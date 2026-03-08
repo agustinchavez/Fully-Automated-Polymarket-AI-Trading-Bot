@@ -1,18 +1,19 @@
 <div align="center">
 
-# 📊 Polymarket AI Trading Bot
+# 📊 Polymarket Trading Bot — Automated AI Prediction Market Trading
 
-### Autonomous AI-Powered Prediction Market Trading Platform
+### The Most Advanced Open-Source Polymarket Bot for Automated Prediction Market Trading
 
 [![Python 3.9+](https://img.shields.io/badge/Python-3.9%2B-3776AB?style=for-the-badge&logo=python&logoColor=white)](https://python.org)
 [![Flask](https://img.shields.io/badge/Flask-3.0-000000?style=for-the-badge&logo=flask&logoColor=white)](https://flask.palletsprojects.com)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow?style=for-the-badge)](LICENSE)
 [![Docker](https://img.shields.io/badge/Docker-Ready-2496ED?style=for-the-badge&logo=docker&logoColor=white)](docker-compose.yml)
 
-**A production-grade autonomous trading agent for [Polymarket](https://polymarket.com) prediction markets.**
-**Discovers markets, researches evidence, forecasts probabilities with a multi-model AI ensemble, and executes trades with 15+ independent risk checks.**
+**A production-grade autonomous Polymarket trading bot that discovers prediction markets, researches evidence with web search, forecasts probabilities using a multi-model AI ensemble (GPT-4o, Claude, Gemini), and executes trades with 15+ independent risk checks and fractional Kelly position sizing.**
 
 Paper trading by default. Three independent safety gates must be unlocked for live orders.
+
+**Keywords:** Polymarket bot, Polymarket trading bot, prediction market bot, AI trading bot, automated trading, algorithmic trading, whale tracker, smart money, Kelly criterion, prediction market trading, Polymarket API, Polymarket CLOB
 
 [Getting Started](#-getting-started) · [Dashboard](#-real-time-dashboard) · [Architecture](#%EF%B8%8F-architecture) · [Configuration](#%EF%B8%8F-configuration) · [Deployment](#-deployment)
 
@@ -154,8 +155,8 @@ A complete **28-section reference guide** is embedded directly in the dashboard 
 ### Installation
 
 ```bash
-git clone https://github.com/dylanpersonguy/polymarket-ai-trading-bot.git
-cd polymarket-ai-trading-bot
+git clone https://github.com/dylanpersonguy/polymarket-bot-automated-ai-trading.git
+cd polymarket-bot-automated-ai-trading
 python3 -m venv .venv && source .venv/bin/activate
 pip install -e ".[dev]"
 ```
@@ -600,6 +601,66 @@ Services include:
 
 ---
 
+## ❓ FAQ
+
+<details>
+<summary><strong>What is this Polymarket bot?</strong></summary>
+
+This is an open-source automated trading bot for [Polymarket](https://polymarket.com), the largest prediction market platform. It uses AI (GPT-4o, Claude, Gemini) to research events, forecast probabilities, and execute trades autonomously with strict risk management.
+
+</details>
+
+<details>
+<summary><strong>Is this Polymarket bot free?</strong></summary>
+
+Yes, the bot is fully open source under the MIT license. You will need API keys for OpenAI and a search provider (Tavily, SerpAPI, or Bing) which have their own costs.
+
+</details>
+
+<details>
+<summary><strong>Can I use this bot for live trading on Polymarket?</strong></summary>
+
+Yes. The bot supports both paper trading (simulated) and live trading. Paper mode is enabled by default — you must explicitly unlock three independent safety gates to enable real order execution on Polymarket's CLOB.
+
+</details>
+
+<details>
+<summary><strong>What AI models does the Polymarket bot use?</strong></summary>
+
+The bot runs a multi-model ensemble with GPT-4o (40% weight), Claude 3.5 Sonnet (35%), and Gemini 1.5 Pro (25%). Models forecast independently and the results are aggregated using trimmed mean, median, or weighted average.
+
+</details>
+
+<details>
+<summary><strong>How does the whale tracker work?</strong></summary>
+
+The bot auto-discovers the top 100 Polymarket wallets by profit and volume, monitors their positions in real time, and generates conviction signals when multiple whales converge on the same market. These signals boost or penalize edge calculations.
+
+</details>
+
+<details>
+<summary><strong>Does this work with the Polymarket API?</strong></summary>
+
+Yes. The bot integrates with both the Polymarket Gamma API (for market discovery) and the Polymarket CLOB API (for order execution). It also supports WebSocket feeds for real-time price data.
+
+</details>
+
+---
+
+## 🌐 Related Topics
+
+This Polymarket trading bot is relevant for anyone interested in:
+
+- **Prediction market trading** — Automated strategies for event-based markets
+- **Polymarket API integration** — Building on Polymarket's CLOB and Gamma APIs
+- **AI-powered trading** — Using large language models (LLMs) for market forecasting
+- **Algorithmic trading bots** — Autonomous systems with risk management and position sizing
+- **Whale tracking & smart money** — Following top traders on prediction markets
+- **Kelly criterion position sizing** — Mathematically optimal bet sizing with multiple adjustment factors
+- **Quantitative trading** — Systematic approaches to prediction market alpha
+
+---
+
 ## 📄 License
 
 MIT
@@ -609,6 +670,8 @@ MIT
 <div align="center">
 
 **Built for the prediction market community.**
+
+**⭐ Star this repo** if you find it useful — it helps others discover this Polymarket trading bot.
 
 *This software is for educational and research purposes. Not financial advice. Trade responsibly.*
 

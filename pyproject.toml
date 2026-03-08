@@ -5,10 +5,36 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "polymarket-bot"
 version = "0.2.0"
-description = "Production-grade Polymarket Research & Trading Bot with intelligent risk management"
+description = "Polymarket Trading Bot — Autonomous AI prediction market bot with multi-model ensemble forecasting, automated research, whale tracking, and real-time dashboard"
 readme = "README.md"
 requires-python = ">=3.9"
 license = { text = "MIT" }
+keywords = [
+    "polymarket",
+    "trading-bot",
+    "prediction-markets",
+    "ai-trading",
+    "automated-trading",
+    "algorithmic-trading",
+    "whale-tracking",
+    "kelly-criterion",
+    "gpt-4",
+    "llm",
+    "forecasting",
+]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "Intended Audience :: Financial and Insurance Industry",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Office/Business :: Financial :: Investment",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+]
 
 dependencies = [
     "click>=8.1",
