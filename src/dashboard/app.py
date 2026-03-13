@@ -7298,6 +7298,25 @@ def api_backtest_markets() -> Any:
         db.close()
 
 
+# ─── API: Base Rate Registry (Phase 2) ────────────────────────────
+
+
+@app.route("/api/forecast/base-rates")
+def api_forecast_base_rates() -> Any:
+    """Return base rate registry patterns and empirical rates."""
+    from src.forecast.base_rates import BaseRateRegistry
+
+    registry = BaseRateRegistry()
+    patterns = registry.get_all_patterns()
+    empirical = registry.get_empirical_rates()
+
+    return jsonify({
+        "pattern_count": len(patterns),
+        "patterns": patterns,
+        "empirical_rates": empirical,
+    })
+
+
 # ─── API: Export Data ──────────────────────────────────────────────
 
 @app.route("/api/export/<table_name>")

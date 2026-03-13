@@ -704,8 +704,64 @@ class TradingEngine:
             except Exception as e:
                 log.warning("engine.adaptive_weights_inject_error", error=str(e))
 
+            # Phase 2: Base rate lookup
+            base_rate_info = None
+            if self.config.forecasting.base_rate_enabled:
+                try:
+                    from src.forecast.base_rates import BaseRateRegistry
+                    br_registry = BaseRateRegistry()
+                    cat = ctx.classification.category if ctx.classification else "UNKNOWN"
+                    base_rate_info = br_registry.match(ctx.question, category=cat)
+                    if base_rate_info:
+                        log.info(
+                            "engine.base_rate_found",
+                            market_id=ctx.market_id,
+                            base_rate=base_rate_info.base_rate,
+                            pattern=base_rate_info.pattern_description,
+                        )
+                except Exception as e:
+                    log.warning("engine.base_rate_lookup_error", error=str(e))
+
+            # Phase 2: Question decomposition
+            if self.config.forecasting.decomposition_enabled:
+                try:
+                    from src.forecast.decomposer import (
+                        QuestionDecomposer,
+                        combine_sub_forecasts,
+                        should_decompose,
+                    )
+                    mtype = ctx.market.market_type if ctx.market else ""
+                    if should_decompose(ctx.question, mtype):
+                        decomposer = QuestionDecomposer(self.config.forecasting)
+                        decomp = await decomposer.decompose(ctx.question, mtype)
+                        if decomp.sub_questions:
+                            sub_probs = []
+                            for sq in decomp.sub_questions:
+                                import copy
+                                sub_features = copy.copy(ctx.features)
+                                sub_features.question = sq.text
+                                sub_result = await ens_forecaster.forecast(
+                                    features=sub_features,
+                                    evidence=ctx.evidence,
+                                    base_rate_info=base_rate_info,
+                                    prompt_version=self.config.forecasting.prompt_version,
+                                )
+                                sub_probs.append(sub_result.model_probability)
+                            decomposed_prob = combine_sub_forecasts(decomp, sub_probs)
+                            log.info(
+                                "engine.decomposition_result",
+                                market_id=ctx.market_id,
+                                num_sub=len(decomp.sub_questions),
+                                decomposed_prob=round(decomposed_prob, 3),
+                            )
+                except Exception as e:
+                    log.warning("engine.decomposition_error", error=str(e))
+
             ens_result = await ens_forecaster.forecast(
-                features=ctx.features, evidence=ctx.evidence,
+                features=ctx.features,
+                evidence=ctx.evidence,
+                base_rate_info=base_rate_info,
+                prompt_version=self.config.forecasting.prompt_version,
             )
             from src.forecast.llm_forecaster import ForecastResult
             ctx.forecast = ForecastResult(

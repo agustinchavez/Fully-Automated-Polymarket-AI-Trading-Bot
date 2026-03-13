@@ -69,10 +69,12 @@ class CachedEnsembleForecaster:
         self,
         features: MarketFeatures,
         evidence: EvidencePackage,
+        base_rate_info: Any = None,
+        prompt_version: str = "v1",
     ) -> EnsembleResult:
         """Run ensemble forecast with cache layer."""
         question = features.question
-        prompt = _build_prompt(features, evidence)
+        prompt = _build_prompt(features, evidence, base_rate_info, prompt_version)
         timeout = self._ensemble_config.timeout_per_model_secs
 
         forecasts: list[ModelForecast] = []
@@ -122,7 +124,7 @@ class CachedEnsembleForecaster:
 
         # Aggregate probabilities using the existing method
         model_probs = [(f.model_name, f.model_probability) for f in successes]
-        agg_prob = self._ensemble._aggregate(model_probs)
+        agg_prob, agg_method = self._ensemble._aggregate(model_probs)
 
         # Aggregate confidence
         conf_order = {"LOW": 0, "MEDIUM": 1, "HIGH": 2}
@@ -150,7 +152,7 @@ class CachedEnsembleForecaster:
             individual_forecasts=list(forecasts),
             models_succeeded=len(successes),
             models_failed=len(failures),
-            aggregation_method=self._ensemble_config.aggregation,
+            aggregation_method=agg_method,
             spread=round(spread, 4),
             agreement_score=round(agreement, 3),
             reasoning=" | ".join(all_reasoning[:3]),

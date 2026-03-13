@@ -63,6 +63,12 @@ class ForecastingConfig(BaseModel):
     low_evidence_penalty: float = 0.15
     min_evidence_quality: float = 0.55
     min_confidence_level: str = "MEDIUM"  # Reject LOW confidence trades
+    # Phase 2: Structured forecasting
+    prompt_version: str = "v1"  # v1 (legacy) or v2 (structured reasoning chain)
+    base_rate_enabled: bool = False  # inject base rates into prompt
+    decomposition_enabled: bool = False  # enable question decomposition
+    decomposition_model: str = "gpt-4o-mini"  # cheap model for decomposition
+    max_sub_questions: int = 3  # max sub-questions per market
 
 
 class EnsembleConfig(BaseModel):

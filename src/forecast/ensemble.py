@@ -44,6 +44,10 @@ class ModelForecast:
     raw_response: dict[str, Any] = field(default_factory=dict)
     error: str = ""
     latency_ms: float = 0.0
+    # Phase 2: Structured reasoning fields (populated by prompt v2)
+    base_rate: float = 0.0
+    evidence_for: list[str] = field(default_factory=list)
+    evidence_against: list[str] = field(default_factory=list)
 
 
 @dataclass
@@ -124,8 +128,106 @@ Return ONLY valid JSON, no markdown fences.
 """
 
 
-def _build_prompt(features: MarketFeatures, evidence: EvidencePackage) -> str:
-    """Build the forecast prompt from features and evidence."""
+_FORECAST_PROMPT_V2 = """\
+You are an expert probabilistic forecaster using superforecasting methodology.
+
+MARKET QUESTION: {question}
+MARKET TYPE: {market_type}
+
+{base_rate_block}
+
+EVIDENCE SUMMARY:
+{evidence_summary}
+
+TOP EVIDENCE BULLETS:
+{evidence_bullets}
+
+{contradictions_block}
+
+MARKET FEATURES:
+- Volume: ${volume_usd:,.0f}
+- Liquidity: ${liquidity_usd:,.0f}
+- Spread: {spread_pct:.1%}
+- Days to expiry: {days_to_expiry:.0f}
+- Price momentum (24h): {price_momentum:+.3f}
+- Evidence quality score: {evidence_quality:.2f}
+- Sources analyzed: {num_sources}
+
+TASK:
+Follow this structured reasoning chain to produce your probability estimate:
+
+1. START WITH THE BASE RATE: What is the historical frequency of this type
+   of event? Use the base rate provided above if available, or estimate one
+   from your knowledge. This is your starting anchor.
+
+2. EVIDENCE FOR: List the strongest evidence supporting YES resolution.
+
+3. EVIDENCE AGAINST: List the strongest evidence supporting NO resolution.
+
+4. ADJUSTMENT: Explain how the specific evidence shifts the probability
+   away from the base rate. Be explicit about the direction and magnitude
+   of each adjustment.
+
+5. FINAL PROBABILITY: Your calibrated estimate after adjustments.
+
+Return valid JSON:
+{{
+  "base_rate": <float, the starting base rate you used>,
+  "base_rate_reasoning": "1-2 sentence explanation of why this base rate applies",
+  "evidence_for": [
+    "strongest evidence point supporting YES"
+  ],
+  "evidence_against": [
+    "strongest evidence point supporting NO"
+  ],
+  "adjustment_reasoning": "how evidence shifts from base rate to final probability",
+  "model_probability": <0.01-0.99>,
+  "confidence_level": "LOW" | "MEDIUM" | "HIGH",
+  "reasoning": "2-4 sentence final summary",
+  "invalidation_triggers": [
+    "specific event/data that would change this forecast significantly"
+  ],
+  "key_evidence": [
+    {{
+      "text": "evidence bullet",
+      "source": "publisher name",
+      "impact": "supports/opposes/neutral"
+    }}
+  ]
+}}
+
+RULES:
+- Your probability must be between 0.01 and 0.99.
+- START from the base rate and adjust — do not ignore the anchor.
+- Form your estimate independently from evidence — do NOT anchor to any
+  external price or implied probability.
+- If evidence is weak (quality < 0.3), stay closer to the base rate.
+- If evidence contradicts itself, widen uncertainty toward the base rate.
+- confidence_level:
+  - HIGH = authoritative primary source data directly answers the question
+  - MEDIUM = strong secondary sources with consistent direction
+  - LOW = limited/conflicting/stale evidence
+- Never claim certainty. Express epistemic humility.
+- Do NOT hallucinate data not present in the evidence.
+
+Return ONLY valid JSON, no markdown fences.
+"""
+
+
+def _build_prompt(
+    features: MarketFeatures,
+    evidence: EvidencePackage,
+    base_rate_info: Any | None = None,
+    prompt_version: str = "v1",
+) -> str:
+    """Build the forecast prompt from features and evidence.
+
+    Args:
+        features: Market features for the forecast.
+        evidence: Evidence package from research.
+        base_rate_info: Optional BaseRateMatch with historical base rate.
+        prompt_version: "v1" (legacy) or "v2" (structured reasoning chain).
+    """
     evidence_bullets = "\n".join(
         f"- {b}" for b in features.top_bullets
     ) if features.top_bullets else "No evidence bullets available."
@@ -140,7 +242,7 @@ def _build_prompt(features: MarketFeatures, evidence: EvidencePackage) -> str:
             )
         contradictions_block = "\n".join(lines)
 
-    return _FORECAST_PROMPT.format(
+    format_kwargs = dict(
         question=features.question,
         market_type=features.market_type,
         evidence_summary=evidence.summary or "No summary available.",
@@ -155,6 +257,28 @@ def _build_prompt(features: MarketFeatures, evidence: EvidencePackage) -> str:
         num_sources=features.num_sources,
     )
 
+    if prompt_version == "v2":
+        # Build base rate block
+        if base_rate_info is not None:
+            base_rate_block = (
+                f"HISTORICAL BASE RATE:\n"
+                f"- Base rate: {base_rate_info.base_rate:.0%}\n"
+                f"- Pattern: {base_rate_info.pattern_description}\n"
+                f"- Source: {base_rate_info.source}\n"
+                f"- Match confidence: {base_rate_info.confidence:.0%}\n"
+                f"Start from this base rate and adjust based on the evidence below."
+            )
+        else:
+            base_rate_block = (
+                "HISTORICAL BASE RATE:\n"
+                "No specific base rate available for this question type.\n"
+                "Estimate an appropriate base rate from your knowledge before adjusting."
+            )
+        format_kwargs["base_rate_block"] = base_rate_block
+        return _FORECAST_PROMPT_V2.format(**format_kwargs)
+
+    return _FORECAST_PROMPT.format(**format_kwargs)
+
 
 def _parse_llm_json(raw_text: str) -> dict[str, Any]:
     """Parse LLM response JSON with markdown fence handling."""
@@ -164,6 +288,24 @@ def _parse_llm_json(raw_text: str) -> dict[str, Any]:
     if raw_text.endswith("```"):
         raw_text = raw_text[:-3]
     return json.loads(raw_text.strip())
+
+
+def _build_model_forecast(model: str, parsed: dict[str, Any], latency_ms: float) -> ModelForecast:
+    """Build a ModelForecast from parsed LLM JSON (works for v1 and v2)."""
+    return ModelForecast(
+        model_name=model,
+        model_probability=max(0.01, min(0.99, float(parsed.get("model_probability", 0.5)))),
+        confidence_level=parsed.get("confidence_level", "LOW"),
+        reasoning=parsed.get("reasoning", ""),
+        invalidation_triggers=parsed.get("invalidation_triggers", []),
+        key_evidence=parsed.get("key_evidence", []),
+        raw_response=parsed,
+        latency_ms=latency_ms,
+        # v2 structured fields (default gracefully for v1 responses)
+        base_rate=float(parsed.get("base_rate", 0.0)),
+        evidence_for=parsed.get("evidence_for", []),
+        evidence_against=parsed.get("evidence_against", []),
+    )
 
 
 async def _query_openai(model: str, prompt: str, config: ForecastingConfig, timeout_secs: int = 30) -> ModelForecast:
@@ -195,16 +337,7 @@ async def _query_openai(model: str, prompt: str, config: ForecastingConfig, time
             input_tokens=getattr(usage, "prompt_tokens", 0) or 0,
             output_tokens=getattr(usage, "completion_tokens", 0) or 0,
         )
-        return ModelForecast(
-            model_name=model,
-            model_probability=max(0.01, min(0.99, float(parsed.get("model_probability", 0.5)))),
-            confidence_level=parsed.get("confidence_level", "LOW"),
-            reasoning=parsed.get("reasoning", ""),
-            invalidation_triggers=parsed.get("invalidation_triggers", []),
-            key_evidence=parsed.get("key_evidence", []),
-            raw_response=parsed,
-            latency_ms=(time.monotonic() - start) * 1000,
-        )
+        return _build_model_forecast(model, parsed, (time.monotonic() - start) * 1000)
     except Exception as e:
         return ModelForecast(
             model_name=model, model_probability=0.5, error=str(e),
@@ -239,16 +372,7 @@ async def _query_anthropic(model: str, prompt: str, config: ForecastingConfig, t
             input_tokens=getattr(usage, "input_tokens", 0) or 0,
             output_tokens=getattr(usage, "output_tokens", 0) or 0,
         )
-        return ModelForecast(
-            model_name=model,
-            model_probability=max(0.01, min(0.99, float(parsed.get("model_probability", 0.5)))),
-            confidence_level=parsed.get("confidence_level", "LOW"),
-            reasoning=parsed.get("reasoning", ""),
-            invalidation_triggers=parsed.get("invalidation_triggers", []),
-            key_evidence=parsed.get("key_evidence", []),
-            raw_response=parsed,
-            latency_ms=(time.monotonic() - start) * 1000,
-        )
+        return _build_model_forecast(model, parsed, (time.monotonic() - start) * 1000)
     except Exception as e:
         return ModelForecast(
             model_name=model, model_probability=0.5, error=str(e),
@@ -284,16 +408,7 @@ async def _query_google(model: str, prompt: str, config: ForecastingConfig, time
             input_tokens=getattr(usage_meta, "prompt_token_count", 0) or 0,
             output_tokens=getattr(usage_meta, "candidates_token_count", 0) or 0,
         )
-        return ModelForecast(
-            model_name=model,
-            model_probability=max(0.01, min(0.99, float(parsed.get("model_probability", 0.5)))),
-            confidence_level=parsed.get("confidence_level", "LOW"),
-            reasoning=parsed.get("reasoning", ""),
-            invalidation_triggers=parsed.get("invalidation_triggers", []),
-            key_evidence=parsed.get("key_evidence", []),
-            raw_response=parsed,
-            latency_ms=(time.monotonic() - start) * 1000,
-        )
+        return _build_model_forecast(model, parsed, (time.monotonic() - start) * 1000)
     except Exception as e:
         return ModelForecast(
             model_name=model, model_probability=0.5, error=str(e),
@@ -340,9 +455,11 @@ class EnsembleForecaster:
         self,
         features: MarketFeatures,
         evidence: EvidencePackage,
+        base_rate_info: Any | None = None,
+        prompt_version: str = "v1",
     ) -> EnsembleResult:
         """Query all configured models in parallel and aggregate."""
-        prompt = _build_prompt(features, evidence)
+        prompt = _build_prompt(features, evidence, base_rate_info, prompt_version)
 
         # Query all models concurrently
         timeout = self._ensemble.timeout_per_model_secs
@@ -396,7 +513,7 @@ class EnsembleForecaster:
 
         # Aggregate probabilities
         model_probs = [(f.model_name, f.model_probability) for f in successes]
-        agg_prob = self._aggregate(model_probs)
+        agg_prob, agg_method_used = self._aggregate(model_probs)
 
         # Aggregate confidence
         conf_order = {"LOW": 0, "MEDIUM": 1, "HIGH": 2}
@@ -436,7 +553,7 @@ class EnsembleForecaster:
             individual_forecasts=list(forecasts),
             models_succeeded=len(successes),
             models_failed=len(failures),
-            aggregation_method=self._ensemble.aggregation,
+            aggregation_method=agg_method_used,
             spread=round(spread, 4),
             agreement_score=round(agreement, 3),
             reasoning=" | ".join(all_reasoning[:3]),
@@ -451,32 +568,46 @@ class EnsembleForecaster:
             models_ok=len(successes),
             models_fail=len(failures),
             spread=round(spread, 3),
-            method=self._ensemble.aggregation,
+            method=agg_method_used,
         )
         return result
 
-    def _aggregate(self, model_probs: list[tuple[str, float]]) -> float:
+    def _aggregate(self, model_probs: list[tuple[str, float]]) -> tuple[float, str]:
         """Aggregate probabilities using configured method.
+
+        When adaptive weights are injected via set_adaptive_weights()
+        and aggregation is trimmed_mean, auto-switches to weighted
+        aggregation so the learned weights are actually used.
 
         Args:
             model_probs: List of (model_name, probability) tuples.
+
+        Returns:
+            Tuple of (aggregated_probability, method_used).
         """
         if not model_probs:
-            return 0.5
+            return 0.5, self._ensemble.aggregation
 
         probs = [p for _, p in model_probs]
 
         if len(probs) == 1:
-            return probs[0]
+            return probs[0], self._ensemble.aggregation
 
         method = self._ensemble.aggregation
+
+        # Auto-switch to weighted when adaptive weights are available
+        # and current method is trimmed_mean (the default). This fixes
+        # the bug where learned weights were injected but never used.
+        if method == "trimmed_mean" and self._external_weights:
+            method = "weighted"
+            log.info("ensemble.auto_switch_to_weighted")
 
         if method == "median":
             sorted_p = sorted(probs)
             mid = len(sorted_p) // 2
             if len(sorted_p) % 2 == 0:
-                return (sorted_p[mid - 1] + sorted_p[mid]) / 2
-            return sorted_p[mid]
+                return (sorted_p[mid - 1] + sorted_p[mid]) / 2, method
+            return sorted_p[mid], method
 
         elif method == "weighted":
             # Use adaptive (learned) weights if available, else config weights
@@ -487,14 +618,15 @@ class EnsembleForecaster:
                 w = weights.get(model_name, 1.0 / len(model_probs))
                 weighted_sum += p * w
                 total_weight += w
-            return weighted_sum / total_weight if total_weight > 0 else 0.5
+            prob = weighted_sum / total_weight if total_weight > 0 else 0.5
+            return prob, method
 
         else:  # trimmed_mean (default)
             if len(probs) <= 2:
-                return sum(probs) / len(probs)
+                return sum(probs) / len(probs), method
             sorted_p = sorted(probs)
             trim = max(1, int(len(sorted_p) * self._ensemble.trim_fraction))
             trimmed = sorted_p[trim:-trim] if trim < len(sorted_p) // 2 else sorted_p
             if not trimmed:
                 trimmed = sorted_p
-            return sum(trimmed) / len(trimmed)
+            return sum(trimmed) / len(trimmed), method
