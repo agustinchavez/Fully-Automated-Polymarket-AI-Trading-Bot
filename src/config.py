@@ -156,7 +156,10 @@ class RiskConfig(BaseModel):
     volatility_med_threshold: float = 0.10
     volatility_high_min_mult: float = 0.4
     volatility_med_min_mult: float = 0.6
-    min_annualized_edge: float = 0.15  # Reject trades below 15% annualized return
+    min_annualized_edge: float = 0.15  # Reject trades below 15% annualized return (spec suggests 0.50)
+    # Phase 3: Edge uncertainty
+    uncertainty_enabled: bool = False          # penalize edge based on forecast uncertainty
+    uncertainty_penalty_factor: float = 0.5    # how much uncertainty penalizes edge (0-1)
     category_stake_multipliers: dict[str, float] = Field(
         default_factory=lambda: {
             "MACRO": 1.0,
@@ -263,6 +266,12 @@ class PortfolioConfig(BaseModel):
         "MACRO": 0.40, "ELECTION": 0.35, "CORPORATE": 0.30,
         "WEATHER": 0.15, "SPORTS": 0.15,
     })
+    # Phase 3: Correlation-aware VaR gate
+    var_gate_enabled: bool = False
+    max_portfolio_var_pct: float = 0.10
+    same_event_same_outcome_corr: float = 0.8
+    same_event_diff_outcome_corr: float = 0.3
+    same_category_corr: float = 0.15
 
 
 class TimelineConfig(BaseModel):

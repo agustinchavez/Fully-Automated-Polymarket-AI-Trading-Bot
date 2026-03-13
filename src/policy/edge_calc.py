@@ -35,6 +35,8 @@ class EdgeResult:
     net_edge: float = 0.0        # raw_edge - transaction_cost
     net_ev_per_dollar: float = 0.0
     break_even_probability: float = 0.0
+    # Phase 3: Set by uncertainty adjustment; None = not computed
+    effective_edge: float | None = None
 
     @property
     def abs_edge(self) -> float:

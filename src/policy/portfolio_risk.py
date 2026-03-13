@@ -269,13 +269,16 @@ def calculate_portfolio_var(
     bankroll: float,
     confidence_level: float = 0.95,
     method: str = "parametric",
+    correlation_matrix: list[list[float]] | None = None,
 ) -> dict[str, Any]:
     """Compute portfolio Value-at-Risk.
 
-    Parametric approach: treats each binary position as an independent
-    Bernoulli bet.  Loss for each position = stake × (1 − current_price).
-    VaR is estimated using the normal approximation over the portfolio of
-    independent bets.
+    Parametric approach: treats each binary position as a Bernoulli bet.
+    Loss for each position = stake × (1 − current_price).
+
+    When correlation_matrix is None, positions are treated as independent.
+    When provided, cross-correlation terms increase VaR for correlated
+    positions: Var = Σvar_i + 2×Σ_{i<j} corr_ij × std_i × std_j
 
     Returns dict with daily_var_95, daily_var_99, component details.
     """
@@ -292,16 +295,15 @@ def calculate_portfolio_var(
         }
 
     components: list[dict[str, Any]] = []
-    total_variance = 0.0
+    individual_stds: list[float] = []
 
     for pos in positions:
         p = max(min(pos.current_price, 0.99), 0.01)
         q = 1 - p
-        # Expected loss = exposure × q  (probability of losing)
-        # Variance of loss for a Bernoulli outcome
         mean_loss = pos.exposure_usd * q
         var_loss = pos.exposure_usd ** 2 * p * q
-        total_variance += var_loss
+        std_loss = math.sqrt(var_loss) if var_loss > 0 else 0.0
+        individual_stds.append(std_loss)
         components.append({
             "market_id": pos.market_id,
             "exposure": round(pos.exposure_usd, 2),
@@ -309,10 +311,20 @@ def calculate_portfolio_var(
             "expected_loss": round(mean_loss, 2),
         })
 
-    portfolio_std = math.sqrt(total_variance) if total_variance > 0 else 0.0
+    # Total variance: sum of individual variances + cross-correlation terms
+    n = len(positions)
+    total_variance = sum(s ** 2 for s in individual_stds)
+
+    if correlation_matrix is not None and len(correlation_matrix) == n:
+        for i in range(n):
+            for j in range(i + 1, n):
+                corr = correlation_matrix[i][j]
+                if corr != 0.0:
+                    total_variance += 2.0 * corr * individual_stds[i] * individual_stds[j]
+
+    portfolio_std = math.sqrt(max(0.0, total_variance))
     mean_total_loss = sum(c["expected_loss"] for c in components)
 
-    # z-scores for confidence levels
     z_95 = 1.645
     z_99 = 2.326
 
@@ -337,6 +349,65 @@ def calculate_portfolio_var(
         positions=len(positions),
     )
     return result
+
+
+def check_var_gate(
+    positions: list[PositionSnapshot],
+    new_position: PositionSnapshot,
+    bankroll: float,
+    max_var_pct: float,
+    correlation_scorer: Any = None,
+) -> tuple[bool, str, dict[str, float]]:
+    """Check if adding a new position would push VaR beyond the limit.
+
+    Returns:
+        (is_allowed, reason, var_details)
+        var_details includes: current_var, projected_var, var_limit
+    """
+    var_limit = max_var_pct * bankroll
+
+    # Current VaR
+    corr_matrix = None
+    if correlation_scorer and positions:
+        _, corr_matrix = correlation_scorer.build_correlation_matrix(positions)
+    current_var_data = calculate_portfolio_var(
+        positions, bankroll, correlation_matrix=corr_matrix,
+    )
+    current_var = current_var_data["daily_var_95"]
+
+    # Projected VaR with new position
+    projected_positions = list(positions) + [new_position]
+    proj_corr_matrix = None
+    if correlation_scorer:
+        _, proj_corr_matrix = correlation_scorer.build_correlation_matrix(
+            projected_positions,
+        )
+    projected_var_data = calculate_portfolio_var(
+        projected_positions, bankroll, correlation_matrix=proj_corr_matrix,
+    )
+    projected_var = projected_var_data["daily_var_95"]
+
+    details = {
+        "current_var": round(current_var, 2),
+        "projected_var": round(projected_var, 2),
+        "var_limit": round(var_limit, 2),
+        "var_increase": round(projected_var - current_var, 2),
+    }
+
+    if projected_var > var_limit:
+        reason = (
+            f"Projected VaR ${projected_var:.2f} > limit "
+            f"${var_limit:.2f} ({max_var_pct:.0%} of bankroll)"
+        )
+        log.info(
+            "portfolio_risk.var_gate_blocked",
+            projected_var=projected_var,
+            limit=var_limit,
+            new_market=new_position.market_id,
+        )
+        return False, reason, details
+
+    return True, "ok", details
 
 
 def check_correlation(

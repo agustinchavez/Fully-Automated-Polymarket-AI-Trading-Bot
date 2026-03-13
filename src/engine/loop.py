@@ -519,6 +519,9 @@ class TradingEngine:
 
         # ── Stage 4: Edge Calculation + Whale Adjustment ─────────────
         self._stage_edge_calc(ctx)
+
+        # ── Stage 4b: Edge Uncertainty Adjustment ─────────────────
+        self._stage_uncertainty_adjustment(ctx)
         ctx.result["has_edge"] = ctx.has_edge
 
         # ── Stage 5: Risk Checks ─────────────────────────────────────
@@ -529,6 +532,9 @@ class TradingEngine:
 
         # ── Portfolio Correlation Check ──────────────────────────────
         self._stage_correlation_check(ctx)
+
+        # ── Portfolio VaR Gate ─────────────────────────────────────
+        self._stage_var_gate(ctx)
 
         # ── Decision Gate ────────────────────────────────────────────
         if not ctx.risk_result.allowed:
@@ -713,6 +719,7 @@ class TradingEngine:
                     cat = ctx.classification.category if ctx.classification else "UNKNOWN"
                     base_rate_info = br_registry.match(ctx.question, category=cat)
                     if base_rate_info:
+                        ctx._base_rate_value = base_rate_info.base_rate
                         log.info(
                             "engine.base_rate_found",
                             market_id=ctx.market_id,
@@ -747,6 +754,7 @@ class TradingEngine:
                                     prompt_version=self.config.forecasting.prompt_version,
                                 )
                                 sub_probs.append(sub_result.model_probability)
+                            ctx._decomposition_sub_probs = sub_probs
                             decomposed_prob = combine_sub_forecasts(decomp, sub_probs)
                             log.info(
                                 "engine.decomposition_result",
@@ -944,9 +952,55 @@ class TradingEngine:
                      whale_min_edge=min_edge,
                      edge=round(ctx.edge_result.abs_net_edge, 4))
 
+        edge_for_threshold = ctx.edge_result.abs_net_edge
+        if ctx.edge_result.effective_edge is not None:
+            edge_for_threshold = ctx.edge_result.effective_edge
         ctx.has_edge = (
             ctx.edge_result.is_positive
-            and ctx.edge_result.abs_net_edge >= min_edge
+            and edge_for_threshold >= min_edge
+        )
+
+    def _stage_uncertainty_adjustment(self, ctx: PipelineContext) -> None:
+        """Stage 4b: Apply edge uncertainty penalty (if enabled)."""
+        if not self.config.risk.uncertainty_enabled:
+            return
+
+        from src.policy.edge_uncertainty import compute_and_adjust, UncertaintyInputs
+
+        # Gather ensemble spread from raw_llm_response
+        ensemble_spread = 0.0
+        if (ctx.forecast
+                and hasattr(ctx.forecast, "raw_llm_response")
+                and isinstance(ctx.forecast.raw_llm_response, dict)):
+            ensemble_spread = ctx.forecast.raw_llm_response.get("spread", 0.0)
+
+        evidence_quality = ctx.features.evidence_quality if ctx.features else 0.5
+        base_rate = getattr(ctx, "_base_rate_value", 0.5)
+        sub_probs = getattr(ctx, "_decomposition_sub_probs", [])
+
+        inputs = UncertaintyInputs(
+            ensemble_spread=ensemble_spread,
+            evidence_quality=evidence_quality,
+            base_rate=base_rate,
+            model_probability=ctx.forecast.model_probability,
+            decomposition_sub_probs=sub_probs,
+        )
+
+        result = compute_and_adjust(
+            inputs=inputs,
+            raw_edge=ctx.edge_result.abs_net_edge,
+            penalty_factor=self.config.risk.uncertainty_penalty_factor,
+        )
+
+        ctx.edge_result.effective_edge = result.effective_edge
+        ctx._uncertainty_result = result
+
+        log.info(
+            "engine.uncertainty_adjustment",
+            market_id=ctx.market_id,
+            uncertainty=round(result.uncertainty_score, 3),
+            raw_edge=round(result.raw_edge, 4),
+            effective_edge=round(result.effective_edge, 4),
         )
 
     def _stage_risk_checks(self, ctx: PipelineContext) -> None:
@@ -1024,6 +1078,47 @@ class TradingEngine:
             log.info("engine.correlation_blocked",
                      market_id=ctx.market_id, reason=corr_reason)
 
+    def _stage_var_gate(self, ctx: PipelineContext) -> None:
+        """Check portfolio VaR limit before allowing entry."""
+        if not self.config.portfolio.var_gate_enabled:
+            return
+        if not ctx.risk_result or not ctx.risk_result.allowed:
+            return
+
+        from src.policy.correlation import EventCorrelationScorer
+        from src.policy.portfolio_risk import check_var_gate, PositionSnapshot
+
+        scorer = EventCorrelationScorer(self.config.portfolio)
+
+        new_pos = PositionSnapshot(
+            market_id=ctx.market_id,
+            question=ctx.question,
+            category=ctx.classification.category if ctx.classification else "",
+            event_slug=getattr(ctx.market, "slug", "") or "",
+            side=ctx.edge_result.direction.replace("BUY_", "") if ctx.edge_result else "YES",
+            size_usd=50.0,  # estimate; actual size computed later
+            entry_price=ctx.edge_result.implied_probability if ctx.edge_result else 0.5,
+            current_price=ctx.edge_result.implied_probability if ctx.edge_result else 0.5,
+        )
+
+        allowed, reason, details = check_var_gate(
+            positions=self._positions,
+            new_position=new_pos,
+            bankroll=self.config.risk.bankroll,
+            max_var_pct=self.config.portfolio.max_portfolio_var_pct,
+            correlation_scorer=scorer,
+        )
+
+        if not allowed:
+            ctx.risk_result.allowed = False
+            ctx.risk_result.violations.append(f"VAR_GATE: {reason}")
+            log.info(
+                "engine.var_gate_blocked",
+                market_id=ctx.market_id,
+                projected_var=details["projected_var"],
+                limit=details["var_limit"],
+            )
+
     def _stage_position_sizing(self, ctx: PipelineContext) -> None:
         """Stage 6: Calculate position size. Sets ctx.position to None if too small."""
         from src.policy.position_sizer import calculate_position_size
@@ -1040,6 +1135,11 @@ class TradingEngine:
                     if ctx.classification else ctx.market.category or "")
         cat_mults = getattr(self.config.risk, "category_stake_multipliers", {})
         cat_mult = cat_mults.get(category, 1.0)
+        # Phase 3: Uncertainty multiplier for position sizing
+        unc_mult = 1.0
+        unc_result = getattr(ctx, "_uncertainty_result", None)
+        if unc_result is not None:
+            unc_mult = max(0.5, 1.0 - unc_result.uncertainty_score * 0.5)
         ctx.position = calculate_position_size(
             edge=ctx.edge_result, risk_config=self.config.risk,
             confidence_level=ctx.forecast.confidence_level,
@@ -1048,6 +1148,7 @@ class TradingEngine:
             price_volatility=ctx.features.price_volatility,
             regime_multiplier=regime_kelly * regime_size,
             category_multiplier=cat_mult,
+            uncertainty_multiplier=unc_mult,
         )
         if ctx.position.stake_usd < 1.0:
             log.info("engine.stake_too_small", market_id=ctx.market_id,
