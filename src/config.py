@@ -15,7 +15,9 @@ from pathlib import Path
 from typing import Any, Callable, List
 
 import yaml
-from pydantic import BaseModel, Field, field_validator
+import warnings
+
+from pydantic import BaseModel, Field, field_validator, model_validator
 
 
 _PROJECT_ROOT = Path(__file__).resolve().parent.parent
@@ -78,6 +80,26 @@ class EnsembleConfig(BaseModel):
     min_models_required: int = 1
     fallback_model: str = "gpt-4o"
 
+    @model_validator(mode="after")
+    def _cross_field_checks(self) -> "EnsembleConfig":
+        if self.enabled and not self.models:
+            raise ValueError("ensemble.models must be non-empty when ensemble is enabled")
+        if self.models and self.min_models_required > len(self.models):
+            raise ValueError(
+                f"min_models_required ({self.min_models_required}) "
+                f"> len(models) ({len(self.models)})"
+            )
+        valid_agg = {"trimmed_mean", "median", "weighted"}
+        if self.aggregation not in valid_agg:
+            raise ValueError(
+                f"aggregation must be one of {valid_agg}, got {self.aggregation!r}"
+            )
+        if not (0.0 <= self.trim_fraction < 0.5):
+            raise ValueError(
+                f"trim_fraction must be in [0.0, 0.5), got {self.trim_fraction}"
+            )
+        return self
+
 
 class ModelTierConfig(BaseModel):
     """Model tier routing — select model quality based on opportunity."""
@@ -90,6 +112,17 @@ class ModelTierConfig(BaseModel):
     premium_min_volume_usd: float = 10000.0
     premium_min_edge: float = 0.06
     scout_max_evidence_quality: float = 0.4
+
+    @model_validator(mode="after")
+    def _non_empty_tiers(self) -> "ModelTierConfig":
+        if self.enabled:
+            if not self.scout_models:
+                raise ValueError("scout_models must be non-empty when model_tiers is enabled")
+            if not self.standard_models:
+                raise ValueError("standard_models must be non-empty when model_tiers is enabled")
+            if not self.premium_models:
+                raise ValueError("premium_models must be non-empty when model_tiers is enabled")
+        return self
 
 
 class RiskConfig(BaseModel):
@@ -147,6 +180,29 @@ class RiskConfig(BaseModel):
             raise ValueError(f"value must be positive, got {v}")
         return v
 
+    @model_validator(mode="after")
+    def _cross_field_checks(self) -> "RiskConfig":
+        if self.max_stake_per_market > self.bankroll:
+            raise ValueError(
+                f"max_stake_per_market ({self.max_stake_per_market}) "
+                f"must be <= bankroll ({self.bankroll})"
+            )
+        total_fees = self.transaction_fee_pct + self.exit_fee_pct
+        if self.min_edge <= total_fees:
+            warnings.warn(
+                f"min_edge ({self.min_edge}) <= total fees "
+                f"({self.transaction_fee_pct} + {self.exit_fee_pct} = {total_fees}). "
+                f"Trades may have zero or negative profit margin.",
+                UserWarning,
+                stacklevel=2,
+            )
+        if self.volatility_high_min_mult >= self.volatility_med_min_mult:
+            raise ValueError(
+                f"volatility_high_min_mult ({self.volatility_high_min_mult}) "
+                f"must be < volatility_med_min_mult ({self.volatility_med_min_mult})"
+            )
+        return self
+
 
 class DrawdownConfig(BaseModel):
     """Drawdown management configuration."""
@@ -163,12 +219,31 @@ class DrawdownConfig(BaseModel):
     recovery_trades_required: int = 5
     snapshot_interval_minutes: int = 15
 
+    @model_validator(mode="after")
+    def _threshold_ordering(self) -> "DrawdownConfig":
+        if not (self.warning_drawdown_pct < self.critical_drawdown_pct < self.max_drawdown_pct):
+            raise ValueError(
+                f"Drawdown thresholds must satisfy "
+                f"warning ({self.warning_drawdown_pct}) < "
+                f"critical ({self.critical_drawdown_pct}) < "
+                f"max ({self.max_drawdown_pct})"
+            )
+        return self
+
 
 class BudgetConfig(BaseModel):
     """API cost budget management."""
     enabled: bool = True
     daily_limit_usd: float = 5.0
     warning_pct: float = 0.80
+
+
+class CircuitBreakerSettings(BaseModel):
+    """Circuit breaker global settings."""
+    enabled: bool = True
+    default_failure_threshold: int = 5
+    default_window_secs: float = 60.0
+    default_recovery_timeout_secs: float = 30.0
 
 
 class PortfolioConfig(BaseModel):
@@ -333,6 +408,7 @@ class BotConfig(BaseModel):
     wallet_scanner: WalletScannerConfig = Field(default_factory=WalletScannerConfig)
     budget: BudgetConfig = Field(default_factory=BudgetConfig)
     model_tiers: ModelTierConfig = Field(default_factory=ModelTierConfig)
+    circuit_breakers: CircuitBreakerSettings = Field(default_factory=CircuitBreakerSettings)
 
     def redacted_dict(self) -> dict[str, Any]:
         """Return config dict with secret values masked."""

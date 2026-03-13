@@ -6,13 +6,14 @@ Can be dumped to JSON for reporting.
 
 from __future__ import annotations
 
+import contextlib
 import math
 import time
 from collections import defaultdict
 from dataclasses import dataclass, field
 from datetime import date
 from threading import Lock
-from typing import Any
+from typing import Any, Generator
 
 _MAX_EVENTS = 10_000  # Cap event history to bound memory usage
 
@@ -106,6 +107,24 @@ class MetricsCollector:
 
 # Global singleton
 metrics = MetricsCollector()
+
+
+# ── API Latency Tracking ─────────────────────────────────────────────
+
+@contextlib.contextmanager
+def track_latency(endpoint: str) -> Generator[None, None, None]:
+    """Context manager that records API call latency to the metrics histogram.
+
+    Usage:
+        with track_latency("gamma"):
+            result = await client._get("/markets")
+    """
+    start = time.monotonic()
+    try:
+        yield
+    finally:
+        elapsed_ms = (time.monotonic() - start) * 1000
+        metrics.histogram(f"api_latency_ms.{endpoint}", elapsed_ms)
 
 
 # ── API Cost Tracking ────────────────────────────────────────────────

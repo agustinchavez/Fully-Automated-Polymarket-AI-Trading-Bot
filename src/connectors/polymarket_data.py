@@ -20,6 +20,7 @@ import httpx
 from tenacity import retry, stop_after_attempt, wait_exponential
 
 from src.observability.logger import get_logger
+from src.observability.metrics import track_latency
 
 log = get_logger(__name__)
 
@@ -155,9 +156,10 @@ class DataAPIClient:
             "limit": limit,
             "offset": offset,
         }
-        resp = await client.get("/positions", params=params)
-        resp.raise_for_status()
-        data = resp.json()
+        with track_latency("data_api"):
+            resp = await client.get("/positions", params=params)
+            resp.raise_for_status()
+            data = resp.json()
 
         positions: list[WalletPosition] = []
         # API returns a list of position objects
@@ -189,9 +191,10 @@ class DataAPIClient:
             "limit": limit,
             "offset": offset,
         }
-        resp = await client.get("/activity", params=params)
-        resp.raise_for_status()
-        data = resp.json()
+        with track_latency("data_api"):
+            resp = await client.get("/activity", params=params)
+            resp.raise_for_status()
+            data = resp.json()
 
         activities: list[WalletActivity] = []
         items = data if isinstance(data, list) else data.get("activity", data.get("data", []))

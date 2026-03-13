@@ -21,7 +21,7 @@ from tenacity import retry, stop_after_attempt, wait_exponential
 
 from src.observability.logger import get_logger
 from src.connectors.rate_limiter import rate_limiter
-from src.observability.metrics import cost_tracker
+from src.observability.metrics import cost_tracker, track_latency
 
 log = get_logger(__name__)
 
@@ -116,18 +116,7 @@ class SerpAPIProvider(SearchProvider):
     @retry(stop=stop_after_attempt(3), wait=wait_exponential(min=1, max=8))
     async def search(self, query: str, num_results: int = 10) -> list[SearchResult]:
         await rate_limiter.get("serpapi").acquire()
-        resp = await self._client.get(
-            "https://serpapi.com/search.json",
-            params={
-                "q": query,
-                "api_key": self._key,
-                "num": num_results,
-                "engine": "google",
-            },
-        )
-        # On rate limit, try rotating to next key before raising
-        if resp.status_code == 429 and self._rotate_key():
-            log.warning("serpapi.rate_limited", msg="Retrying with rotated key")
+        with track_latency("serpapi"):
             resp = await self._client.get(
                 "https://serpapi.com/search.json",
                 params={
@@ -137,7 +126,19 @@ class SerpAPIProvider(SearchProvider):
                     "engine": "google",
                 },
             )
-        resp.raise_for_status()
+            # On rate limit, try rotating to next key before raising
+            if resp.status_code == 429 and self._rotate_key():
+                log.warning("serpapi.rate_limited", msg="Retrying with rotated key")
+                resp = await self._client.get(
+                    "https://serpapi.com/search.json",
+                    params={
+                        "q": query,
+                        "api_key": self._key,
+                        "num": num_results,
+                        "engine": "google",
+                    },
+                )
+            resp.raise_for_status()
         data = resp.json()
         results: list[SearchResult] = []
         for i, item in enumerate(data.get("organic_results", [])):
@@ -172,12 +173,13 @@ class BingProvider(SearchProvider):
     @retry(stop=stop_after_attempt(3), wait=wait_exponential(min=1, max=8))
     async def search(self, query: str, num_results: int = 10) -> list[SearchResult]:
         await rate_limiter.get("bing").acquire()
-        resp = await self._client.get(
-            "https://api.bing.microsoft.com/v7.0/search",
-            headers={"Ocp-Apim-Subscription-Key": self._key},
-            params={"q": query, "count": num_results, "mkt": "en-US"},
-        )
-        resp.raise_for_status()
+        with track_latency("bing"):
+            resp = await self._client.get(
+                "https://api.bing.microsoft.com/v7.0/search",
+                headers={"Ocp-Apim-Subscription-Key": self._key},
+                params={"q": query, "count": num_results, "mkt": "en-US"},
+            )
+            resp.raise_for_status()
         data = resp.json()
         results: list[SearchResult] = []
         for i, item in enumerate(data.get("webPages", {}).get("value", [])):
@@ -230,19 +232,7 @@ class TavilyProvider(SearchProvider):
     @retry(stop=stop_after_attempt(3), wait=wait_exponential(min=1, max=8))
     async def search(self, query: str, num_results: int = 10) -> list[SearchResult]:
         await rate_limiter.get("tavily").acquire()
-        resp = await self._client.post(
-            "https://api.tavily.com/search",
-            json={
-                "api_key": self._key,
-                "query": query,
-                "max_results": num_results,
-                "search_depth": "advanced",
-                "include_answer": False,
-            },
-        )
-        # On rate limit or auth error, try rotating to next key before raising
-        if resp.status_code in (429, 401, 403) and self._rotate_key():
-            log.warning("tavily.rate_limited", msg="Retrying with rotated key")
+        with track_latency("tavily"):
             resp = await self._client.post(
                 "https://api.tavily.com/search",
                 json={
@@ -253,7 +243,20 @@ class TavilyProvider(SearchProvider):
                     "include_answer": False,
                 },
             )
-        resp.raise_for_status()
+            # On rate limit or auth error, try rotating to next key before raising
+            if resp.status_code in (429, 401, 403) and self._rotate_key():
+                log.warning("tavily.rate_limited", msg="Retrying with rotated key")
+                resp = await self._client.post(
+                    "https://api.tavily.com/search",
+                    json={
+                        "api_key": self._key,
+                        "query": query,
+                        "max_results": num_results,
+                        "search_depth": "advanced",
+                        "include_answer": False,
+                    },
+                )
+            resp.raise_for_status()
         data = resp.json()
         results: list[SearchResult] = []
         for i, item in enumerate(data.get("results", [])):

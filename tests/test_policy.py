@@ -294,7 +294,7 @@ class TestPositionSizer:
             risk_config=_risk_cfg(
                 bankroll=200.0,
                 kelly_fraction=0.5,
-                max_stake_per_market=1000.0,
+                max_stake_per_market=200.0,
                 max_bankroll_fraction=0.05,
             ),
             confidence_level="HIGH",

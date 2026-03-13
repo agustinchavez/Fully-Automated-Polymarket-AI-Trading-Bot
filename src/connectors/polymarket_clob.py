@@ -17,6 +17,7 @@ import httpx
 from tenacity import retry, stop_after_attempt, wait_exponential
 
 from src.observability.logger import get_logger
+from src.observability.metrics import track_latency
 
 log = get_logger(__name__)
 
@@ -146,9 +147,10 @@ class CLOBClient:
 
     @retry(stop=stop_after_attempt(3), wait=wait_exponential(min=1, max=10))
     async def _get(self, path: str, params: dict[str, Any] | None = None) -> Any:
-        resp = await self._client.get(path, params=params)
-        resp.raise_for_status()
-        return resp.json()
+        with track_latency("clob"):
+            resp = await self._client.get(path, params=params)
+            resp.raise_for_status()
+            return resp.json()
 
     async def get_orderbook(self, token_id: str) -> OrderBook:
         """Fetch the current order book for a token."""

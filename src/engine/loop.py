@@ -40,6 +40,7 @@ from src.analytics.wallet_scanner import WalletScanner, save_scan_result
 from src.connectors.ws_feed import WebSocketFeed, PriceTick
 from src.observability.logger import get_logger
 from src.observability.metrics import cost_tracker
+from src.observability.circuit_breaker import circuit_breakers
 
 log = get_logger(__name__)
 
@@ -444,12 +445,21 @@ class TradingEngine:
 
     async def _discover_markets(self) -> list[Any]:
         from src.connectors.polymarket_gamma import fetch_active_markets
+        cb = circuit_breakers.get("gamma")
+        if not cb.allow_request():
+            log.warning(
+                "engine.discovery_circuit_open",
+                retry_after=cb.time_until_retry(),
+            )
+            return []
         try:
             markets = await fetch_active_markets(
                 min_volume=self.config.risk.min_liquidity, limit=200,
             )
+            cb.record_success()
             return markets
         except Exception as e:
+            cb.record_failure()
             log.error("engine.discovery_error", error=str(e))
             return []
 
@@ -498,7 +508,11 @@ class TradingEngine:
         ctx.features = build_features(market=market, evidence=ctx.evidence)
 
         # ── Stage 3: Forecast ────────────────────────────────────────
-        await self._stage_forecast(ctx)
+        forecast_ok = await self._stage_forecast(ctx)
+        if not forecast_ok:
+            self._log_candidate(ctx.cycle_id, ctx.market, decision="SKIP",
+                                reason="Forecast failed or circuit open")
+            return ctx.result
 
         # ── Stage 3b: Apply Calibration ──────────────────────────────
         self._stage_calibrate(ctx)
@@ -570,6 +584,17 @@ class TradingEngine:
 
     async def _stage_research(self, ctx: PipelineContext) -> bool:
         """Stage 1: Research. Returns False if research failed and pipeline should abort."""
+        cb = circuit_breakers.get("research")
+        if not cb.allow_request():
+            log.warning(
+                "engine.research_circuit_open",
+                market_id=ctx.market_id,
+                retry_after=cb.time_until_retry(),
+            )
+            self._log_candidate(ctx.cycle_id, ctx.market, decision="SKIP",
+                                reason="Research circuit breaker open")
+            return False
+
         from src.research.query_builder import build_queries
         from src.research.source_fetcher import SourceFetcher
         from src.research.evidence_extractor import EvidenceExtractor
@@ -595,7 +620,9 @@ class TradingEngine:
                 market_id=ctx.market_id, question=ctx.question,
                 sources=ctx.sources, market_type=ctx.market.market_type,
             )
+            cb.record_success()
         except Exception as e:
+            cb.record_failure()
             log.error("engine.research_failed", market_id=ctx.market_id, error=str(e))
             self._log_candidate(ctx.cycle_id, ctx.market, decision="SKIP",
                                 reason=f"Research failed: {e}")
@@ -611,8 +638,27 @@ class TradingEngine:
         )
         return True
 
-    async def _stage_forecast(self, ctx: PipelineContext) -> None:
-        """Stage 3: Run ensemble or single-model forecast."""
+    async def _stage_forecast(self, ctx: PipelineContext) -> bool:
+        """Stage 3: Run ensemble or single-model forecast. Returns False on failure."""
+        cb = circuit_breakers.get("forecast")
+        if not cb.allow_request():
+            log.warning(
+                "engine.forecast_circuit_open",
+                market_id=ctx.market_id,
+                retry_after=cb.time_until_retry(),
+            )
+            return False
+
+        try:
+            return await self._run_forecast(ctx)
+        except Exception as e:
+            cb.record_failure()
+            log.error("engine.forecast_failed", market_id=ctx.market_id, error=str(e))
+            return False
+
+    async def _run_forecast(self, ctx: PipelineContext) -> bool:
+        """Inner forecast logic — separated for circuit breaker wrapping."""
+        cb = circuit_breakers.get("forecast")
         if self.config.ensemble.enabled:
             from src.forecast.ensemble import EnsembleForecaster
             from src.forecast.model_router import select_tier
@@ -709,6 +755,8 @@ class TradingEngine:
             edge=round(ctx.forecast.edge, 3),
             confidence=ctx.forecast.confidence_level,
         )
+        cb.record_success()
+        return True
 
     def _stage_calibrate(self, ctx: PipelineContext) -> None:
         """Stage 3b: Apply probability calibration."""
@@ -1554,4 +1602,5 @@ class TradingEngine:
                 if self._last_filter_stats else None
             ),
             "research_cache_size": self._research_cache.size(),
+            "circuit_breakers": circuit_breakers.stats(),
         }

@@ -5715,6 +5715,27 @@ def api_costs() -> Any:
     })
 
 
+@app.route("/api/circuit-breakers")
+def api_circuit_breakers() -> Any:
+    """Return circuit breaker states for all endpoints."""
+    from src.observability.circuit_breaker import circuit_breakers
+    return jsonify(circuit_breakers.stats())
+
+
+@app.route("/api/latency")
+def api_latency() -> Any:
+    """Return API latency percentiles per endpoint."""
+    from src.observability.metrics import metrics
+    snapshot = metrics.snapshot()
+    histograms = snapshot.get("histograms", {})
+    latency = {
+        key.replace("api_latency_ms.", ""): stats
+        for key, stats in histograms.items()
+        if key.startswith("api_latency_ms.")
+    }
+    return jsonify(latency)
+
+
 # ─── API: Performance Analytics ────────────────────────────────────
 
 @app.route("/api/analytics")

@@ -151,6 +151,11 @@ model_tiers:
   premium_min_volume_usd: 10000.0
   premium_min_edge: 0.06
   scout_max_evidence_quality: 0.4
+circuit_breakers:
+  enabled: true
+  default_failure_threshold: 5
+  default_window_secs: 60.0
+  default_recovery_timeout_secs: 30.0
 engine:
   scan_interval_minutes: 10
   max_markets_per_cycle: 10
