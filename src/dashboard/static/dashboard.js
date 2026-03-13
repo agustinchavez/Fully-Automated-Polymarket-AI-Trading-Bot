@@ -51,6 +51,7 @@ const TAB_UPDATERS = {
     strategies: ['updateStrategiesTab'],
     journal:  ['updateVaR', 'updateWatchlist', 'updateJournal', 'updateEquitySnapshots'],
     admin:    ['updateAdminPanel', 'updateRisk', 'updateAlerts', 'updateAudit', 'updateConfig', 'updateSettingsTab'],
+    backtest: ['updateBacktestTab'],
     docs:     [],
 };
 
@@ -6676,6 +6677,243 @@ function filterDocs(query) {
         if (!sec) return;
         link.style.display = (!q || sec.style.display !== 'none') ? '' : 'none';
     });
+}
+
+// ─── Backtest Tab ───────────────────────────────────────────────────
+
+let _btEquityChart = null;
+let _btCalibrationChart = null;
+
+async function updateBacktestTab() {
+    try {
+        const [runsRes, cacheRes, marketsRes] = await Promise.all([
+            fetch('/api/backtest/runs?limit=50').then(r => r.json()),
+            fetch('/api/backtest/cache-stats').then(r => r.json()),
+            fetch('/api/backtest/markets?limit=1').then(r => r.json()),
+        ]);
+
+        safeText($('#bt-total-markets'), (marketsRes.total || 0).toLocaleString());
+        safeText($('#bt-cache-entries'), (cacheRes.total_entries || 0).toLocaleString());
+        safeText($('#bt-total-runs'), (runsRes.count || 0).toString());
+
+        const runs = runsRes.runs || [];
+        const tbody = $('#bt-runs-body');
+        if (!tbody) return;
+
+        // Populate compare dropdowns
+        const selA = $('#bt-compare-a');
+        const selB = $('#bt-compare-b');
+        if (selA && selB) {
+            const opts = '<option value="">— Select —</option>' +
+                runs.map(r => `<option value="${r.run_id}">${r.name || r.run_id}</option>`).join('');
+            if (selA.innerHTML !== opts) selA.innerHTML = opts;
+            if (selB.innerHTML !== opts) selB.innerHTML = opts;
+        }
+
+        if (runs.length === 0) {
+            safeHTML(tbody, '<tr><td colspan="11" style="text-align:center;color:var(--text-muted)">No backtest runs yet</td></tr>');
+            return;
+        }
+
+        let html = '';
+        for (const r of runs) {
+            const pnlColor = r.total_pnl >= 0 ? 'var(--success)' : 'var(--danger)';
+            const statusColor = r.status === 'completed' ? 'var(--success)' : r.status === 'failed' ? 'var(--danger)' : 'var(--text-muted)';
+            html += `<tr style="cursor:pointer" onclick="loadBacktestRun('${r.run_id}')">
+                <td style="font-family:monospace;font-size:0.85em">${r.run_id}</td>
+                <td>${r.name || '—'}</td>
+                <td style="color:${statusColor}">${r.status}</td>
+                <td>${r.markets_processed}</td>
+                <td>${r.markets_traded}</td>
+                <td style="color:${pnlColor}">$${r.total_pnl.toFixed(2)}</td>
+                <td>${r.brier_score.toFixed(4)}</td>
+                <td>${r.sharpe_ratio.toFixed(4)}</td>
+                <td>${(r.win_rate * 100).toFixed(1)}%</td>
+                <td>${(r.max_drawdown_pct * 100).toFixed(2)}%</td>
+                <td>${(r.started_at || '').slice(0, 19)}</td>
+            </tr>`;
+        }
+        safeHTML(tbody, html);
+    } catch (e) {
+        console.warn('backtest tab update error:', e);
+    }
+}
+
+async function loadBacktestRun(runId) {
+    const detail = $('#bt-run-detail');
+    if (!detail) return;
+    detail.style.display = 'block';
+
+    try {
+        const data = await fetch(`/api/backtest/runs/${runId}`).then(r => r.json());
+        const run = data.run;
+        const trades = data.trades || [];
+
+        safeText($('#bt-detail-name'), run.name || run.run_id);
+        safeText($('#bt-detail-pnl'), '$' + run.total_pnl.toFixed(2));
+        safeText($('#bt-detail-brier'), run.brier_score.toFixed(4));
+        safeText($('#bt-detail-sharpe'), run.sharpe_ratio.toFixed(4));
+        safeText($('#bt-detail-winrate'), (run.win_rate * 100).toFixed(1) + '%');
+        safeText($('#bt-detail-drawdown'), (run.max_drawdown_pct * 100).toFixed(2) + '%');
+
+        // Build trades table
+        const tbody = $('#bt-trades-body');
+        if (tbody) {
+            let html = '';
+            for (const t of trades.slice(0, 100)) {
+                const pnlColor = t.pnl >= 0 ? 'var(--success)' : 'var(--danger)';
+                html += `<tr>
+                    <td title="${t.question}">${(t.question || '').slice(0, 50)}</td>
+                    <td>${t.direction}</td>
+                    <td>${t.model_probability.toFixed(3)}</td>
+                    <td>${t.edge.toFixed(3)}</td>
+                    <td>$${t.stake_usd.toFixed(0)}</td>
+                    <td style="color:${pnlColor}">$${t.pnl.toFixed(2)}</td>
+                    <td>${t.resolution}</td>
+                    <td>${t.forecast_correct ? '✓' : '✗'}</td>
+                </tr>`;
+            }
+            safeHTML(tbody, html || '<tr><td colspan="8" style="text-align:center;color:var(--text-muted)">No trades</td></tr>');
+        }
+
+        // Equity curve chart
+        _renderBacktestEquityCurve(trades);
+
+        // Calibration chart
+        const calData = await fetch(`/api/backtest/runs/${runId}/calibration`).then(r => r.json());
+        _renderBacktestCalibration(calData.calibration_buckets || []);
+
+    } catch (e) {
+        console.warn('load backtest run error:', e);
+    }
+}
+
+function _renderBacktestEquityCurve(trades) {
+    const ctx = document.getElementById('bt-equity-chart');
+    if (!ctx) return;
+    if (_btEquityChart) _btEquityChart.destroy();
+
+    let cum = 0;
+    const labels = [];
+    const values = [];
+    for (let i = 0; i < trades.length; i++) {
+        cum += trades[i].pnl;
+        labels.push(i + 1);
+        values.push(cum);
+    }
+
+    _btEquityChart = new Chart(ctx, {
+        type: 'line',
+        data: {
+            labels,
+            datasets: [{
+                label: 'Cumulative P&L',
+                data: values,
+                borderColor: '#3b82f6',
+                backgroundColor: 'rgba(59,130,246,0.1)',
+                fill: true,
+                tension: 0.3,
+                pointRadius: 0,
+            }]
+        },
+        options: {
+            responsive: true,
+            plugins: { legend: { display: false } },
+            scales: {
+                x: { title: { display: true, text: 'Trade #' } },
+                y: { title: { display: true, text: 'Cumulative P&L ($)' } },
+            }
+        }
+    });
+}
+
+function _renderBacktestCalibration(buckets) {
+    const ctx = document.getElementById('bt-calibration-chart');
+    if (!ctx) return;
+    if (_btCalibrationChart) _btCalibrationChart.destroy();
+
+    if (!buckets.length) return;
+
+    const labels = buckets.map(b => `${(b.bin_start * 100).toFixed(0)}-${(b.bin_end * 100).toFixed(0)}%`);
+    const forecasted = buckets.map(b => b.avg_forecast);
+    const actual = buckets.map(b => b.actual_rate);
+
+    _btCalibrationChart = new Chart(ctx, {
+        type: 'bar',
+        data: {
+            labels,
+            datasets: [
+                {
+                    label: 'Avg Forecast',
+                    data: forecasted,
+                    backgroundColor: 'rgba(59,130,246,0.6)',
+                },
+                {
+                    label: 'Actual Rate',
+                    data: actual,
+                    backgroundColor: 'rgba(16,185,129,0.6)',
+                }
+            ]
+        },
+        options: {
+            responsive: true,
+            scales: {
+                y: { beginAtZero: true, max: 1.0, title: { display: true, text: 'Probability' } },
+            }
+        }
+    });
+}
+
+async function compareBacktestRuns() {
+    const runA = ($('#bt-compare-a') || {}).value;
+    const runB = ($('#bt-compare-b') || {}).value;
+    if (!runA || !runB) return;
+
+    const result = $('#bt-compare-result');
+    if (result) result.style.display = 'block';
+
+    try {
+        const data = await fetch(`/api/backtest/compare?a=${runA}&b=${runB}`).then(r => r.json());
+        if (data.error) {
+            safeHTML($('#bt-compare-body'), `<tr><td colspan="4" style="color:var(--danger)">${data.error}</td></tr>`);
+            return;
+        }
+
+        safeText($('#bt-cmp-name-a'), data.run_a.name || data.run_a.id);
+        safeText($('#bt-cmp-name-b'), data.run_b.name || data.run_b.id);
+
+        const ma = data.run_a_metrics;
+        const mb = data.run_b_metrics;
+        const d = data.deltas;
+
+        function fmtDelta(val, fmt) {
+            const sign = val >= 0 ? '+' : '';
+            const color = val >= 0 ? 'var(--success)' : 'var(--danger)';
+            return `<span style="color:${color}">${sign}${fmt(val)}</span>`;
+        }
+        const f2 = v => v.toFixed(2);
+        const f4 = v => v.toFixed(4);
+        const pct = v => (v * 100).toFixed(1) + '%';
+
+        let html = '';
+        html += `<tr><td>Total P&L</td><td>$${ma.total_pnl.toFixed(2)}</td><td>$${mb.total_pnl.toFixed(2)}</td><td>${fmtDelta(d.pnl, f2)}</td></tr>`;
+        html += `<tr><td>Brier Score</td><td>${ma.brier_score.toFixed(4)}</td><td>${mb.brier_score.toFixed(4)}</td><td>${fmtDelta(d.brier_score, f4)}</td></tr>`;
+        html += `<tr><td>Sharpe Ratio</td><td>${ma.sharpe_ratio.toFixed(4)}</td><td>${mb.sharpe_ratio.toFixed(4)}</td><td>${fmtDelta(d.sharpe_ratio, f4)}</td></tr>`;
+        html += `<tr><td>Win Rate</td><td>${(ma.win_rate * 100).toFixed(1)}%</td><td>${(mb.win_rate * 100).toFixed(1)}%</td><td>${fmtDelta(d.win_rate, pct)}</td></tr>`;
+        html += `<tr><td>Max Drawdown</td><td>${(ma.max_drawdown_pct * 100).toFixed(2)}%</td><td>${(mb.max_drawdown_pct * 100).toFixed(2)}%</td><td>${fmtDelta(d.max_drawdown_pct, pct)}</td></tr>`;
+        safeHTML($('#bt-compare-body'), html);
+
+        // Significance badge
+        const sig = data.significance;
+        const sigColors = { strong: '#16a34a', moderate: '#ca8a04', weak: '#9ca3af', none: '#6b7280' };
+        const sigLabel = sig.level.charAt(0).toUpperCase() + sig.level.slice(1);
+        safeHTML($('#bt-compare-sig'),
+            `<span style="display:inline-block;padding:2px 8px;border-radius:4px;background:${sigColors[sig.level] || '#6b7280'};color:#fff;font-size:0.85em">${sigLabel} significance</span>` +
+            ` (p=${sig.p_value.toFixed(4)}, ${sig.overlapping_markets} overlapping markets)`
+        );
+    } catch (e) {
+        console.warn('compare backtest error:', e);
+    }
 }
 
 // Highlight active docs section on scroll

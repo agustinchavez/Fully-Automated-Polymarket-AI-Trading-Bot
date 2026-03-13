@@ -596,5 +596,218 @@ def alerts(ctx: click.Context, limit: int) -> None:
     console.print("Configure alert channels in config.yaml under 'alerts'")
 
 
+# ─── BACKTEST ─────────────────────────────────────────────────────
+
+
+@cli.group()
+def backtest() -> None:
+    """Historical backtesting commands."""
+    pass
+
+
+@backtest.command("scrape")
+@click.option("--max-markets", default=5000, help="Maximum markets to scrape")
+@click.option("--min-volume", default=1000.0, help="Minimum volume filter (USD)")
+@click.pass_context
+def backtest_scrape(ctx: click.Context, max_markets: int, min_volume: float) -> None:
+    """Scrape resolved markets from Polymarket Gamma API."""
+    from src.backtest.data_scraper import HistoricalDataScraper
+    from src.backtest.database import BacktestDatabase
+
+    cfg: BotConfig = ctx.obj["config"]
+    db = BacktestDatabase(cfg.backtest.db_path)
+    db.connect()
+
+    scraper = HistoricalDataScraper(db, min_volume=min_volume)
+
+    def progress(current: int, total: int) -> None:
+        console.print(f"  Scraped {current:,} / {total:,} markets", end="\r")
+
+    console.print(f"[bold]Scraping resolved markets[/bold] (max={max_markets:,}, min_vol=${min_volume:,.0f})")
+    result = _run(scraper.scrape(max_markets=max_markets, progress_callback=progress))
+
+    console.print()
+    table = Table(title="Scrape Results")
+    table.add_column("Metric", style="bold")
+    table.add_column("Value", justify="right")
+    table.add_row("Total fetched", f"{result.total_fetched:,}")
+    table.add_row("New inserted", f"{result.new_inserted:,}")
+    table.add_row("Duplicates skipped", f"{result.duplicates_skipped:,}")
+    table.add_row("Invalid skipped", f"{result.invalid_skipped:,}")
+    table.add_row("Duration", f"{result.duration_secs:.1f}s")
+    table.add_row("Total in DB", f"{db.count_historical_markets():,}")
+    if result.errors:
+        table.add_row("Errors", str(len(result.errors)))
+    console.print(table)
+    db.close()
+
+
+@backtest.command("run")
+@click.option("--start", "start_date", default=None, help="Start date (YYYY-MM-DD)")
+@click.option("--end", "end_date", default=None, help="End date (YYYY-MM-DD)")
+@click.option("--name", default=None, help="Name for this backtest run")
+@click.option("--min-volume", default=1000.0, help="Minimum market volume")
+@click.option("--max-markets", default=0, help="Max markets to process (0=all)")
+@click.option("--category", default=None, help="Filter by market category")
+@click.option("--cache-only", is_flag=True, help="Only use cached LLM responses")
+@click.pass_context
+def backtest_run(
+    ctx: click.Context,
+    start_date: str | None,
+    end_date: str | None,
+    name: str | None,
+    min_volume: float,
+    max_markets: int,
+    category: str | None,
+    cache_only: bool,
+) -> None:
+    """Run a backtest on historical data."""
+    from src.backtest.database import BacktestDatabase
+    from src.backtest.llm_cache import LLMResponseCache
+    from src.backtest.replay_engine import ReplayEngine
+
+    cfg: BotConfig = ctx.obj["config"]
+    db = BacktestDatabase(cfg.backtest.db_path)
+    db.connect()
+    cache = LLMResponseCache(db, template_version=cfg.backtest.prompt_template_version)
+
+    engine = ReplayEngine(
+        config=cfg, backtest_db=db, cache=cache,
+        force_cache_only=cache_only,
+    )
+
+    def progress(current: int, total: int, question: str) -> None:
+        console.print(f"  [{current}/{total}] {question}", end="\r")
+
+    console.print("[bold]Running backtest[/bold]")
+    result = _run(engine.run(
+        start_date=start_date, end_date=end_date,
+        min_volume=min_volume, category=category,
+        max_markets=max_markets, name=name or "",
+        progress_callback=progress,
+    ))
+
+    console.print()
+    table = Table(title=f"Backtest Results: {result.config_name}")
+    table.add_column("Metric", style="bold")
+    table.add_column("Value", justify="right")
+    table.add_row("Run ID", result.run_id)
+    table.add_row("Markets processed", f"{result.total_markets:,}")
+    table.add_row("Markets traded", f"{result.markets_traded:,}")
+    table.add_row("Total P&L", f"${result.total_pnl:,.2f}")
+    table.add_row("Win rate", f"{result.win_rate:.1%}")
+    table.add_row("Brier score", f"{result.brier_score:.4f}")
+    table.add_row("Sharpe ratio", f"{result.sharpe_ratio:.4f}")
+    table.add_row("Max drawdown", f"{result.max_drawdown_pct:.2%}")
+    table.add_row("Duration", f"{result.duration_secs:.1f}s")
+    table.add_row("Cache stats", str(cache.stats))
+    console.print(table)
+    db.close()
+
+
+@backtest.command("list")
+@click.option("--limit", default=20, help="Number of runs to show")
+@click.pass_context
+def backtest_list(ctx: click.Context, limit: int) -> None:
+    """List previous backtest runs."""
+    from src.backtest.database import BacktestDatabase
+
+    cfg: BotConfig = ctx.obj["config"]
+    db = BacktestDatabase(cfg.backtest.db_path)
+    db.connect()
+
+    runs = db.get_backtest_runs(limit=limit)
+    if not runs:
+        console.print("No backtest runs found.")
+        db.close()
+        return
+
+    table = Table(title="Backtest Runs")
+    table.add_column("Run ID", style="bold")
+    table.add_column("Name")
+    table.add_column("Status")
+    table.add_column("Markets")
+    table.add_column("Traded")
+    table.add_column("P&L", justify="right")
+    table.add_column("Brier", justify="right")
+    table.add_column("Sharpe", justify="right")
+    table.add_column("Started")
+
+    for r in runs:
+        table.add_row(
+            r.run_id, r.name, r.status,
+            str(r.markets_processed), str(r.markets_traded),
+            f"${r.total_pnl:,.2f}", f"{r.brier_score:.4f}",
+            f"{r.sharpe_ratio:.4f}", r.started_at[:19],
+        )
+
+    console.print(table)
+    db.close()
+
+
+@backtest.command("compare")
+@click.argument("run_id_a")
+@click.argument("run_id_b")
+@click.pass_context
+def backtest_compare(ctx: click.Context, run_id_a: str, run_id_b: str) -> None:
+    """Compare two backtest runs (A/B analysis)."""
+    from src.backtest.database import BacktestDatabase
+
+    cfg: BotConfig = ctx.obj["config"]
+    db = BacktestDatabase(cfg.backtest.db_path)
+    db.connect()
+
+    run_a = db.get_backtest_run(run_id_a)
+    run_b = db.get_backtest_run(run_id_b)
+
+    if not run_a or not run_b:
+        console.print(f"[red]Run not found: {run_id_a if not run_a else run_id_b}[/red]")
+        db.close()
+        return
+
+    table = Table(title=f"A/B Comparison: {run_a.name} vs {run_b.name}")
+    table.add_column("Metric", style="bold")
+    table.add_column(f"A: {run_a.name}", justify="right")
+    table.add_column(f"B: {run_b.name}", justify="right")
+    table.add_column("Delta", justify="right")
+
+    def _row(label: str, va: float, vb: float, fmt: str = ".2f") -> None:
+        delta = vb - va
+        sign = "+" if delta >= 0 else ""
+        table.add_row(label, f"{va:{fmt}}", f"{vb:{fmt}}", f"{sign}{delta:{fmt}}")
+
+    _row("P&L ($)", run_a.total_pnl, run_b.total_pnl)
+    _row("Win rate", run_a.win_rate, run_b.win_rate, ".1%")
+    _row("Brier score", run_a.brier_score, run_b.brier_score, ".4f")
+    _row("Sharpe ratio", run_a.sharpe_ratio, run_b.sharpe_ratio, ".4f")
+    _row("Max drawdown", run_a.max_drawdown_pct, run_b.max_drawdown_pct, ".2%")
+    _row("Markets traded", float(run_a.markets_traded), float(run_b.markets_traded), ".0f")
+
+    console.print(table)
+    db.close()
+
+
+@backtest.command("cache-stats")
+@click.pass_context
+def backtest_cache_stats(ctx: click.Context) -> None:
+    """Show LLM cache statistics."""
+    from src.backtest.database import BacktestDatabase
+
+    cfg: BotConfig = ctx.obj["config"]
+    db = BacktestDatabase(cfg.backtest.db_path)
+    db.connect()
+
+    stats = db.get_llm_cache_stats()
+    table = Table(title="LLM Cache Statistics")
+    table.add_column("Metric", style="bold")
+    table.add_column("Value", justify="right")
+    table.add_row("Total cached responses", f"{stats['total_entries']:,}")
+    table.add_row("Distinct models", str(stats["distinct_models"]))
+    table.add_row("Database path", cfg.backtest.db_path)
+
+    console.print(table)
+    db.close()
+
+
 if __name__ == "__main__":
     cli()

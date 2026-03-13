@@ -7131,6 +7131,173 @@ def api_config_schema() -> Any:
     return jsonify({"schema": schema})
 
 
+# ─── API: Backtest ─────────────────────────────────────────────────
+
+def _get_backtest_db():
+    """Get a connected BacktestDatabase using the config db_path."""
+    from src.backtest.database import BacktestDatabase
+    cfg = _get_config()
+    db = BacktestDatabase(cfg.backtest.db_path)
+    db.connect()
+    return db
+
+
+@app.route("/api/backtest/runs")
+def api_backtest_runs() -> Any:
+    """List backtest runs, most recent first."""
+    limit = request.args.get("limit", 50, type=int)
+    try:
+        db = _get_backtest_db()
+    except Exception:
+        return jsonify({"runs": [], "count": 0})
+    try:
+        runs = db.get_backtest_runs(limit=limit)
+        data = [r.model_dump() for r in runs]
+        return jsonify({"runs": data, "count": len(data)})
+    finally:
+        db.close()
+
+
+@app.route("/api/backtest/runs/<run_id>")
+def api_backtest_run_detail(run_id: str) -> Any:
+    """Full details for a single backtest run."""
+    try:
+        db = _get_backtest_db()
+    except Exception:
+        return jsonify({"error": "Backtest database unavailable"}), 500
+    try:
+        run = db.get_backtest_run(run_id)
+        if not run:
+            return jsonify({"error": f"Run not found: {run_id}"}), 404
+        trades = db.get_backtest_trades(run_id)
+        return jsonify({
+            "run": run.model_dump(),
+            "trades_count": len(trades),
+            "trades": [t.model_dump() for t in trades[:200]],
+        })
+    finally:
+        db.close()
+
+
+@app.route("/api/backtest/runs/<run_id>/trades")
+def api_backtest_run_trades(run_id: str) -> Any:
+    """Paginated trade list for a backtest run."""
+    limit = request.args.get("limit", 100, type=int)
+    offset = request.args.get("offset", 0, type=int)
+    try:
+        db = _get_backtest_db()
+    except Exception:
+        return jsonify({"error": "Backtest database unavailable"}), 500
+    try:
+        trades = db.get_backtest_trades(run_id)
+        page = trades[offset:offset + limit]
+        return jsonify({
+            "run_id": run_id,
+            "total": len(trades),
+            "offset": offset,
+            "limit": limit,
+            "trades": [t.model_dump() for t in page],
+        })
+    finally:
+        db.close()
+
+
+@app.route("/api/backtest/runs/<run_id>/calibration")
+def api_backtest_calibration(run_id: str) -> Any:
+    """Calibration curve data for a backtest run."""
+    try:
+        db = _get_backtest_db()
+    except Exception:
+        return jsonify({"error": "Backtest database unavailable"}), 500
+    try:
+        run = db.get_backtest_run(run_id)
+        if not run:
+            return jsonify({"error": f"Run not found: {run_id}"}), 404
+
+        # Extract calibration from stored results
+        results = {}
+        if run.results_json and run.results_json != "{}":
+            try:
+                results = json.loads(run.results_json)
+            except json.JSONDecodeError:
+                pass
+
+        return jsonify({
+            "run_id": run_id,
+            "calibration_buckets": results.get("calibration_buckets", []),
+            "brier_score": run.brier_score,
+        })
+    finally:
+        db.close()
+
+
+@app.route("/api/backtest/compare")
+def api_backtest_compare() -> Any:
+    """A/B comparison of two backtest runs."""
+    run_a = request.args.get("a", "")
+    run_b = request.args.get("b", "")
+    if not run_a or not run_b:
+        return jsonify({"error": "Provide ?a=<run_id>&b=<run_id>"}), 400
+
+    from src.backtest.comparator import BacktestComparator
+
+    try:
+        db = _get_backtest_db()
+    except Exception:
+        return jsonify({"error": "Backtest database unavailable"}), 500
+    try:
+        comp = BacktestComparator(db)
+        result = comp.compare(run_a, run_b)
+        return jsonify(result.to_dict())
+    except ValueError as e:
+        return jsonify({"error": str(e)}), 404
+    finally:
+        db.close()
+
+
+@app.route("/api/backtest/cache-stats")
+def api_backtest_cache_stats() -> Any:
+    """LLM cache statistics."""
+    try:
+        db = _get_backtest_db()
+    except Exception:
+        return jsonify({"total_entries": 0, "distinct_models": 0})
+    try:
+        stats = db.get_llm_cache_stats()
+        stats["db_path"] = _get_config().backtest.db_path
+        return jsonify(stats)
+    finally:
+        db.close()
+
+
+@app.route("/api/backtest/markets")
+def api_backtest_markets() -> Any:
+    """List scraped historical markets with filtering."""
+    limit = request.args.get("limit", 100, type=int)
+    offset = request.args.get("offset", 0, type=int)
+    min_volume = request.args.get("min_volume", 0.0, type=float)
+    category = request.args.get("category")
+    try:
+        db = _get_backtest_db()
+    except Exception:
+        return jsonify({"markets": [], "total": 0})
+    try:
+        markets = db.get_historical_markets(
+            min_volume=min_volume,
+            category=category,
+            limit=limit,
+            offset=offset,
+        )
+        total = db.count_historical_markets()
+        return jsonify({
+            "markets": [m.model_dump() for m in markets],
+            "count": len(markets),
+            "total": total,
+        })
+    finally:
+        db.close()
+
+
 # ─── API: Export Data ──────────────────────────────────────────────
 
 @app.route("/api/export/<table_name>")

@@ -383,6 +383,17 @@ class EngineConfig(BaseModel):
     cycle_interval_secs: int = 300  # 5 minutes between full cycles
 
 
+class BacktestConfig(BaseModel):
+    """Backtesting engine configuration."""
+    db_path: str = "data/backtest.db"
+    default_implied_prob: float = 0.5       # When no historical price available
+    default_slippage_pct: float = 0.005     # 0.5% slippage
+    cache_llm_responses: bool = True
+    mock_evidence_quality: float = 0.5      # Evidence quality for synthetic evidence
+    max_markets_per_run: int = 0            # 0 = unlimited
+    prompt_template_version: str = "v1"     # Cache key component
+
+
 _SECRET_FIELDS = frozenset({
     "telegram_bot_token", "discord_webhook_url", "slack_webhook_url",
     "email_smtp_password",
@@ -409,6 +420,7 @@ class BotConfig(BaseModel):
     budget: BudgetConfig = Field(default_factory=BudgetConfig)
     model_tiers: ModelTierConfig = Field(default_factory=ModelTierConfig)
     circuit_breakers: CircuitBreakerSettings = Field(default_factory=CircuitBreakerSettings)
+    backtest: BacktestConfig = Field(default_factory=BacktestConfig)
 
     def redacted_dict(self) -> dict[str, Any]:
         """Return config dict with secret values masked."""

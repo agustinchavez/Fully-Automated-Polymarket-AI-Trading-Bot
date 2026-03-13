@@ -108,6 +108,10 @@
             <span class="tab-icon">🛡️</span>
             <span class="tab-label">Admin Panel</span>
         </button>
+        <button class="tab-btn" data-tab="backtest" onclick="switchTab('backtest')">
+            <span class="tab-icon">🧪</span>
+            <span class="tab-label">Backtest</span>
+        </button>
         <button class="tab-btn" data-tab="docs" onclick="switchTab('docs')">
             <span class="tab-icon">📖</span>
             <span class="tab-label">Documentation</span>
@@ -1942,6 +1946,96 @@
                     </div>
                     <button class="btn btn-danger btn-sm" onclick="adminResetMetrics()">📊 Reset</button>
                 </div>
+            </div>
+        </section>
+
+    </div>
+
+    <!-- ════════════════════════════════════════════════════════ -->
+    <!-- TAB: BACKTEST                                            -->
+    <!-- ════════════════════════════════════════════════════════ -->
+    <div class="tab-content" id="tab-backtest" data-tab="backtest">
+
+        <!-- ─── Backtest KPIs ──────────────────────────────────── -->
+        <section class="card" style="margin-bottom:16px;">
+            <h2>Historical Data</h2>
+            <div class="kpi-grid" style="grid-template-columns: repeat(3,1fr);">
+                <div class="kpi-card"><div class="kpi-label">Scraped Markets</div><div class="kpi-value" id="bt-total-markets">0</div></div>
+                <div class="kpi-card"><div class="kpi-label">Cached LLM Responses</div><div class="kpi-value" id="bt-cache-entries">0</div></div>
+                <div class="kpi-card"><div class="kpi-label">Total Backtest Runs</div><div class="kpi-value" id="bt-total-runs">0</div></div>
+            </div>
+        </section>
+
+        <!-- ─── Backtest Runs List ─────────────────────────────── -->
+        <section class="card" style="margin-bottom:16px;">
+            <h2>Backtest Runs</h2>
+            <table>
+                <thead>
+                    <tr>
+                        <th>Run ID</th><th>Name</th><th>Status</th>
+                        <th>Markets</th><th>Traded</th><th>P&amp;L</th>
+                        <th>Brier</th><th>Sharpe</th><th>Win Rate</th>
+                        <th>Max DD</th><th>Started</th>
+                    </tr>
+                </thead>
+                <tbody id="bt-runs-body">
+                    <tr><td colspan="11" style="text-align:center;color:var(--text-muted)">No backtest runs yet</td></tr>
+                </tbody>
+            </table>
+        </section>
+
+        <!-- ─── Run Detail (shown when a run is selected) ─────── -->
+        <section class="card" id="bt-run-detail" style="margin-bottom:16px; display:none;">
+            <h2>Run Detail: <span id="bt-detail-name">—</span></h2>
+            <div class="kpi-grid" style="grid-template-columns: repeat(5,1fr); margin-bottom:16px;">
+                <div class="kpi-card"><div class="kpi-label">Total P&amp;L</div><div class="kpi-value" id="bt-detail-pnl">$0</div></div>
+                <div class="kpi-card"><div class="kpi-label">Brier Score</div><div class="kpi-value" id="bt-detail-brier">0.0000</div></div>
+                <div class="kpi-card"><div class="kpi-label">Sharpe Ratio</div><div class="kpi-value" id="bt-detail-sharpe">0.0000</div></div>
+                <div class="kpi-card"><div class="kpi-label">Win Rate</div><div class="kpi-value" id="bt-detail-winrate">0.0%</div></div>
+                <div class="kpi-card"><div class="kpi-label">Max Drawdown</div><div class="kpi-value" id="bt-detail-drawdown">0.0%</div></div>
+            </div>
+            <!-- Equity curve chart -->
+            <div class="chart-container" style="margin-bottom:16px;">
+                <canvas id="bt-equity-chart"></canvas>
+            </div>
+            <!-- Calibration chart -->
+            <div class="chart-container" style="margin-bottom:16px;">
+                <canvas id="bt-calibration-chart"></canvas>
+            </div>
+            <!-- Trades table -->
+            <h3 style="margin-top:16px;">Trades</h3>
+            <table>
+                <thead>
+                    <tr>
+                        <th>Market</th><th>Direction</th><th>Model P</th>
+                        <th>Edge</th><th>Stake</th><th>P&amp;L</th>
+                        <th>Resolution</th><th>Correct</th>
+                    </tr>
+                </thead>
+                <tbody id="bt-trades-body">
+                    <tr><td colspan="8" style="text-align:center;color:var(--text-muted)">Select a run to view trades</td></tr>
+                </tbody>
+            </table>
+        </section>
+
+        <!-- ─── A/B Comparison ─────────────────────────────────── -->
+        <section class="card" style="margin-bottom:16px;">
+            <h2>A/B Comparison</h2>
+            <div style="display:flex;gap:8px;margin-bottom:12px;">
+                <select id="bt-compare-a" style="flex:1;padding:6px;background:var(--bg-card);color:var(--text);border:1px solid var(--border);border-radius:4px;">
+                    <option value="">Run A</option>
+                </select>
+                <select id="bt-compare-b" style="flex:1;padding:6px;background:var(--bg-card);color:var(--text);border:1px solid var(--border);border-radius:4px;">
+                    <option value="">Run B</option>
+                </select>
+                <button onclick="compareBacktestRuns()" style="padding:6px 16px;background:var(--accent);color:#fff;border:none;border-radius:4px;cursor:pointer;">Compare</button>
+            </div>
+            <div id="bt-compare-result" style="display:none;">
+                <table>
+                    <thead><tr><th>Metric</th><th id="bt-cmp-name-a">Run A</th><th id="bt-cmp-name-b">Run B</th><th>Delta</th></tr></thead>
+                    <tbody id="bt-compare-body"></tbody>
+                </table>
+                <div id="bt-compare-sig" style="margin-top:8px;padding:8px;border-radius:4px;"></div>
             </div>
         </section>
 
