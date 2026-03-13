@@ -5600,6 +5600,8 @@ def api_config() -> Any:
         "engine": cfg.engine.model_dump(),
         "alerts": cfg.alerts.model_dump(),
         "observability": cfg.observability.model_dump(),
+        "budget": cfg.budget.model_dump(),
+        "model_tiers": cfg.model_tiers.model_dump(),
     })
 
 
@@ -5674,6 +5676,43 @@ def api_config_reset() -> Any:
         return jsonify({"ok": True, "message": "Configuration reset to defaults"})
     except Exception as exc:
         return jsonify({"ok": False, "error": str(exc)}), 500
+
+
+# ─── API: Costs ───────────────────────────────────────────────────
+
+@app.route("/api/costs")
+def api_costs() -> Any:
+    """Return current cost tracking data and budget status."""
+    from src.observability.metrics import cost_tracker
+    cfg = _get_config()
+    snap = cost_tracker.snapshot()
+    budget_enabled = cfg.budget.enabled
+    limit = cfg.budget.daily_limit_usd if budget_enabled else 0.0
+    daily_cost = snap.get("daily_cost_usd", 0.0)
+    remaining = max(0.0, limit - daily_cost) if budget_enabled else 0.0
+    pct_used = (daily_cost / limit * 100) if (budget_enabled and limit > 0) else 0.0
+
+    return jsonify({
+        "daily": {
+            "cost_usd": daily_cost,
+            "limit_usd": limit,
+            "remaining_usd": round(remaining, 4),
+            "pct_used": round(pct_used, 1),
+            "calls": snap.get("daily_calls", {}),
+        },
+        "session": {
+            "cost_usd": snap.get("total_cost_usd", 0.0),
+            "calls": snap.get("total_calls", {}),
+            "input_tokens": snap.get("total_input_tokens", 0),
+            "output_tokens": snap.get("total_output_tokens", 0),
+        },
+        "cycle": {
+            "cost_usd": snap.get("cycle_cost_usd", 0.0),
+            "calls": snap.get("cycle_calls", {}),
+        },
+        "budget_enabled": budget_enabled,
+        "current_date": snap.get("current_date", ""),
+    })
 
 
 # ─── API: Performance Analytics ────────────────────────────────────

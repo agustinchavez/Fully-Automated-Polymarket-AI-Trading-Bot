@@ -31,6 +31,7 @@ from openai import AsyncOpenAI
 
 from src.config import ForecastingConfig, ResearchConfig
 from src.observability.logger import get_logger
+from src.observability.metrics import cost_tracker
 from src.research.source_fetcher import FetchedSource
 
 log = get_logger(__name__)
@@ -349,8 +350,11 @@ class EvidenceExtractor:
         )
 
         try:
+            evidence_model = getattr(
+                self._config, "evidence_model", self._config.llm_model,
+            )
             resp = await self._llm.chat.completions.create(
-                model=self._config.llm_model,
+                model=evidence_model,
                 temperature=0.1,
                 max_tokens=self._config.llm_max_tokens,
                 messages=[
@@ -365,6 +369,12 @@ class EvidenceExtractor:
                 ],
             )
             raw_text = resp.choices[0].message.content or "{}"
+            usage = getattr(resp, "usage", None)
+            cost_tracker.record_call(
+                evidence_model,
+                input_tokens=getattr(usage, "prompt_tokens", 0) or 0,
+                output_tokens=getattr(usage, "completion_tokens", 0) or 0,
+            )
             raw_text = raw_text.strip()
             if raw_text.startswith("```"):
                 raw_text = raw_text.split("\n", 1)[1] if "\n" in raw_text else raw_text[3:]

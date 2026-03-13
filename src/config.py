@@ -54,6 +54,7 @@ class ResearchConfig(BaseModel):
 
 class ForecastingConfig(BaseModel):
     llm_model: str = "gpt-4o"
+    evidence_model: str = "gpt-4o-mini"
     llm_temperature: float = 0.2
     llm_max_tokens: int = 4096
     calibration_method: str = "platt"
@@ -76,6 +77,19 @@ class EnsembleConfig(BaseModel):
     timeout_per_model_secs: int = 30
     min_models_required: int = 1
     fallback_model: str = "gpt-4o"
+
+
+class ModelTierConfig(BaseModel):
+    """Model tier routing — select model quality based on opportunity."""
+    enabled: bool = True
+    scout_models: list[str] = Field(default_factory=lambda: ["gpt-4o-mini"])
+    standard_models: list[str] = Field(default_factory=lambda: ["gpt-4o"])
+    premium_models: list[str] = Field(default_factory=lambda: [
+        "gpt-4o", "claude-sonnet-4-5-20250929", "gemini-2.0-flash",
+    ])
+    premium_min_volume_usd: float = 10000.0
+    premium_min_edge: float = 0.06
+    scout_max_evidence_quality: float = 0.4
 
 
 class RiskConfig(BaseModel):
@@ -103,6 +117,7 @@ class RiskConfig(BaseModel):
     volatility_med_threshold: float = 0.10
     volatility_high_min_mult: float = 0.4
     volatility_med_min_mult: float = 0.6
+    min_annualized_edge: float = 0.15  # Reject trades below 15% annualized return
     category_stake_multipliers: dict[str, float] = Field(
         default_factory=lambda: {
             "MACRO": 1.0,
@@ -147,6 +162,13 @@ class DrawdownConfig(BaseModel):
     heat_reduction_factor: float = 0.50
     recovery_trades_required: int = 5
     snapshot_interval_minutes: int = 15
+
+
+class BudgetConfig(BaseModel):
+    """API cost budget management."""
+    enabled: bool = True
+    daily_limit_usd: float = 5.0
+    warning_pct: float = 0.80
 
 
 class PortfolioConfig(BaseModel):
@@ -309,6 +331,8 @@ class BotConfig(BaseModel):
     alerts: AlertsConfig = Field(default_factory=AlertsConfig)
     engine: EngineConfig = Field(default_factory=EngineConfig)
     wallet_scanner: WalletScannerConfig = Field(default_factory=WalletScannerConfig)
+    budget: BudgetConfig = Field(default_factory=BudgetConfig)
+    model_tiers: ModelTierConfig = Field(default_factory=ModelTierConfig)
 
     def redacted_dict(self) -> dict[str, Any]:
         """Return config dict with secret values masked."""

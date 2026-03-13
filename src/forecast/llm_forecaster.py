@@ -20,6 +20,7 @@ from src.forecast.feature_builder import MarketFeatures
 from src.research.evidence_extractor import EvidencePackage
 from src.observability.logger import get_logger
 from src.connectors.rate_limiter import rate_limiter
+from src.observability.metrics import cost_tracker
 
 log = get_logger(__name__)
 
@@ -201,6 +202,12 @@ class LLMForecaster:
                 ],
             )
             raw_text = resp.choices[0].message.content or "{}"
+            usage = getattr(resp, "usage", None)
+            cost_tracker.record_call(
+                self._config.llm_model,
+                input_tokens=getattr(usage, "prompt_tokens", 0) or 0,
+                output_tokens=getattr(usage, "completion_tokens", 0) or 0,
+            )
             raw_text = raw_text.strip()
             if raw_text.startswith("```"):
                 raw_text = raw_text.split("\n", 1)[1] if "\n" in raw_text else raw_text[3:]

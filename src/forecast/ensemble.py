@@ -189,7 +189,12 @@ async def _query_openai(model: str, prompt: str, config: ForecastingConfig, time
         )
         raw = resp.choices[0].message.content or "{}"
         parsed = _parse_llm_json(raw)
-        cost_tracker.record_call(model)
+        usage = getattr(resp, "usage", None)
+        cost_tracker.record_call(
+            model,
+            input_tokens=getattr(usage, "prompt_tokens", 0) or 0,
+            output_tokens=getattr(usage, "completion_tokens", 0) or 0,
+        )
         return ModelForecast(
             model_name=model,
             model_probability=max(0.01, min(0.99, float(parsed.get("model_probability", 0.5)))),
@@ -228,7 +233,12 @@ async def _query_anthropic(model: str, prompt: str, config: ForecastingConfig, t
         )
         raw = resp.content[0].text if resp.content else "{}"
         parsed = _parse_llm_json(raw)
-        cost_tracker.record_call(model)
+        usage = getattr(resp, "usage", None)
+        cost_tracker.record_call(
+            model,
+            input_tokens=getattr(usage, "input_tokens", 0) or 0,
+            output_tokens=getattr(usage, "output_tokens", 0) or 0,
+        )
         return ModelForecast(
             model_name=model,
             model_probability=max(0.01, min(0.99, float(parsed.get("model_probability", 0.5)))),
@@ -268,7 +278,12 @@ async def _query_google(model: str, prompt: str, config: ForecastingConfig, time
         )
         raw = resp.text or "{}"
         parsed = _parse_llm_json(raw)
-        cost_tracker.record_call(model)
+        usage_meta = getattr(resp, "usage_metadata", None)
+        cost_tracker.record_call(
+            model,
+            input_tokens=getattr(usage_meta, "prompt_token_count", 0) or 0,
+            output_tokens=getattr(usage_meta, "candidates_token_count", 0) or 0,
+        )
         return ModelForecast(
             model_name=model,
             model_probability=max(0.01, min(0.99, float(parsed.get("model_probability", 0.5)))),

@@ -276,6 +276,25 @@ class TradingEngine:
                 self._finish_cycle(cycle)
                 return cycle
 
+            # ── Budget Check ─────────────────────────────────────────
+            if self.config.budget.enabled:
+                can_spend, remaining = cost_tracker.check_budget(
+                    self.config.budget.daily_limit_usd,
+                )
+                if not can_spend:
+                    log.warning(
+                        "engine.budget_exhausted",
+                        daily_limit=self.config.budget.daily_limit_usd,
+                    )
+                    cycle.status = "skipped"
+                    cycle.errors.append("Budget exhausted for today")
+                    if self._db:
+                        self._db.insert_alert(
+                            "warning", "Daily API budget exhausted", "budget",
+                        )
+                    self._finish_cycle(cycle)
+                    return cycle
+
             # ── Regime Detection ─────────────────────────────────────
             try:
                 if self._db:
@@ -596,8 +615,29 @@ class TradingEngine:
         """Stage 3: Run ensemble or single-model forecast."""
         if self.config.ensemble.enabled:
             from src.forecast.ensemble import EnsembleForecaster
+            from src.forecast.model_router import select_tier
+
+            # Select model tier based on opportunity characteristics
+            ens_cfg = self.config.ensemble
+            if self.config.model_tiers.enabled:
+                rough_edge = abs(ctx.features.implied_probability - 0.5)
+                tier = select_tier(
+                    ctx.features, self.config.model_tiers, rough_edge,
+                )
+                log.info(
+                    "engine.tier_selected",
+                    market_id=ctx.market_id,
+                    tier=tier.tier,
+                    models=tier.models,
+                    reason=tier.reason,
+                )
+                if tier.models != ens_cfg.models:
+                    ens_cfg = ens_cfg.model_copy(
+                        update={"models": tier.models},
+                    )
+
             ens_forecaster = EnsembleForecaster(
-                self.config.ensemble, self.config.forecasting,
+                ens_cfg, self.config.forecasting,
             )
             # Inject learned adaptive weights if available
             try:
@@ -716,6 +756,7 @@ class TradingEngine:
             model_prob=ctx.forecast.model_probability,
             transaction_fee_pct=self.config.risk.transaction_fee_pct,
             gas_cost_usd=self.config.risk.gas_cost_usd,
+            holding_hours=ctx.features.hours_to_resolution,
         )
 
         # Track whale convergence for min_edge override later
@@ -763,6 +804,7 @@ class TradingEngine:
                         ),
                         transaction_fee_pct=self.config.risk.transaction_fee_pct,
                         gas_cost_usd=self.config.risk.gas_cost_usd,
+                        holding_hours=ctx.features.hours_to_resolution,
                     )
                     ctx_whale_converged = True
                     ctx.whale_converged = True
@@ -782,6 +824,7 @@ class TradingEngine:
                         ),
                         transaction_fee_pct=self.config.risk.transaction_fee_pct,
                         gas_cost_usd=self.config.risk.gas_cost_usd,
+                        holding_hours=ctx.features.hours_to_resolution,
                     )
                     log.info("engine.whale_edge_penalty", market_id=ctx.market_id,
                              penalty=penalty, new_edge=round(ctx.edge_result.abs_net_edge, 4))

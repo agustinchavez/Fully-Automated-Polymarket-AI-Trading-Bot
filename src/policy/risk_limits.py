@@ -222,7 +222,19 @@ def check_risk_limits(
                 f"MARKET_TYPE: {market_type} not in preferred list"
             )
 
-    # 13. Clear resolution source
+    # 13. Annualized edge — reject low-return capital lockups
+    min_ann = getattr(risk_config, "min_annualized_edge", 0.0)
+    if min_ann > 0 and features.hours_to_resolution > 0:
+        years = features.hours_to_resolution / (365.25 * 24)
+        ann_edge = edge.abs_net_edge / years if years > 0 else float("inf")
+        if ann_edge < min_ann:
+            violations.append(
+                f"ANNUALIZED_EDGE: {ann_edge:.1%}/yr < {min_ann:.1%}/yr"
+            )
+        else:
+            passed.append(f"annualized_edge: {ann_edge:.1%}/yr >= {min_ann:.1%}/yr")
+
+    # 14. Clear resolution source
     if not features.has_clear_resolution:
         warnings.append("RESOLUTION: No clear resolution source defined")
 

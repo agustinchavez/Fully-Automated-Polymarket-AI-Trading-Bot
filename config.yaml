@@ -30,6 +30,7 @@ research:
   stale_days_heavy_penalty: 30
 forecasting:
   llm_model: gpt-4o
+  evidence_model: gpt-4o-mini
   llm_temperature: 0.2
   llm_max_tokens: 4096
   low_evidence_penalty: 0.15
@@ -39,8 +40,8 @@ ensemble:
   enabled: true
   models:
   - gpt-4o
-  - claude-3-5-sonnet-20241022
-  - gemini-1.5-pro
+  - claude-sonnet-4-5-20250929
+  - gemini-2.0-flash
   aggregation: trimmed_mean
   min_models_required: 1
   fallback_model: gpt-4o
@@ -64,6 +65,7 @@ risk:
   take_profit_pct: 0.3
   max_holding_hours: 240
   min_stake_usd: 1.0
+  min_annualized_edge: 0.15
   volatility_high_threshold: 0.15
   volatility_med_threshold: 0.10
   volatility_high_min_mult: 0.4
@@ -132,6 +134,23 @@ scanner:
     #   base_url: https://my-polymarket-proxy.example.com
     #   rpm: 60
     #   weight: 1.0
+budget:
+  enabled: true
+  daily_limit_usd: 5.0
+  warning_pct: 0.80
+model_tiers:
+  enabled: true
+  scout_models:
+  - gpt-4o-mini
+  standard_models:
+  - gpt-4o
+  premium_models:
+  - gpt-4o
+  - claude-sonnet-4-5-20250929
+  - gemini-2.0-flash
+  premium_min_volume_usd: 10000.0
+  premium_min_edge: 0.06
+  scout_max_evidence_quality: 0.4
 engine:
   scan_interval_minutes: 10
   max_markets_per_cycle: 10

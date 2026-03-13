@@ -423,7 +423,7 @@ class TestMinImpliedProbability:
     def test_default_config_value(self) -> None:
         from src.config import RiskConfig as RC
         rc = RC()
-        assert rc.min_implied_probability == 0.10
+        assert rc.min_implied_probability == 0.05
 
 
 class TestEvidenceQualityThreshold:
@@ -548,6 +548,63 @@ class TestCategoryStakeMultipliers:
         assert rc.category_stake_multipliers["MACRO"] == 1.0
         assert rc.category_stake_multipliers["ELECTION"] == 0.50
         assert rc.category_stake_multipliers["CORPORATE"] == 0.75
+
+
+class TestAnnualizedEdge:
+    """Reject trades where annualized return is too low (capital traps)."""
+
+    def test_slow_market_rejected(self) -> None:
+        """3% edge over 90 days = ~12%/yr → below 15% threshold."""
+        edge = calculate_edge(implied_prob=0.50, model_prob=0.53)
+        result = check_risk_limits(
+            edge=edge,
+            features=_features(hours_to_resolution=90 * 24),
+            risk_config=_risk_cfg(min_annualized_edge=0.15),
+            forecast_config=_forecast_cfg(),
+            confidence_level="MEDIUM",
+        )
+        assert any("ANNUALIZED_EDGE" in v for v in result.violations)
+
+    def test_fast_market_accepted(self) -> None:
+        """3% edge over 7 days = ~156%/yr → above 15% threshold."""
+        edge = calculate_edge(implied_prob=0.50, model_prob=0.53)
+        result = check_risk_limits(
+            edge=edge,
+            features=_features(hours_to_resolution=7 * 24),
+            risk_config=_risk_cfg(min_annualized_edge=0.15),
+            forecast_config=_forecast_cfg(),
+            confidence_level="MEDIUM",
+        )
+        assert not any("ANNUALIZED_EDGE" in v for v in result.violations)
+
+    def test_disabled_when_zero(self) -> None:
+        """min_annualized_edge=0 disables the check."""
+        edge = calculate_edge(implied_prob=0.50, model_prob=0.53)
+        result = check_risk_limits(
+            edge=edge,
+            features=_features(hours_to_resolution=90 * 24),
+            risk_config=_risk_cfg(min_annualized_edge=0.0),
+            forecast_config=_forecast_cfg(),
+            confidence_level="MEDIUM",
+        )
+        assert not any("ANNUALIZED_EDGE" in v for v in result.violations)
+
+    def test_no_hours_skips_check(self) -> None:
+        """If hours_to_resolution is 0, skip the check."""
+        edge = calculate_edge(implied_prob=0.50, model_prob=0.53)
+        result = check_risk_limits(
+            edge=edge,
+            features=_features(hours_to_resolution=0),
+            risk_config=_risk_cfg(min_annualized_edge=0.15),
+            forecast_config=_forecast_cfg(),
+            confidence_level="MEDIUM",
+        )
+        assert not any("ANNUALIZED_EDGE" in v for v in result.violations)
+
+    def test_config_default(self) -> None:
+        from src.config import RiskConfig as RC
+        rc = RC()
+        assert rc.min_annualized_edge == 0.15
 
 
 class TestStopLossTakeProfit:
