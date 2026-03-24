@@ -193,7 +193,7 @@ class TestCachedEnsembleForecaster:
 
         # No mocking needed — if it calls the API, it would fail
         # because there's no OpenAI key configured
-        result = asyncio.get_event_loop().run_until_complete(
+        result = asyncio.new_event_loop().run_until_complete(
             forecaster.forecast(self._make_features("Will X?"), self._make_evidence())
         )
         assert result.model_probability == pytest.approx(0.8, abs=0.01)
@@ -207,7 +207,7 @@ class TestCachedEnsembleForecaster:
             cache, models=["gpt-4o"], force_cache_only=True,
         )
         with pytest.raises(CacheMissError, match="gpt-4o"):
-            asyncio.get_event_loop().run_until_complete(
+            asyncio.new_event_loop().run_until_complete(
                 forecaster.forecast(
                     self._make_features("Unknown question?"),
                     self._make_evidence(),
@@ -233,7 +233,7 @@ class TestCachedEnsembleForecaster:
             new_callable=AsyncMock,
             return_value=mock_forecast,
         ):
-            result = asyncio.get_event_loop().run_until_complete(
+            result = asyncio.new_event_loop().run_until_complete(
                 forecaster.forecast(
                     self._make_features("Will X?"),
                     self._make_evidence(),
@@ -255,7 +255,7 @@ class TestCachedEnsembleForecaster:
 
         forecaster = self._make_forecaster(cache, models=["m1", "m2"])
 
-        result = asyncio.get_event_loop().run_until_complete(
+        result = asyncio.new_event_loop().run_until_complete(
             forecaster.forecast(self._make_features("Will X?"), self._make_evidence())
         )
         assert result.models_succeeded == 2

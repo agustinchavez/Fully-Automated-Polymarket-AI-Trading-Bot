@@ -241,7 +241,7 @@ class TestDataAPIClient:
         mock_http.is_closed = False
         client._client = mock_http
 
-        positions = asyncio.get_event_loop().run_until_complete(
+        positions = asyncio.new_event_loop().run_until_complete(
             client.get_positions("0xtest")
         )
         assert len(positions) == 2
@@ -265,7 +265,7 @@ class TestDataAPIClient:
         mock_http.is_closed = False
         client._client = mock_http
 
-        positions = asyncio.get_event_loop().run_until_complete(
+        positions = asyncio.new_event_loop().run_until_complete(
             client.get_positions("0xtest2")
         )
         assert len(positions) == 1
@@ -286,7 +286,7 @@ class TestDataAPIClient:
         mock_http.is_closed = False
         client._client = mock_http
 
-        activities = asyncio.get_event_loop().run_until_complete(
+        activities = asyncio.new_event_loop().run_until_complete(
             client.get_activity("0xtest3")
         )
         assert len(activities) == 1
@@ -743,7 +743,7 @@ class TestScanCycle:
             min_conviction_score=0,
         )
 
-        result = asyncio.get_event_loop().run_until_complete(scanner.scan())
+        result = asyncio.new_event_loop().run_until_complete(scanner.scan())
         assert result.wallets_scanned == 2
         assert result.total_positions == 2
         assert len(result.tracked_wallets) == 2
@@ -760,7 +760,7 @@ class TestScanCycle:
             client=mock_client,
         )
 
-        result = asyncio.get_event_loop().run_until_complete(scanner.scan())
+        result = asyncio.new_event_loop().run_until_complete(scanner.scan())
         assert result.wallets_scanned == 0
         assert len(result.errors) == 1
         assert "API down" in result.errors[0]
@@ -782,7 +782,7 @@ class TestScanCycle:
             min_conviction_score=0,
         )
 
-        asyncio.get_event_loop().run_until_complete(scanner.scan())
+        asyncio.new_event_loop().run_until_complete(scanner.scan())
 
         # Second scan: added mk2
         mock_client.get_positions = AsyncMock(return_value=[
@@ -790,7 +790,7 @@ class TestScanCycle:
             _make_position(slug="mk2", current_value=300),
         ])
 
-        result2 = asyncio.get_event_loop().run_until_complete(scanner.scan())
+        result2 = asyncio.new_event_loop().run_until_complete(scanner.scan())
         entries = [d for d in result2.deltas if d.action == "NEW_ENTRY"]
         assert len(entries) == 1
         assert entries[0].market_slug == "mk2"
@@ -821,7 +821,7 @@ class TestScanCycle:
         )
         assert scanner._prev_positions == {}
 
-        asyncio.get_event_loop().run_until_complete(scanner.scan())
+        asyncio.new_event_loop().run_until_complete(scanner.scan())
         assert "0xa" in scanner._prev_positions
         assert "mk1|Yes" in scanner._prev_positions["0xa"]
 

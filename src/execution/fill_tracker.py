@@ -66,6 +66,13 @@ class ExecutionQuality:
     # By strategy
     strategy_stats: dict[str, dict[str, float]] = field(default_factory=dict)
 
+    # Phase 6: Deeper analytics
+    slippage_distribution: list[float] = field(default_factory=list)
+    fill_rate_by_size_bucket: dict[str, float] = field(default_factory=dict)
+    realized_vs_expected_spread: float = 0.0
+    worst_slippage_bps: float = 0.0
+    best_slippage_bps: float = 0.0
+
     def to_dict(self) -> dict[str, Any]:
         return self.__dict__
 
@@ -214,6 +221,63 @@ class FillTracker:
             ),
             strategy_stats=strat_stats,
         )
+
+        return quality
+
+    def get_detailed_quality(
+        self,
+        lookback_hours: float = 24.0,
+    ) -> ExecutionQuality:
+        """Enhanced quality metrics with distributions and breakdowns.
+
+        Extends get_quality() with:
+        - Slippage distribution (list of all slippage_bps values)
+        - Fill rate by order size bucket (small < $50, medium $50-$200, large > $200)
+        - Worst/best slippage
+        """
+        quality = self.get_quality(lookback_hours)
+
+        cutoff = time.time() - (lookback_hours * 3600)
+        recent = [f for f in self._fills if f.timestamp >= cutoff]
+        filled = [f for f in recent if f.size_filled > 0]
+
+        if not filled:
+            return quality
+
+        # Slippage distribution
+        slippages = [f.slippage_bps for f in filled]
+        quality.slippage_distribution = [round(s, 1) for s in slippages]
+        quality.worst_slippage_bps = round(max(slippages), 1)
+        quality.best_slippage_bps = round(min(slippages), 1)
+
+        # Fill rate by size bucket
+        buckets: dict[str, list[float]] = {"small": [], "medium": [], "large": []}
+        for f in recent:
+            stake = f.size_ordered * f.expected_price if f.expected_price > 0 else 0
+            if stake < 50:
+                buckets["small"].append(f.fill_rate)
+            elif stake < 200:
+                buckets["medium"].append(f.fill_rate)
+            else:
+                buckets["large"].append(f.fill_rate)
+
+        for bucket, rates in buckets.items():
+            if rates:
+                quality.fill_rate_by_size_bucket[bucket] = round(
+                    sum(rates) / len(rates), 3
+                )
+
+        # Realized vs expected spread
+        spreads = []
+        for f in filled:
+            if f.expected_price > 0:
+                spreads.append(
+                    (f.fill_price - f.expected_price) / f.expected_price
+                )
+        if spreads:
+            quality.realized_vs_expected_spread = round(
+                sum(spreads) / len(spreads), 6
+            )
 
         return quality
 

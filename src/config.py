@@ -311,6 +311,18 @@ class ExecutionConfig(BaseModel):
     stale_order_cancel_secs: int = 600
     iceberg_threshold_usd: float = 500.0
     iceberg_show_pct: float = 0.20
+    # Phase 6: Patience window
+    patience_window_enabled: bool = False
+    patience_window_max_secs: int = 300
+    patience_check_interval_secs: int = 5
+    edge_immediate_multiplier: float = 2.0
+    edge_deterioration_cancel: bool = True
+    # Phase 6: Auto strategy selection
+    auto_strategy_selection_enabled: bool = False
+    auto_strategy_thin_depth_usd: float = 5000.0
+    auto_strategy_large_order_pct: float = 0.10
+    auto_strategy_learning_enabled: bool = False
+    auto_strategy_min_samples: int = 10
 
 
 class StorageConfig(BaseModel):
@@ -384,6 +396,15 @@ class WalletScannerConfig(BaseModel):
     whale_convergence_min_edge: float = 0.02  # lower min_edge when whale+model agree
     track_leaderboard: bool = True  # auto-track leaderboard wallets
     custom_wallets: list[str] = Field(default_factory=list)  # user-added wallet addresses
+    # Phase 7: Enhanced Whale Intelligence
+    whale_quality_scoring_enabled: bool = False
+    whale_quality_lookback_days: int = 90
+    whale_quality_min_percentile: float = 60.0
+    whale_timing_lookback_hours: int = 24
+    whale_timing_favorable_threshold: float = 0.02  # 2% move = favorable
+    enhanced_min_whale_count: int = 3
+    enhanced_conviction_edge_boost: float = 0.04
+    enhanced_conviction_edge_penalty: float = 0.03
 
 
 class EngineConfig(BaseModel):
@@ -407,11 +428,132 @@ class BacktestConfig(BaseModel):
     mock_evidence_quality: float = 0.5      # Evidence quality for synthetic evidence
     max_markets_per_run: int = 0            # 0 = unlimited
     prompt_template_version: str = "v1"     # Cache key component
+    # Phase 6: Realistic fill simulation
+    realistic_fills_enabled: bool = False        # config-gated, disabled by default
+    fill_sim_depth_multiplier: float = 1.0       # scales modeled available liquidity
+    fill_sim_partial_fill_enabled: bool = True    # allow partial fills
+    fill_sim_delay_min_ms: int = 50              # minimum fill delay in ms
+    fill_sim_delay_max_ms: int = 500             # maximum fill delay in ms
+    fill_sim_price_drift_vol: float = 0.001      # vol for price drift during delay
+    fill_sim_fee_entry_pct: float = 0.02         # entry fee percentage
+    fill_sim_fee_exit_pct: float = 0.02          # exit fee percentage
+
+
+class SpecialistsConfig(BaseModel):
+    """Domain-specific forecasting specialists (Phase 4)."""
+    enabled: bool = False
+    enabled_specialists: list[str] = Field(default_factory=list)
+    weather_min_edge: float = 0.08
+    weather_api_base: str = "https://ensemble-api.open-meteo.com/v1/ensemble"
+    crypto_min_edge: float = 0.04
+    crypto_candle_source: str = "binance"
+    politics_polling_weight: float = 0.6
+
+
+class ContinuousLearningConfig(BaseModel):
+    """Continuous learning & self-improvement (Phase 8)."""
+    # Post-mortem analysis
+    post_mortem_enabled: bool = False
+    confident_wrong_threshold: float = 0.75
+    weekly_summary_enabled: bool = False
+    # Evidence quality tracking
+    evidence_tracking_enabled: bool = False
+    min_citations_for_ranking: int = 5
+    source_quality_min_markets: int = 100
+    auto_weight_sources: bool = False
+    # Parameter optimizer
+    param_optimizer_enabled: bool = False
+    optimization_interval_days: int = 7
+    num_perturbations: int = 30
+    perturbation_range_pct: float = 0.20
+    min_sharpe_improvement_pct: float = 0.10
+    significance_threshold: float = 0.05
+    lookback_days: int = 30
+    # Smart calibration retraining
+    smart_retrain_enabled: bool = False
+    retrain_resolution_count: int = 30
+    brier_degradation_threshold: float = 0.10
+    brier_window_days: int = 7
+    ab_holdout_pct: float = 0.20
+    ab_min_samples: int = 20
+    auto_disable_bad_calibration: bool = False
+
+
+class ProductionConfig(BaseModel):
+    """Production deployment & live trading (Phase 9)."""
+    enabled: bool = False
+    # Kill switch enhancements
+    daily_loss_kill_pct: float = 0.05       # auto-kill at -5% of bankroll
+    daily_loss_kill_enabled: bool = True
+    persist_kill_switch: bool = True
+    require_manual_restart_after_kill: bool = True
+    # Graduated deployment
+    deployment_stage: str = "paper"          # paper|week1|week2|week3_4|month2_plus
+    auto_advance_stages: bool = False
+    week1_bankroll: float = 100.0
+    week1_max_stake: float = 5.0
+    week2_bankroll: float = 500.0
+    week2_max_stake: float = 25.0
+    week3_4_bankroll: float = 2000.0
+    week3_4_max_stake: float = 50.0
+    week1_max_loss_pct: float = 0.10
+    # Pre-flight thresholds
+    preflight_min_sharpe: float = 1.0
+    preflight_min_paper_days: int = 30
+    preflight_backtest_paper_tolerance: float = 0.25
+    # Telegram kill
+    telegram_kill_enabled: bool = False
+    telegram_kill_token: str = ""
+    telegram_kill_chat_id: str = ""
+    # Sentry
+    sentry_dsn: str = ""
+
+
+class ArbitrageConfig(BaseModel):
+    """Cross-platform and intra-platform arbitrage (Phase 5)."""
+    enabled: bool = False
+    # Kalshi connector
+    kalshi_api_base: str = "https://trading-api.kalshi.com"
+    kalshi_api_key_id: str = ""
+    kalshi_private_key_path: str = ""
+    kalshi_paper_mode: bool = True
+    # Cross-platform arb
+    scan_interval_secs: int = 60
+    min_arb_edge: float = 0.03           # 3% minimum after fees
+    polymarket_fee_pct: float = 0.02     # 2% round-trip
+    kalshi_fee_pct: float = 0.02         # 2% round-trip
+    max_arb_position_usd: float = 200.0
+    max_arb_positions_count: int = 5
+    execution_timeout_secs: int = 30
+    # Intra-Polymarket arb
+    complementary_threshold: float = 0.97  # YES+NO sum < this = opportunity
+    correlated_min_divergence: float = 0.10
+    # Market matching
+    manual_mappings_json: str = "{}"     # JSON: {kalshi_ticker: poly_condition_id}
+    match_min_confidence: float = 0.6
+    # Paired trade
+    unwind_on_partial_fill: bool = True
+
+    @model_validator(mode="after")
+    def _validate_arb_config(self) -> "ArbitrageConfig":
+        if self.enabled:
+            total_fees = self.polymarket_fee_pct + self.kalshi_fee_pct
+            if self.min_arb_edge <= total_fees:
+                import warnings
+                warnings.warn(
+                    f"min_arb_edge ({self.min_arb_edge}) <= total fees "
+                    f"({self.polymarket_fee_pct} + {self.kalshi_fee_pct} = {total_fees}). "
+                    "Arb trades may have zero or negative profit.",
+                    UserWarning,
+                    stacklevel=2,
+                )
+        return self
 
 
 _SECRET_FIELDS = frozenset({
     "telegram_bot_token", "discord_webhook_url", "slack_webhook_url",
-    "email_smtp_password",
+    "email_smtp_password", "kalshi_api_key_id", "kalshi_private_key_path",
+    "telegram_kill_token", "sentry_dsn",
 })
 
 
@@ -436,6 +578,10 @@ class BotConfig(BaseModel):
     model_tiers: ModelTierConfig = Field(default_factory=ModelTierConfig)
     circuit_breakers: CircuitBreakerSettings = Field(default_factory=CircuitBreakerSettings)
     backtest: BacktestConfig = Field(default_factory=BacktestConfig)
+    specialists: SpecialistsConfig = Field(default_factory=SpecialistsConfig)
+    arbitrage: ArbitrageConfig = Field(default_factory=ArbitrageConfig)
+    continuous_learning: ContinuousLearningConfig = Field(default_factory=ContinuousLearningConfig)
+    production: ProductionConfig = Field(default_factory=ProductionConfig)
 
     def redacted_dict(self) -> dict[str, Any]:
         """Return config dict with secret values masked."""

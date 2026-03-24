@@ -85,7 +85,8 @@ class TestParseEvidenceFromRaw:
         assert package.market_id == "test_123"
         assert package.llm_quality_score == 0.9
         # Final quality is blended: 0.4 * LLM + 0.6 * independent
-        assert 0.8 <= package.quality_score <= 1.0
+        # Independent quality penalises older sources (recency_score)
+        assert 0.6 <= package.quality_score <= 1.0
         assert len(package.bullets) == 2
         assert package.bullets[0].text == "CPI-U increased 3.1% YoY in January 2026"
         assert package.bullets[0].is_numeric is True
@@ -210,7 +211,8 @@ class TestParseEvidenceFromRaw:
         d = package.to_dict()
         assert d["market_id"] == "test_dict"
         # Blended quality score (0.4*LLM + 0.6*independent)
-        assert 0.8 <= d["quality_score"] <= 0.9
+        # Independent quality penalises older sources (recency_score)
+        assert 0.6 <= d["quality_score"] <= 0.9
         assert len(d["evidence"]) == 1
         assert d["evidence"][0]["metric_name"] == "CPI"
         assert d["evidence"][0]["citation"]["url"] == "https://www.bls.gov/news.release/cpi.nr0.htm"

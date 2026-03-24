@@ -153,6 +153,7 @@ class ScanResult:
     deltas: list[WalletDelta] = field(default_factory=list)
     tracked_wallets: list[TrackedWallet] = field(default_factory=list)
     errors: list[str] = field(default_factory=list)
+    quality_scores: list[Any] = field(default_factory=list)  # Phase 7
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -235,6 +236,9 @@ class WalletScanner:
 
         # Phase 3: Compute conviction signals
         result.conviction_signals = self._compute_conviction(all_positions, now)
+
+        # Store all_positions for post-scan quality re-computation
+        self._last_all_positions = all_positions
 
         # Update snapshot for next scan
         self._update_snapshot(all_positions)
@@ -368,14 +372,23 @@ class WalletScanner:
         self,
         all_positions: dict[str, list[WalletPosition]],
         now: str,
+        qualified_addresses: set[str] | None = None,
+        quality_weights: dict[str, float] | None = None,
     ) -> list[ConvictionSignal]:
-        """Compute conviction signals — markets where multiple whales agree."""
+        """Compute conviction signals — markets where multiple whales agree.
+
+        Args:
+            qualified_addresses: If set, only count positions from these wallets.
+            quality_weights: If set, address -> weight (0-1) to scale contribution.
+        """
         # Group positions by market+outcome
         market_groups: dict[str, list[tuple[str, str, WalletPosition]]] = {}
         # key = market_slug|outcome -> [(address, name, position), ...]
 
         for wallet_info in self._wallets:
             addr = wallet_info["address"]
+            if qualified_addresses is not None and addr not in qualified_addresses:
+                continue
             name = wallet_info.get("name", addr[:10])
             positions = all_positions.get(addr, [])
             for pos in positions:
@@ -406,7 +419,14 @@ class WalletScanner:
             # + profitability bonus: if avg entry price < current price → whales winning
             import math
             usd_factor = math.log10(max(total_usd, 1)) * 8
-            count_factor = whale_count * 25
+            # Phase 7: quality-weighted count factor
+            if quality_weights:
+                weight_sum = sum(
+                    quality_weights.get(e[0], 1.0) for e in entries
+                )
+                count_factor = weight_sum * 25
+            else:
+                count_factor = whale_count * 25
             # Bonus: whales in profit → higher conviction
             profit_factor = 0.0
             if avg_price > 0 and cur_price > 0:
@@ -518,10 +538,51 @@ def save_scan_result(conn: sqlite3.Connection, result: ScanResult) -> None:
              delta.current_price, delta.detected_at),
         )
 
+    # Phase 7: Save quality scores if present
+    if result.quality_scores:
+        for qs in result.quality_scores:
+            to_dict = getattr(qs, "to_dict", None)
+            if to_dict:
+                d = to_dict()
+                try:
+                    conn.execute(
+                        """INSERT OR REPLACE INTO whale_quality_scores
+                           (address, name, historical_roi, calibration_quality,
+                            category_specialization, consistency, timing_score,
+                            composite_score, percentile, best_category,
+                            trade_count_90d, sharpe_ratio, scored_at)
+                           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                        (d["address"], d["name"], d["historical_roi"],
+                         d["calibration_quality"], d["category_specialization"],
+                         d["consistency"], d["timing_score"],
+                         d["composite_score"], d["percentile"],
+                         d["best_category"], d["trade_count_90d"],
+                         d["sharpe_ratio"], d["scored_at"]),
+                    )
+                except Exception:
+                    pass  # table may not exist yet
+
+    # Phase 7: Create price snapshots for NEW_ENTRY deltas
+    for delta in result.deltas:
+        if delta.action == "NEW_ENTRY" and delta.current_price > 0:
+            direction = "BULLISH" if delta.outcome.lower() in ("yes", "long") else "BEARISH"
+            try:
+                conn.execute(
+                    """INSERT INTO whale_price_snapshots
+                       (wallet_address, market_slug, outcome, entry_price,
+                        entry_time, direction, price_24h_recorded)
+                       VALUES (?, ?, ?, ?, ?, ?, 0)""",
+                    (delta.wallet_address, delta.market_slug, delta.outcome,
+                     delta.current_price, delta.detected_at, direction),
+                )
+            except Exception:
+                pass  # table may not exist yet
+
     conn.commit()
     log.info(
         "wallet_scanner.saved",
         wallets=len(result.tracked_wallets),
         signals=len(result.conviction_signals),
         deltas=len(result.deltas),
+        quality_scores=len(result.quality_scores),
     )

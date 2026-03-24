@@ -324,7 +324,7 @@ class TestReplayIntegration:
             cache=cache, force_cache_only=True,
         )
 
-        result = asyncio.get_event_loop().run_until_complete(
+        result = asyncio.new_event_loop().run_until_complete(
             engine.run(max_markets=3, name="test-run")
         )
 
@@ -346,7 +346,7 @@ class TestReplayIntegration:
         """Replay with no markets should produce empty result."""
         engine = ReplayEngine(config=config, backtest_db=db, cache=cache)
 
-        result = asyncio.get_event_loop().run_until_complete(
+        result = asyncio.new_event_loop().run_until_complete(
             engine.run(max_markets=10, name="empty-run")
         )
 
@@ -372,7 +372,7 @@ class TestReplayIntegration:
             cache=cache, force_cache_only=True,
         )
 
-        asyncio.get_event_loop().run_until_complete(
+        asyncio.new_event_loop().run_until_complete(
             engine.run(
                 max_markets=2, name="progress-test",
                 progress_callback=lambda c, t, q: calls.append((c, t, q)),

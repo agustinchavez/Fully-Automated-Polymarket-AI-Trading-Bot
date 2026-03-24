@@ -186,3 +186,66 @@ class CalibrationHistoryRecord(BaseModel):
     trained_at: str = Field(
         default_factory=lambda: dt.datetime.now(dt.timezone.utc).isoformat()
     )
+
+
+class ArbOpportunityRecord(BaseModel):
+    """Cross-platform arb opportunity from scanner."""
+    arb_id: str
+    match_method: str = ""
+    match_confidence: float = 0.0
+    poly_market_id: str = ""
+    poly_question: str = ""
+    poly_yes_price: float = 0.0
+    poly_no_price: float = 0.0
+    kalshi_ticker: str = ""
+    kalshi_title: str = ""
+    kalshi_yes_price: float = 0.0
+    kalshi_no_price: float = 0.0
+    spread: float = 0.0
+    net_spread: float = 0.0
+    direction: str = ""
+    buy_platform: str = ""
+    sell_platform: str = ""
+    buy_price: float = 0.0
+    sell_price: float = 0.0
+    total_fees: float = 0.0
+    is_actionable: bool = False
+    created_at: str = Field(
+        default_factory=lambda: dt.datetime.now(dt.timezone.utc).isoformat()
+    )
+
+
+class ArbTradeRecord(BaseModel):
+    """Paired arb trade — both legs logged as a unit."""
+    arb_id: str
+    buy_platform: str = ""
+    sell_platform: str = ""
+    buy_market_id: str = ""
+    sell_market_id: str = ""
+    buy_price: float = 0.0
+    sell_price: float = 0.0
+    buy_fill_price: float = 0.0
+    sell_fill_price: float = 0.0
+    stake_usd: float = 0.0
+    net_pnl: float = 0.0
+    status: str = ""
+    unwind_reason: str = ""
+    created_at: str = Field(
+        default_factory=lambda: dt.datetime.now(dt.timezone.utc).isoformat()
+    )
+
+
+class ComplementaryArbRecord(BaseModel):
+    """Complementary arb opportunity (YES+NO < 1.0)."""
+    market_id: str
+    question: str = ""
+    yes_price: float = 0.0
+    no_price: float = 0.0
+    combined_cost: float = 0.0
+    guaranteed_profit: float = 0.0
+    fee_cost: float = 0.0
+    net_profit: float = 0.0
+    is_actionable: bool = False
+    created_at: str = Field(
+        default_factory=lambda: dt.datetime.now(dt.timezone.utc).isoformat()
+    )

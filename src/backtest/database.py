@@ -250,8 +250,11 @@ class BacktestDatabase:
                  edge, confidence_level, stake_usd,
                  entry_price, exit_price, pnl,
                  resolution, actual_outcome, forecast_correct,
-                 created_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                 created_at,
+                 slippage_bps, fill_rate, simulated_impact_pct,
+                 fill_delay_ms, fee_paid_usd)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
+                    ?, ?, ?, ?, ?)
             """,
             (
                 record.run_id, record.market_condition_id, record.question,
@@ -261,6 +264,9 @@ class BacktestDatabase:
                 record.entry_price, record.exit_price, record.pnl,
                 record.resolution, record.actual_outcome,
                 int(record.forecast_correct), record.created_at,
+                record.slippage_bps, record.fill_rate,
+                record.simulated_impact_pct, record.fill_delay_ms,
+                record.fee_paid_usd,
             ),
         )
         self.conn.commit()

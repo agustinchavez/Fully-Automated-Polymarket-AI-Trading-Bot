@@ -133,9 +133,48 @@ class TradingEngine:
         self._last_arbitrage_scan: float = 0.0
         self._latest_arb_opportunities: list[Any] = []
 
+        # ── Phase 5: Cross-Platform Arbitrage ──
+        self._cross_platform_scanner: Any = None
+        self._last_cross_platform_scan: float = 0.0
+        self._latest_cross_platform_opps: list[Any] = []
+        self._latest_complementary_arb: list[Any] = []
+        self._latest_correlated_mispricings: list[Any] = []
+        if self.config.arbitrage.enabled:
+            try:
+                from src.policy.cross_platform_arb import CrossPlatformArbScanner
+                self._cross_platform_scanner = CrossPlatformArbScanner(
+                    self.config.arbitrage,
+                )
+            except Exception as e:
+                log.warning("engine.cross_platform_scanner_init_error", error=str(e))
+
         # Database (initialised in start())
         self._db: Any = None
         self._audit: Any = None
+        self._alert_manager: Any = None
+
+        # Phase 9: Daily summary tracking
+        self._last_daily_summary_date: str = ""
+
+        # Phase 9: Graduated deployment + Telegram bot
+        self._deployment_manager: Any = None
+        self._telegram_bot: Any = None
+        self._telegram_task: asyncio.Task[None] | None = None
+
+        # Phase 6: Execution fill tracker (optional)
+        self._fill_tracker: Any = None
+        if self.config.execution.auto_strategy_selection_enabled:
+            from src.execution.fill_tracker import FillTracker
+            self._fill_tracker = FillTracker()
+
+        # ── Phase 4: Specialist Router ──
+        self._specialist_router: Any = None
+        if self.config.specialists.enabled:
+            try:
+                from src.forecast.specialist_router import SpecialistRouter
+                self._specialist_router = SpecialistRouter(self.config.specialists)
+            except Exception as e:
+                log.warning("engine.specialist_router_init_error", error=str(e))
 
     @property
     def is_running(self) -> bool:
@@ -196,6 +235,31 @@ class TradingEngine:
         self._running = True
         interval = self.config.engine.cycle_interval_secs
         self._init_db()
+        self._restore_kill_switch_state()
+
+        # Init alert manager
+        try:
+            from src.observability.alerts import AlertManager
+            self._alert_manager = AlertManager(self.config)
+        except Exception as e:
+            log.warning("engine.alert_manager_init_error", error=str(e))
+
+        # Phase 9: Graduated deployment — apply stage limits
+        if self.config.production.enabled:
+            try:
+                from src.policy.graduated_deployment import GraduatedDeploymentManager
+                conn = self._db._conn if self._db else None
+                self._deployment_manager = GraduatedDeploymentManager(
+                    self.config, conn,
+                )
+                bankroll, max_stake = self._deployment_manager.apply_stage_limits()
+                self.config.risk.bankroll = bankroll
+                self.config.risk.max_stake_per_market = max_stake
+                self.drawdown = DrawdownManager(bankroll, self.config)
+                self.portfolio = PortfolioRiskManager(bankroll, self.config)
+            except Exception as e:
+                log.warning("engine.deployment_manager_init_error", error=str(e))
+
         self._db.insert_alert("info", "\U0001f916 Trading engine started", "system")
         log.info(
             "engine.starting",
@@ -219,6 +283,23 @@ class TradingEngine:
             log.info("engine.ws_feed_started")
         except Exception as e:
             log.warning("engine.ws_feed_start_error", error=str(e))
+
+        # Phase 9: Start Telegram kill bot in background
+        prod = self.config.production
+        if prod.telegram_kill_enabled and prod.telegram_kill_token:
+            try:
+                from src.observability.telegram_bot import TelegramKillBot
+                self._telegram_bot = TelegramKillBot(
+                    token=prod.telegram_kill_token,
+                    chat_id=prod.telegram_kill_chat_id,
+                    engine=self,
+                )
+                self._telegram_task = asyncio.create_task(
+                    self._telegram_bot.start()
+                )
+                log.info("engine.telegram_bot_started")
+            except Exception as e:
+                log.warning("engine.telegram_bot_start_error", error=str(e))
 
         while self._running:
             try:
@@ -244,11 +325,128 @@ class TradingEngine:
         # Stop WebSocket feed
         if self._ws_task and not self._ws_task.done():
             asyncio.ensure_future(self._ws_feed.stop())
+        # Stop Telegram bot
+        if self._telegram_bot:
+            self._telegram_bot.stop()
+        if self._telegram_task and not self._telegram_task.done():
+            self._telegram_task.cancel()
 
     def _handle_signal(self, sig: signal.Signals) -> None:
         """Handle SIGTERM/SIGINT for graceful shutdown."""
         log.info("engine.signal_received", signal=sig.name)
         self.stop()
+
+    # ── Phase 9: Kill Switch Persistence ────────────────────────────
+
+    def _restore_kill_switch_state(self) -> None:
+        """Restore kill switch from DB on engine startup."""
+        if not self._db or not self.config.production.enabled:
+            return
+        if not self.config.production.persist_kill_switch:
+            return
+        try:
+            state = self._db.get_kill_switch_state()
+            if state["is_killed"]:
+                self.drawdown.state.is_killed = True
+                self.drawdown.state.kelly_multiplier = 0.0
+                self.config.risk.kill_switch = True
+                log.warning(
+                    "engine.kill_switch_restored",
+                    reason=state["kill_reason"],
+                    killed_at=state["killed_at"],
+                )
+        except Exception as e:
+            log.warning("engine.kill_switch_restore_error", error=str(e))
+
+    def _persist_kill_switch(self, reason: str, killed_by: str) -> None:
+        """Write kill switch state to DB."""
+        if not self._db or not self.config.production.enabled:
+            return
+        if not self.config.production.persist_kill_switch:
+            return
+        try:
+            daily_pnl = self._db.get_daily_pnl()
+            self._db.set_kill_switch(
+                is_killed=True,
+                reason=reason,
+                killed_by=killed_by,
+                daily_pnl=daily_pnl,
+                bankroll=self.config.risk.bankroll,
+            )
+        except Exception as e:
+            log.warning("engine.persist_kill_error", error=str(e))
+
+    def _check_daily_pnl_kill(self) -> bool:
+        """Check if daily P&L loss exceeds percentage threshold.
+
+        Returns True if the kill switch was triggered.
+        """
+        if not self._db or not self.config.production.enabled:
+            return False
+        if not self.config.production.daily_loss_kill_enabled:
+            return False
+        if self.drawdown.state.is_killed:
+            return False  # already killed
+
+        try:
+            daily_pnl = self._db.get_daily_pnl()
+            bankroll = self.config.risk.bankroll
+            if bankroll <= 0:
+                return False
+            loss_pct = abs(daily_pnl) / bankroll
+            threshold = self.config.production.daily_loss_kill_pct
+
+            if daily_pnl < 0 and loss_pct >= threshold:
+                self.drawdown.state.is_killed = True
+                self.drawdown.state.kelly_multiplier = 0.0
+                self.config.risk.kill_switch = True
+                reason = (
+                    f"Daily P&L loss {loss_pct:.1%} exceeds "
+                    f"{threshold:.1%} threshold (${daily_pnl:.2f})"
+                )
+                log.critical("engine.daily_pnl_kill", reason=reason)
+                self._persist_kill_switch(reason, "daily_pnl_auto")
+                if self._db:
+                    self._db.insert_alert("critical", reason, "risk")
+                return True
+        except Exception as e:
+            log.warning("engine.daily_pnl_kill_check_error", error=str(e))
+        return False
+
+    async def _maybe_send_daily_summary(self) -> None:
+        """Send daily summary at the configured hour (once per day)."""
+        if not self._db:
+            return
+        if not self.config.alerts.daily_summary_enabled:
+            return
+
+        import datetime as _dt
+        now = _dt.datetime.now(_dt.timezone.utc)
+        today = now.strftime("%Y-%m-%d")
+
+        # Already sent today
+        if self._last_daily_summary_date == today:
+            return
+        # Not yet the configured hour
+        if now.hour < self.config.alerts.daily_summary_hour:
+            return
+
+        try:
+            from src.observability.daily_summary import DailySummaryGenerator
+            generator = DailySummaryGenerator(
+                self._db.conn,
+                bankroll=self.config.risk.bankroll,
+            )
+            summary = generator.generate(today)
+            generator.persist(summary)
+
+            if self._alert_manager:
+                await generator.send_summary(summary, self._alert_manager)
+
+            self._last_daily_summary_date = today
+            log.info("engine.daily_summary_generated", date=today)
+        except Exception as e:
+            log.warning("engine.daily_summary_error", error=str(e))
 
     # ── Cycle ────────────────────────────────────────────────────────
 
@@ -274,6 +472,16 @@ class TradingEngine:
                 cycle.errors.append(f"Drawdown halt: {dd_reason}")
                 if self._db:
                     self._db.insert_alert("warning", f"Cycle skipped: {dd_reason}", "risk")
+                # Persist kill switch to DB if drawdown killed
+                if self.drawdown.state.is_killed:
+                    self._persist_kill_switch(dd_reason, "drawdown_auto")
+                self._finish_cycle(cycle)
+                return cycle
+
+            # ── Daily P&L Kill Check ─────────────────────────────────
+            if self._check_daily_pnl_kill():
+                cycle.status = "skipped"
+                cycle.errors.append("Daily P&L kill switch triggered")
                 self._finish_cycle(cycle)
                 return cycle
 
@@ -391,6 +599,11 @@ class TradingEngine:
             await self._maybe_rebalance()
             await self._maybe_scan_wallets()
             await self._maybe_scan_arbitrage(markets)
+            await self._maybe_scan_cross_platform_arb(markets)
+
+            # ── Daily Summary ────────────────────────────────────────
+            await self._maybe_send_daily_summary()
+
             cycle.status = "completed"
 
         except Exception as e:
@@ -665,6 +878,63 @@ class TradingEngine:
     async def _run_forecast(self, ctx: PipelineContext) -> bool:
         """Inner forecast logic — separated for circuit breaker wrapping."""
         cb = circuit_breakers.get("forecast")
+
+        # ── Phase 4: Specialist routing ─────────────────────────────
+        if self.config.specialists.enabled and self._specialist_router:
+            specialist_result = await self._specialist_router.route(
+                ctx.market, ctx.features, ctx.classification,
+            )
+            if specialist_result is not None:
+                if specialist_result.bypasses_llm:
+                    # Bypass mode: specialist provides complete forecast
+                    from src.forecast.specialists.base import BaseSpecialist
+                    from src.forecast.llm_forecaster import ForecastResult
+                    ens_result = BaseSpecialist.to_ensemble_result(specialist_result)
+                    ctx.forecast = ForecastResult(
+                        market_id=ctx.market_id,
+                        question=ctx.question,
+                        market_type=ctx.market.market_type,
+                        resolution_source=ctx.market.resolution_source,
+                        implied_probability=ctx.features.implied_probability,
+                        model_probability=ens_result.model_probability,
+                        edge=ens_result.model_probability - ctx.features.implied_probability,
+                        confidence_level=ens_result.confidence_level,
+                        evidence=ens_result.key_evidence,
+                        invalidation_triggers=ens_result.invalidation_triggers,
+                        reasoning=ens_result.reasoning,
+                        evidence_quality=specialist_result.evidence_quality,
+                        num_sources=1,
+                        raw_llm_response={
+                            "specialist": True,
+                            "specialist_name": specialist_result.specialist_name,
+                            "specialist_metadata": specialist_result.specialist_metadata,
+                            "spread": 0.0,
+                            "agreement": 1.0,
+                        },
+                    )
+                    ctx._specialist_used = specialist_result.specialist_name
+                    log.info(
+                        "engine.specialist_bypass",
+                        specialist=specialist_result.specialist_name,
+                        market_id=ctx.market_id,
+                        probability=round(specialist_result.probability, 3),
+                    )
+                    cb.record_success()
+                    return True
+                else:
+                    # Augment mode: inject as base rate, continue to ensemble
+                    from src.forecast.specialists.base import BaseSpecialist
+                    ctx._specialist_base_rate = BaseSpecialist.to_base_rate_match(
+                        specialist_result,
+                    )
+                    ctx._specialist_used = specialist_result.specialist_name
+                    log.info(
+                        "engine.specialist_augment",
+                        specialist=specialist_result.specialist_name,
+                        market_id=ctx.market_id,
+                        base_rate=round(specialist_result.probability, 3),
+                    )
+
         if self.config.ensemble.enabled:
             from src.forecast.ensemble import EnsembleForecaster
             from src.forecast.model_router import select_tier
@@ -710,9 +980,18 @@ class TradingEngine:
             except Exception as e:
                 log.warning("engine.adaptive_weights_inject_error", error=str(e))
 
-            # Phase 2: Base rate lookup
+            # Phase 2: Base rate lookup (specialist augment overrides)
             base_rate_info = None
-            if self.config.forecasting.base_rate_enabled:
+            if hasattr(ctx, "_specialist_base_rate") and ctx._specialist_base_rate:
+                base_rate_info = ctx._specialist_base_rate
+                ctx._base_rate_value = base_rate_info.base_rate
+                log.info(
+                    "engine.specialist_base_rate_injected",
+                    market_id=ctx.market_id,
+                    base_rate=base_rate_info.base_rate,
+                    source=base_rate_info.source,
+                )
+            elif self.config.forecasting.base_rate_enabled:
                 try:
                     from src.forecast.base_rates import BaseRateRegistry
                     br_registry = BaseRateRegistry()
@@ -879,6 +1158,13 @@ class TradingEngine:
                 and self._latest_scan_result
                 and hasattr(self._latest_scan_result, "conviction_signals")):
             whale_cfg = self.config.wallet_scanner
+            # Phase 7: Use enhanced thresholds when quality scoring enabled
+            if whale_cfg.whale_quality_scoring_enabled:
+                _whale_boost = whale_cfg.enhanced_conviction_edge_boost
+                _whale_penalty = whale_cfg.enhanced_conviction_edge_penalty
+            else:
+                _whale_boost = whale_cfg.conviction_edge_boost
+                _whale_penalty = whale_cfg.conviction_edge_penalty
             market_slug = getattr(ctx.market, "slug", "") or ""
             market_cid = getattr(ctx.market, "condition_id", "") or ""
 
@@ -899,7 +1185,7 @@ class TradingEngine:
                     or (sig.direction == "BEARISH" and ctx.edge_result.direction == "BUY_NO")
                 )
                 if whale_agrees:
-                    boost = whale_cfg.conviction_edge_boost
+                    boost = _whale_boost
                     # Scale boost by conviction strength
                     strength_mult = (
                         1.5 if sig.signal_strength == "STRONG"
@@ -926,7 +1212,7 @@ class TradingEngine:
                              whale_count=sig.whale_count,
                              new_edge=round(ctx.edge_result.abs_net_edge, 4))
                 else:
-                    penalty = whale_cfg.conviction_edge_penalty
+                    penalty = _whale_penalty
                     ctx.edge_result = calculate_edge(
                         implied_prob=ctx.forecast.implied_probability,
                         model_prob=(
@@ -1014,6 +1300,16 @@ class TradingEngine:
         if ctx.whale_converged:
             whale_min_edge = self.config.wallet_scanner.whale_convergence_min_edge
 
+        # Phase 4: When a specialist handled this market, bypass its
+        # category restriction so the market type check passes.
+        restricted = self.config.scanning.restricted_types or None
+        specialist_used = getattr(ctx, "_specialist_used", None)
+        if specialist_used and restricted and ctx.classification:
+            restricted = [
+                t for t in restricted
+                if t != ctx.classification.category
+            ] or None
+
         ctx.risk_result = check_risk_limits(
             edge=ctx.edge_result, features=ctx.features,
             risk_config=self.config.risk,
@@ -1022,7 +1318,7 @@ class TradingEngine:
             daily_pnl=daily_pnl,
             market_type=ctx.market.market_type,
             allowed_types=self.config.scanning.preferred_types or None,
-            restricted_types=self.config.scanning.restricted_types or None,
+            restricted_types=restricted,
             drawdown_state=self.drawdown.state,
             confidence_level=ctx.forecast.confidence_level if ctx.forecast else "LOW",
             min_edge_override=whale_min_edge,
@@ -1231,6 +1527,106 @@ class TradingEngine:
                 )
         except Exception as e:
             log.warning("engine.smart_entry_error", error=str(e))
+
+        # Phase 6: Patience window — wait for better price if enabled
+        if self.config.execution.patience_window_enabled:
+            try:
+                _patience_clob = CLOBClient()
+                try:
+                    async def _get_price():
+                        ob = _patience_clob.get_orderbook(token_id)
+                        if asyncio.iscoroutine(ob):
+                            ob = await ob
+                        return ob.mid if hasattr(ob, "mid") and ob.mid > 0 else implied_price
+
+                    patience_result = await self._smart_entry.patience_monitor(
+                        market_id=ctx.market_id,
+                        side=edge_result.direction,
+                        min_edge=self.config.risk.min_edge,
+                        current_edge=edge_result.abs_net_edge,
+                        get_current_price=_get_price,
+                        get_model_prob=lambda: forecast.model_probability,
+                        max_wait_secs=self.config.execution.patience_window_max_secs,
+                        check_interval_secs=self.config.execution.patience_check_interval_secs,
+                        immediate_multiplier=self.config.execution.edge_immediate_multiplier,
+                    )
+
+                    if patience_result.action == "cancelled":
+                        log.info(
+                            "engine.patience_cancelled",
+                            market_id=ctx.market_id,
+                            reason=patience_result.reason,
+                            wait=patience_result.wait_time_secs,
+                        )
+                        self._log_candidate(
+                            ctx.cycle_id, market, forecast=forecast,
+                            evidence=ctx.evidence, edge_result=edge_result,
+                            decision="NO TRADE",
+                            reason=f"Patience cancelled: {patience_result.reason}",
+                        )
+                        return
+                    elif patience_result.entry_price > 0:
+                        implied_price = patience_result.entry_price
+                        log.info(
+                            "engine.patience_entered",
+                            market_id=ctx.market_id,
+                            action=patience_result.action,
+                            wait=patience_result.wait_time_secs,
+                            price=patience_result.entry_price,
+                        )
+                finally:
+                    if hasattr(_patience_clob, "close"):
+                        try:
+                            close_result = _patience_clob.close()
+                            if asyncio.iscoroutine(close_result):
+                                await close_result
+                        except Exception:
+                            pass
+            except Exception as e:
+                log.warning("engine.patience_error", error=str(e))
+
+        # Phase 6: Auto strategy selection based on liquidity + historical quality
+        if self.config.execution.auto_strategy_selection_enabled:
+            try:
+                from src.execution.strategy_selector import ExecutionStrategySelector
+
+                selector = ExecutionStrategySelector(
+                    thin_depth_usd=self.config.execution.auto_strategy_thin_depth_usd,
+                    large_order_pct=self.config.execution.auto_strategy_large_order_pct,
+                    learning_enabled=self.config.execution.auto_strategy_learning_enabled,
+                    min_samples=self.config.execution.auto_strategy_min_samples,
+                )
+
+                # Estimate depth from features or use default
+                depth_usd = getattr(ctx.features, "depth_usd", 0.0)
+                if depth_usd <= 0:
+                    depth_usd = getattr(ctx.features, "volume_24h", 50000.0)
+
+                # Get historical quality if learning is enabled
+                historical_quality = None
+                if (
+                    self.config.execution.auto_strategy_learning_enabled
+                    and hasattr(self, "_fill_tracker")
+                    and self._fill_tracker is not None
+                ):
+                    historical_quality = self._fill_tracker.get_quality()
+
+                recommendation = selector.select(
+                    order_size_usd=position.stake_usd,
+                    depth_usd=depth_usd,
+                    historical_quality=historical_quality,
+                )
+                execution_strategy = recommendation.strategy
+                log.info(
+                    "engine.strategy_selected",
+                    market_id=ctx.market_id,
+                    strategy=recommendation.strategy,
+                    reason=recommendation.reason,
+                    confidence=recommendation.confidence,
+                    depth_usd=recommendation.depth_usd,
+                )
+            except Exception as e:
+                log.warning("engine.strategy_selector_error", error=str(e))
 
         orders = build_order(
             market_id=ctx.market_id, token_id=token_id,
@@ -1455,6 +1851,29 @@ class TradingEngine:
         except Exception as e:
             log.warning("engine.performance_log_error", error=str(e))
 
+    def _maybe_run_post_mortem(self, market_id: str) -> None:
+        """Run post-mortem analysis on a resolved market (Phase 8)."""
+        cl_cfg = self.config.continuous_learning
+        if not cl_cfg.post_mortem_enabled:
+            return
+        if not self._db:
+            return
+        try:
+            from src.analytics.post_mortem import PostMortemAnalyzer
+
+            conn = self._db._conn  # reuse existing connection
+            analyzer = PostMortemAnalyzer(conn)
+            analysis = analyzer.analyze_market(market_id)
+            if analysis and analysis.was_confident_and_wrong:
+                log.warning(
+                    "engine.confident_wrong_trade",
+                    market_id=market_id[:8],
+                    forecast=analysis.forecast_prob,
+                    outcome=analysis.actual_outcome,
+                )
+        except Exception as e:
+            log.warning("engine.post_mortem_error", error=str(e))
+
     async def _check_positions(self) -> None:
         """Fetch live prices for all open positions and update PNL.
 
@@ -1581,6 +2000,9 @@ class TradingEngine:
                             mkt_record=mkt_record,
                         )
 
+                        # ── Phase 8: Post-mortem analysis ─────────────
+                        self._maybe_run_post_mortem(pos.market_id)
+
                         self._db.remove_position(pos.market_id)
                         self._db.insert_alert(
                             "warning",
@@ -1685,8 +2107,13 @@ class TradingEngine:
             return
 
         try:
-            from src.policy.arbitrage import detect_arbitrage
-            opps = detect_arbitrage(markets, fee_bps=int(self.config.risk.transaction_fee_pct * 10000))
+            from src.policy.arbitrage import (
+                detect_arbitrage,
+                detect_complementary_arb,
+                detect_correlated_mispricings,
+            )
+            fee_bps = int(self.config.risk.transaction_fee_pct * 10000)
+            opps = detect_arbitrage(markets, fee_bps=fee_bps)
             self._latest_arb_opportunities = opps
             if opps:
                 actionable = [o for o in opps if o.is_actionable]
@@ -1702,8 +2129,88 @@ class TradingEngine:
                             f"🔀 Arb: {opp.description}",
                             "arbitrage",
                         )
+
+            # Complementary arb (YES+NO < threshold)
+            comp_opps = detect_complementary_arb(
+                markets,
+                threshold=self.config.arbitrage.complementary_threshold,
+                fee_bps=fee_bps,
+            )
+            self._latest_complementary_arb = comp_opps
+            for co in comp_opps[:3]:
+                if co.is_actionable and self._db:
+                    self._db.insert_alert(
+                        "info",
+                        f"🎯 Complementary arb: {co.question[:60]} "
+                        f"(net profit: {co.net_profit:.4f})",
+                        "arbitrage",
+                    )
+
+            # Correlated mispricings
+            corr_opps = detect_correlated_mispricings(
+                markets,
+                min_divergence=self.config.arbitrage.correlated_min_divergence,
+            )
+            self._latest_correlated_mispricings = corr_opps
+            for cm in corr_opps[:3]:
+                if cm.is_actionable and self._db:
+                    self._db.insert_alert(
+                        "info",
+                        f"📊 Correlated mispricing: {cm.explanation[:80]}",
+                        "arbitrage",
+                    )
         except Exception as e:
             log.warning("engine.arbitrage_scan_error", error=str(e))
+
+    async def _maybe_scan_cross_platform_arb(
+        self, markets: list[Any],
+    ) -> None:
+        """Scan for cross-platform arb opportunities (Polymarket vs Kalshi)."""
+        if not self.config.arbitrage.enabled or not self._cross_platform_scanner:
+            return
+
+        interval = self.config.arbitrage.scan_interval_secs
+        now = time.time()
+        if now - self._last_cross_platform_scan < interval:
+            return
+
+        self._last_cross_platform_scan = now
+
+        try:
+            opps = await self._cross_platform_scanner.scan(markets)
+            self._latest_cross_platform_opps = opps
+
+            actionable = [o for o in opps if o.is_actionable]
+            if actionable:
+                log.info(
+                    "engine.cross_platform_arb_found",
+                    total=len(opps),
+                    actionable=len(actionable),
+                )
+
+                # Auto-execute within position limits
+                for opp in actionable:
+                    if not self._cross_platform_scanner.check_position_limits():
+                        log.info("engine.cross_platform_arb_position_limit_reached")
+                        break
+
+                    stake = min(
+                        self.config.arbitrage.max_arb_position_usd,
+                        self.config.risk.max_stake,
+                    )
+                    result = await self._cross_platform_scanner.execute_arb(
+                        opp, stake,
+                    )
+
+                    if self._db:
+                        self._db.insert_alert(
+                            "info" if result.status == "both_filled" else "warning",
+                            f"⚡ Cross-platform arb {result.status}: "
+                            f"net_pnl=${result.net_pnl:.4f}",
+                            "arbitrage",
+                        )
+        except Exception as e:
+            log.warning("engine.cross_platform_arb_error", error=str(e))
 
     async def _maybe_scan_wallets(self) -> None:
         """Run wallet scanner if enabled and interval elapsed."""
@@ -1728,6 +2235,52 @@ class TradingEngine:
                 conn = sqlite3.connect(db_path)
                 try:
                     save_scan_result(conn, result)
+
+                    # Phase 7: Quality scoring + timing snapshots
+                    whale_cfg = self.config.wallet_scanner
+                    if whale_cfg.whale_quality_scoring_enabled:
+                        from src.analytics.whale_scorer import WhaleScorer
+                        scorer = WhaleScorer(
+                            conn,
+                            lookback_days=whale_cfg.whale_quality_lookback_days,
+                            timing_favorable_threshold=whale_cfg.whale_timing_favorable_threshold,
+                        )
+                        quality_scores = scorer.score_all(result.tracked_wallets)
+                        result.quality_scores = quality_scores
+                        scorer.save_scores(conn, quality_scores)
+
+                        # Update pending 24h snapshots
+                        def _price_from_scan(slug: str) -> float:
+                            for sig in result.conviction_signals:
+                                if sig.market_slug == slug:
+                                    return sig.current_price
+                            return 0.0
+                        scorer.update_pending_snapshots(conn, _price_from_scan)
+
+                        # Re-compute conviction with quality filter
+                        qualified = scorer.get_top_percentile(
+                            quality_scores, whale_cfg.whale_quality_min_percentile,
+                        )
+                        if qualified and hasattr(self._wallet_scanner, "_last_all_positions"):
+                            qualified_addrs = {s.address for s in qualified}
+                            quality_wts = {
+                                s.address: s.composite_score / 100.0
+                                for s in qualified
+                            }
+                            result.conviction_signals = (
+                                self._wallet_scanner._compute_conviction(
+                                    self._wallet_scanner._last_all_positions,
+                                    result.scanned_at,
+                                    qualified_addresses=qualified_addrs,
+                                    quality_weights=quality_wts,
+                                )
+                            )
+                            log.info(
+                                "engine.whale_quality_filter",
+                                total=len(quality_scores),
+                                qualified=len(qualified),
+                                signals=len(result.conviction_signals),
+                            )
                 finally:
                     conn.close()
 
@@ -1760,4 +2313,15 @@ class TradingEngine:
             ),
             "research_cache_size": self._research_cache.size(),
             "circuit_breakers": circuit_breakers.stats(),
+            "arbitrage": {
+                "enabled": self.config.arbitrage.enabled,
+                "intra_platform_opportunities": len(self._latest_arb_opportunities),
+                "cross_platform_opportunities": len(self._latest_cross_platform_opps),
+                "complementary_arb": len(self._latest_complementary_arb),
+                "correlated_mispricings": len(self._latest_correlated_mispricings),
+                "active_arb_positions": (
+                    len(self._cross_platform_scanner.active_positions)
+                    if self._cross_platform_scanner else 0
+                ),
+            },
         }

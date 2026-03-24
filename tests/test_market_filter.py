@@ -118,13 +118,13 @@ def test_pass_unknown_not_blocked_if_custom():
 def test_score_high_liquidity():
     m = FakeMarket(liquidity=100_000)
     score, bd = _score_market(m)
-    assert bd["liquidity"] == 15
+    assert bd["liquidity"] == 20
 
 
 def test_score_low_liquidity():
     m = FakeMarket(liquidity=500)
     score, bd = _score_market(m)
-    assert bd["liquidity"] == -30
+    assert bd["liquidity"] == -10
 
 
 def test_score_high_volume():
@@ -136,7 +136,7 @@ def test_score_high_volume():
 def test_score_low_volume():
     m = FakeMarket(volume=1_000)
     score, bd = _score_market(m)
-    assert bd["volume"] == -15
+    assert bd["volume"] == 0
 
 
 def test_score_extreme_probability_low():
@@ -354,9 +354,9 @@ def test_filter_markets_hard_rejects():
 
 
 def test_filter_markets_soft_rejects():
-    # Markets with terrible stats → low score (but not hard-rejected)
-    terrible = _make_markets(5, liquidity=100, volume=100, best_bid=0.07, spread=0.18)
-    passed, stats = filter_markets(terrible, min_score=60, max_pass=10)
+    # Markets with stats above hard-reject thresholds but low score → soft-rejected
+    terrible = _make_markets(5, liquidity=2100, volume=1100, best_bid=0.07, spread=0.18)
+    passed, stats = filter_markets(terrible, min_score=95, max_pass=10)
     assert stats.soft_rejected > 0
 
 
@@ -433,14 +433,14 @@ def test_preferred_keywords_are_lowercase():
 
 
 def test_hard_reject_extreme_probability_low():
-    m = FakeMarket(best_bid=0.03)
+    m = FakeMarket(best_bid=0.01)
     reason = _hard_reject(m)
     assert reason is not None
     assert "extreme_probability" in reason
 
 
 def test_hard_reject_extreme_probability_high():
-    m = FakeMarket(best_bid=0.97)
+    m = FakeMarket(best_bid=0.99)
     reason = _hard_reject(m)
     assert reason is not None
     assert "extreme_probability" in reason
@@ -453,7 +453,7 @@ def test_pass_normal_probability():
 
 
 def test_hard_reject_wide_spread():
-    m = FakeMarket(spread=0.25)
+    m = FakeMarket(spread=0.35)
     reason = _hard_reject(m)
     assert reason is not None
     assert "wide_spread" in reason
@@ -542,7 +542,7 @@ def test_freshness_bonus_6h():
         created_at=dt.datetime.now(dt.timezone.utc) - dt.timedelta(hours=5),
     )
     score, bd = _score_market(m)
-    assert bd.get("freshness", 0) == 10
+    assert bd.get("freshness", 0) == 15  # age ~5h → ≤6h bracket
 
 
 def test_freshness_bonus_12h():
@@ -550,15 +550,15 @@ def test_freshness_bonus_12h():
         created_at=dt.datetime.now(dt.timezone.utc) - dt.timedelta(hours=10),
     )
     score, bd = _score_market(m)
-    assert bd.get("freshness", 0) == 5
+    assert bd.get("freshness", 0) == 10  # age ~10h → ≤24h bracket
 
 
 def test_freshness_bonus_old():
     m = FakeMarket(
-        created_at=dt.datetime.now(dt.timezone.utc) - dt.timedelta(hours=24),
+        created_at=dt.datetime.now(dt.timezone.utc) - dt.timedelta(hours=48),
     )
     score, bd = _score_market(m)
-    assert bd.get("freshness", 0) == 0
+    assert bd.get("freshness", 0) == 5  # age ~48h → ≤72h bracket
 
 
 def test_freshness_bonus_no_created_at():

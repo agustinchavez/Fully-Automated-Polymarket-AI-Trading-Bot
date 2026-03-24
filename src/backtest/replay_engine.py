@@ -149,6 +149,13 @@ class ReplayEngine:
             force_cache_only=force_cache_only,
         )
 
+        # Phase 6: Optional realistic fill simulator
+        self._fill_simulator = None
+        if config.backtest.realistic_fills_enabled:
+            from src.backtest.fill_simulator import FillSimulator, FillSimulationConfig
+            sim_config = FillSimulationConfig.from_backtest_config(config.backtest)
+            self._fill_simulator = FillSimulator(sim_config)
+
     async def run(
         self,
         start_date: str | None = None,
@@ -326,6 +333,48 @@ class ReplayEngine:
         # Simulate execution
         actual_outcome = 1.0 if hist_market.resolution == "YES" else 0.0
         entry_price = implied_prob if direction == "BUY_YES" else (1.0 - implied_prob)
+
+        # Determine if forecast was correct
+        if direction == "BUY_YES":
+            forecast_correct = hist_market.resolution == "YES"
+        else:
+            forecast_correct = hist_market.resolution == "NO"
+
+        # Phase 6: Use realistic fill simulator if enabled
+        if self._fill_simulator is not None:
+            sim_fill = self._fill_simulator.simulate(
+                direction=direction,
+                entry_price=entry_price,
+                resolution=hist_market.resolution,
+                stake_usd=stake,
+                available_liquidity_usd=hist_market.liquidity_usd,
+            )
+            return BacktestTradeRecord(
+                run_id="",
+                market_condition_id=hist_market.condition_id,
+                question=hist_market.question,
+                category=hist_market.category,
+                direction=direction,
+                model_probability=model_prob,
+                implied_probability=implied_prob,
+                edge=edge_result.net_edge,
+                confidence_level=confidence,
+                stake_usd=sim_fill.filled_size_usd,
+                entry_price=sim_fill.entry_price,
+                exit_price=sim_fill.exit_price,
+                pnl=sim_fill.pnl,
+                resolution=hist_market.resolution,
+                actual_outcome=actual_outcome,
+                forecast_correct=forecast_correct,
+                created_at=hist_market.resolved_at,
+                slippage_bps=sim_fill.slippage_bps,
+                fill_rate=sim_fill.fill_rate,
+                simulated_impact_pct=sim_fill.price_impact_pct,
+                fill_delay_ms=sim_fill.fill_delay_ms,
+                fee_paid_usd=sim_fill.fee_paid_usd,
+            )
+
+        # Default: flat slippage model
         slippage = self._config.backtest.default_slippage_pct
         exit_price, pnl = self._simulate_execution(
             direction=direction,
@@ -335,14 +384,8 @@ class ReplayEngine:
             slippage_pct=slippage,
         )
 
-        # Determine if forecast was correct
-        if direction == "BUY_YES":
-            forecast_correct = hist_market.resolution == "YES"
-        else:
-            forecast_correct = hist_market.resolution == "NO"
-
         return BacktestTradeRecord(
-            run_id="",  # filled by caller
+            run_id="",
             market_condition_id=hist_market.condition_id,
             question=hist_market.question,
             category=hist_market.category,

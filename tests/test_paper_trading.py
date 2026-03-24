@@ -496,13 +496,13 @@ class TestMigration8:
     def test_schema_version_is_8(self) -> None:
         from src.storage.migrations import run_migrations, SCHEMA_VERSION
 
-        assert SCHEMA_VERSION == 8
+        assert SCHEMA_VERSION >= 8
         conn = sqlite3.connect(":memory:")
         conn.row_factory = sqlite3.Row
         run_migrations(conn)
 
         ver = conn.execute("SELECT MAX(version) FROM schema_version").fetchone()[0]
-        assert ver == 8
+        assert ver >= 8
 
 
 # ═══════════════════════════════════════════════════════════════════

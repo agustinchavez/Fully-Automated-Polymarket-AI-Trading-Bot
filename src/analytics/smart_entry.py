@@ -7,6 +7,7 @@ optimal entry levels using:
   3. Microstructure signals (flow imbalance, whale activity)
   4. Price momentum (wait for momentum confirmation or reversal)
   5. Limit order placement at calculated levels
+  6. Patience window — monitors price for better entry (Phase 6)
 
 This can significantly improve entry prices and reduce slippage,
 adding 1-3% edge on every trade.
@@ -14,9 +15,11 @@ adding 1-3% edge on every trade.
 
 from __future__ import annotations
 
+import asyncio
 import math
+import time
 from dataclasses import dataclass, field
-from typing import Any
+from typing import Any, Awaitable, Callable
 
 from src.observability.logger import get_logger
 
@@ -326,6 +329,168 @@ class SmartEntryCalculator:
         )
 
         return plan
+
+
+@dataclass
+class PatienceResult:
+    """Result of a patience window monitoring session."""
+
+    action: str             # "enter_immediately" | "entered_after_wait" | "cancelled" | "timeout"
+    wait_time_secs: float
+    entry_price: float      # final entry price (0 if cancelled)
+    edge_at_entry: float    # edge when we decided to enter
+    edge_trajectory: list[float] = field(default_factory=list)
+    reason: str = ""
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "action": self.action,
+            "wait_time_secs": round(self.wait_time_secs, 2),
+            "entry_price": round(self.entry_price, 4),
+            "edge_at_entry": round(self.edge_at_entry, 4),
+            "edge_trajectory": [round(e, 4) for e in self.edge_trajectory],
+            "reason": self.reason,
+        }
+
+
+async def patience_monitor(
+    self: SmartEntryCalculator,
+    market_id: str,
+    side: str,
+    min_edge: float,
+    current_edge: float,
+    get_current_price: Callable[[], Awaitable[float]],
+    get_model_prob: Callable[[], float],
+    max_wait_secs: int = 300,
+    check_interval_secs: int = 5,
+    immediate_multiplier: float = 2.0,
+) -> PatienceResult:
+    """Monitor edge and price for up to max_wait_secs before entering.
+
+    Decision rules:
+    1. If current_edge > immediate_multiplier * min_edge -> enter immediately
+    2. If current_edge >= min_edge -> wait and monitor
+    3. If edge deteriorates below min_edge -> cancel
+    4. If max_wait_secs expires and edge still >= min_edge -> enter
+
+    Args:
+        get_current_price: Async callback to fetch latest market price.
+        get_model_prob: Callback returning model's fair value probability.
+    """
+    trajectory: list[float] = [current_edge]
+
+    # Rule 1: Large edge — enter immediately
+    if min_edge > 0 and current_edge > immediate_multiplier * min_edge:
+        try:
+            price = await get_current_price()
+        except Exception:
+            price = 0.0
+        log.info(
+            "patience.enter_immediately",
+            market_id=market_id,
+            edge=round(current_edge, 4),
+            threshold=round(immediate_multiplier * min_edge, 4),
+        )
+        return PatienceResult(
+            action="enter_immediately",
+            wait_time_secs=0.0,
+            entry_price=price,
+            edge_at_entry=current_edge,
+            edge_trajectory=trajectory,
+            reason=f"Edge {current_edge:.1%} > {immediate_multiplier}x min_edge {min_edge:.1%}",
+        )
+
+    # Rule 2: Edge above threshold — wait and monitor
+    start = time.monotonic()
+    best_edge = current_edge
+    best_price = 0.0
+
+    while True:
+        elapsed = time.monotonic() - start
+        if elapsed >= max_wait_secs:
+            # Rule 4: Timeout — enter if edge still valid
+            try:
+                price = await get_current_price()
+            except Exception:
+                price = best_price
+            log.info(
+                "patience.timeout",
+                market_id=market_id,
+                wait=round(elapsed, 1),
+                edge=round(current_edge, 4),
+            )
+            return PatienceResult(
+                action="timeout",
+                wait_time_secs=elapsed,
+                entry_price=price,
+                edge_at_entry=current_edge,
+                edge_trajectory=trajectory,
+                reason=f"Timeout after {elapsed:.0f}s, edge {current_edge:.1%} still valid",
+            )
+
+        await asyncio.sleep(check_interval_secs)
+
+        # Fetch updated price and recalculate edge
+        try:
+            price = await get_current_price()
+        except Exception as e:
+            log.warning("patience.price_error", error=str(e))
+            continue
+
+        model_prob = get_model_prob()
+        # Recalculate edge: |model_prob - implied_price|
+        if side == "BUY_YES":
+            current_edge = model_prob - price
+        else:
+            current_edge = (1.0 - model_prob) - (1.0 - price)
+
+        trajectory.append(current_edge)
+
+        # Rule 3: Edge deteriorated below threshold — cancel
+        if current_edge < min_edge:
+            elapsed = time.monotonic() - start
+            log.info(
+                "patience.cancelled",
+                market_id=market_id,
+                edge=round(current_edge, 4),
+                min_edge=round(min_edge, 4),
+                wait=round(elapsed, 1),
+            )
+            return PatienceResult(
+                action="cancelled",
+                wait_time_secs=elapsed,
+                entry_price=0.0,
+                edge_at_entry=current_edge,
+                edge_trajectory=trajectory,
+                reason=f"Edge {current_edge:.1%} dropped below min_edge {min_edge:.1%}",
+            )
+
+        # Check if edge improved enough for immediate entry
+        if min_edge > 0 and current_edge > immediate_multiplier * min_edge:
+            elapsed = time.monotonic() - start
+            log.info(
+                "patience.entered_after_wait",
+                market_id=market_id,
+                edge=round(current_edge, 4),
+                wait=round(elapsed, 1),
+            )
+            return PatienceResult(
+                action="entered_after_wait",
+                wait_time_secs=elapsed,
+                entry_price=price,
+                edge_at_entry=current_edge,
+                edge_trajectory=trajectory,
+                reason=f"Edge improved to {current_edge:.1%} after {elapsed:.0f}s",
+            )
+
+        # Track best edge for logging
+        if current_edge > best_edge:
+            best_edge = current_edge
+            best_price = price
+
+
+# Bind the async method to the class
+SmartEntryCalculator.patience_monitor = patience_monitor
 
 
 def _adjust_price(price: float, side: str, adjustment: float) -> float:

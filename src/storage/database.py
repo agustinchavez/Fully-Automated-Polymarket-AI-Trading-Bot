@@ -14,7 +14,10 @@ from typing import Any
 from src.config import StorageConfig
 from src.storage.migrations import run_migrations
 from src.storage.models import (
+    ArbOpportunityRecord,
+    ArbTradeRecord,
     ClosedPositionRecord,
+    ComplementaryArbRecord,
     ForecastRecord,
     MarketRecord,
     PerformanceLogRecord,
@@ -478,6 +481,243 @@ class Database:
             "SELECT * FROM calibration_history ORDER BY recorded_at DESC LIMIT ?", (limit,)
         ).fetchall()
         return [dict(r) for r in rows]
+
+    # ── Arbitrage ──────────────────────────────────────────────────
+
+    def insert_arb_opportunity(self, record: ArbOpportunityRecord) -> None:
+        self.conn.execute(
+            """INSERT OR REPLACE INTO arb_opportunities
+                (arb_id, match_method, match_confidence, poly_market_id,
+                 poly_question, poly_yes_price, poly_no_price,
+                 kalshi_ticker, kalshi_title, kalshi_yes_price, kalshi_no_price,
+                 spread, net_spread, direction, buy_platform, sell_platform,
+                 buy_price, sell_price, total_fees, is_actionable, created_at)
+            VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+            (
+                record.arb_id, record.match_method, record.match_confidence,
+                record.poly_market_id, record.poly_question,
+                record.poly_yes_price, record.poly_no_price,
+                record.kalshi_ticker, record.kalshi_title,
+                record.kalshi_yes_price, record.kalshi_no_price,
+                record.spread, record.net_spread, record.direction,
+                record.buy_platform, record.sell_platform,
+                record.buy_price, record.sell_price,
+                record.total_fees, int(record.is_actionable),
+                record.created_at,
+            ),
+        )
+        self.conn.commit()
+
+    def insert_arb_trade(self, record: ArbTradeRecord) -> None:
+        self.conn.execute(
+            """INSERT INTO arb_trades
+                (arb_id, buy_platform, sell_platform, buy_market_id,
+                 sell_market_id, buy_price, sell_price, buy_fill_price,
+                 sell_fill_price, stake_usd, net_pnl, status,
+                 unwind_reason, created_at)
+            VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+            (
+                record.arb_id, record.buy_platform, record.sell_platform,
+                record.buy_market_id, record.sell_market_id,
+                record.buy_price, record.sell_price,
+                record.buy_fill_price, record.sell_fill_price,
+                record.stake_usd, record.net_pnl, record.status,
+                record.unwind_reason, record.created_at,
+            ),
+        )
+        self.conn.commit()
+
+    def insert_complementary_arb(self, record: ComplementaryArbRecord) -> None:
+        self.conn.execute(
+            """INSERT INTO complementary_arb
+                (market_id, question, yes_price, no_price, combined_cost,
+                 guaranteed_profit, fee_cost, net_profit, is_actionable,
+                 created_at)
+            VALUES (?,?,?,?,?,?,?,?,?,?)""",
+            (
+                record.market_id, record.question,
+                record.yes_price, record.no_price,
+                record.combined_cost, record.guaranteed_profit,
+                record.fee_cost, record.net_profit,
+                int(record.is_actionable), record.created_at,
+            ),
+        )
+        self.conn.commit()
+
+    def get_arb_opportunities(
+        self, limit: int = 50, actionable_only: bool = False,
+    ) -> list[dict]:
+        if actionable_only:
+            rows = self.conn.execute(
+                "SELECT * FROM arb_opportunities WHERE is_actionable = 1 "
+                "ORDER BY created_at DESC LIMIT ?", (limit,)
+            ).fetchall()
+        else:
+            rows = self.conn.execute(
+                "SELECT * FROM arb_opportunities ORDER BY created_at DESC LIMIT ?",
+                (limit,),
+            ).fetchall()
+        return [dict(r) for r in rows]
+
+    def get_arb_trades(self, limit: int = 50) -> list[dict]:
+        rows = self.conn.execute(
+            "SELECT * FROM arb_trades ORDER BY created_at DESC LIMIT ?",
+            (limit,),
+        ).fetchall()
+        return [dict(r) for r in rows]
+
+    def get_complementary_arb(self, limit: int = 50) -> list[dict]:
+        rows = self.conn.execute(
+            "SELECT * FROM complementary_arb ORDER BY created_at DESC LIMIT ?",
+            (limit,),
+        ).fetchall()
+        return [dict(r) for r in rows]
+
+    def get_arb_summary(self) -> dict[str, Any]:
+        """Return summary stats for the arbitrage dashboard."""
+        total_opps = self.conn.execute(
+            "SELECT COUNT(*) FROM arb_opportunities"
+        ).fetchone()[0]
+        actionable_opps = self.conn.execute(
+            "SELECT COUNT(*) FROM arb_opportunities WHERE is_actionable = 1"
+        ).fetchone()[0]
+        total_trades = self.conn.execute(
+            "SELECT COUNT(*) FROM arb_trades"
+        ).fetchone()[0]
+        combined_pnl_row = self.conn.execute(
+            "SELECT COALESCE(SUM(net_pnl), 0) FROM arb_trades"
+        ).fetchone()
+        combined_pnl = float(combined_pnl_row[0])
+        filled_trades = self.conn.execute(
+            "SELECT COUNT(*) FROM arb_trades WHERE status = 'both_filled'"
+        ).fetchone()[0]
+        comp_count = self.conn.execute(
+            "SELECT COUNT(*) FROM complementary_arb WHERE is_actionable = 1"
+        ).fetchone()[0]
+
+        return {
+            "total_opportunities": total_opps,
+            "actionable_opportunities": actionable_opps,
+            "total_trades": total_trades,
+            "filled_trades": filled_trades,
+            "combined_pnl": round(combined_pnl, 4),
+            "complementary_actionable": comp_count,
+        }
+
+    # ── Kill Switch Persistence ────────────────────────────────────
+
+    def get_kill_switch_state(self) -> dict[str, Any]:
+        """Read the persisted kill switch state."""
+        try:
+            row = self.conn.execute(
+                "SELECT * FROM kill_switch_state WHERE id = 1"
+            ).fetchone()
+            if row:
+                return {
+                    "is_killed": bool(row["is_killed"]),
+                    "kill_reason": row["kill_reason"] or "",
+                    "killed_at": row["killed_at"] or "",
+                    "killed_by": row["killed_by"] or "",
+                    "daily_pnl_at_kill": float(row["daily_pnl_at_kill"]),
+                    "bankroll_at_kill": float(row["bankroll_at_kill"]),
+                }
+        except sqlite3.OperationalError:
+            pass
+        return {
+            "is_killed": False,
+            "kill_reason": "",
+            "killed_at": "",
+            "killed_by": "",
+            "daily_pnl_at_kill": 0.0,
+            "bankroll_at_kill": 0.0,
+        }
+
+    def set_kill_switch(
+        self,
+        is_killed: bool,
+        reason: str,
+        killed_by: str,
+        daily_pnl: float = 0.0,
+        bankroll: float = 0.0,
+    ) -> None:
+        """Persist kill switch state to DB."""
+        import datetime as _dt
+        try:
+            self.conn.execute(
+                """INSERT OR REPLACE INTO kill_switch_state
+                    (id, is_killed, kill_reason, killed_at, killed_by,
+                     daily_pnl_at_kill, bankroll_at_kill)
+                VALUES (1, ?, ?, ?, ?, ?, ?)""",
+                (
+                    int(is_killed), reason,
+                    _dt.datetime.now(_dt.timezone.utc).isoformat() if is_killed else "",
+                    killed_by, daily_pnl, bankroll,
+                ),
+            )
+            self.conn.commit()
+        except sqlite3.OperationalError as e:
+            log.warning("database.set_kill_switch_error", error=str(e))
+
+    def reset_kill_switch(self) -> None:
+        """Clear the persisted kill switch state."""
+        try:
+            self.conn.execute(
+                """UPDATE kill_switch_state
+                SET is_killed = 0, kill_reason = '', killed_at = '',
+                    killed_by = '', daily_pnl_at_kill = 0, bankroll_at_kill = 0
+                WHERE id = 1"""
+            )
+            self.conn.commit()
+        except sqlite3.OperationalError as e:
+            log.warning("database.reset_kill_switch_error", error=str(e))
+
+    # ── Daily Summaries ──────────────────────────────────────────────
+
+    def insert_daily_summary(
+        self,
+        summary_date: str,
+        total_pnl: float,
+        realized_pnl: float,
+        unrealized_pnl: float,
+        trades_opened: int,
+        trades_closed: int,
+        positions_held: int,
+        drawdown_pct: float,
+        bankroll: float,
+        best_trade_pnl: float = 0.0,
+        worst_trade_pnl: float = 0.0,
+    ) -> None:
+        """Insert or update a daily summary record."""
+        import datetime as _dt
+        try:
+            self.conn.execute(
+                """INSERT OR REPLACE INTO daily_summaries
+                    (summary_date, total_pnl, realized_pnl, unrealized_pnl,
+                     trades_opened, trades_closed, positions_held,
+                     drawdown_pct, bankroll, best_trade_pnl, worst_trade_pnl,
+                     created_at)
+                VALUES (?,?,?,?,?,?,?,?,?,?,?,?)""",
+                (
+                    summary_date, total_pnl, realized_pnl, unrealized_pnl,
+                    trades_opened, trades_closed, positions_held,
+                    drawdown_pct, bankroll, best_trade_pnl, worst_trade_pnl,
+                    _dt.datetime.now(_dt.timezone.utc).isoformat(),
+                ),
+            )
+            self.conn.commit()
+        except sqlite3.OperationalError as e:
+            log.warning("database.insert_daily_summary_error", error=str(e))
+
+    def get_daily_summaries(self, limit: int = 30) -> list[dict]:
+        """Return recent daily summaries."""
+        try:
+            rows = self.conn.execute(
+                "SELECT * FROM daily_summaries ORDER BY summary_date DESC LIMIT ?",
+                (limit,),
+            ).fetchall()
+            return [dict(r) for r in rows]
+        except sqlite3.OperationalError:
+            return []
 
     # ── Maintenance ──────────────────────────────────────────────────
 

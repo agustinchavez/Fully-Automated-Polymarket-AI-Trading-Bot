@@ -3019,16 +3019,148 @@ def api_audit() -> Any:
 
 @app.route("/api/kill-switch", methods=["POST"])
 def api_kill_switch() -> Any:
-    """Toggle kill switch (for dashboard button)."""
+    """Toggle kill switch (for dashboard button) — persists to DB."""
     cfg = _get_config()
-    # In production this would persist to config file
     current = cfg.risk.kill_switch
-    # Note: this only affects the in-memory config
     cfg.risk.kill_switch = not current
+
+    # Persist to DB if production mode
+    conn = _get_conn()
+    try:
+        import datetime as _dt
+        if cfg.risk.kill_switch:
+            conn.execute(
+                """INSERT OR REPLACE INTO kill_switch_state
+                    (id, is_killed, kill_reason, killed_at, killed_by,
+                     daily_pnl_at_kill, bankroll_at_kill)
+                VALUES (1, 1, ?, ?, 'dashboard', 0, ?)""",
+                ("Manual kill via dashboard",
+                 _dt.datetime.now(_dt.timezone.utc).isoformat(),
+                 cfg.risk.bankroll),
+            )
+        else:
+            conn.execute(
+                """UPDATE kill_switch_state
+                SET is_killed = 0, kill_reason = '', killed_at = '',
+                    killed_by = '', daily_pnl_at_kill = 0, bankroll_at_kill = 0
+                WHERE id = 1"""
+            )
+        conn.commit()
+    except Exception:
+        pass
+    finally:
+        conn.close()
+
     return jsonify({
         "kill_switch": cfg.risk.kill_switch,
         "message": f"Kill switch {'ENGAGED' if cfg.risk.kill_switch else 'DISENGAGED'}",
     })
+
+
+@app.route("/api/kill-switch/state")
+def api_kill_switch_state() -> Any:
+    """Get current kill switch state from DB."""
+    conn = _get_conn()
+    try:
+        row = conn.execute(
+            "SELECT * FROM kill_switch_state WHERE id = 1"
+        ).fetchone()
+        if row:
+            return jsonify({
+                "is_killed": bool(row["is_killed"]),
+                "kill_reason": row["kill_reason"] or "",
+                "killed_at": row["killed_at"] or "",
+                "killed_by": row["killed_by"] or "",
+                "daily_pnl_at_kill": float(row["daily_pnl_at_kill"]),
+                "bankroll_at_kill": float(row["bankroll_at_kill"]),
+            })
+        return jsonify({
+            "is_killed": False, "kill_reason": "", "killed_at": "",
+            "killed_by": "", "daily_pnl_at_kill": 0.0, "bankroll_at_kill": 0.0,
+        })
+    except Exception:
+        return jsonify({
+            "is_killed": False, "kill_reason": "", "killed_at": "",
+            "killed_by": "", "daily_pnl_at_kill": 0.0, "bankroll_at_kill": 0.0,
+        })
+    finally:
+        conn.close()
+
+
+@app.route("/api/kill-switch/reset", methods=["POST"])
+def api_kill_switch_reset() -> Any:
+    """Reset kill switch — requires {"confirm": true} body."""
+    data = request.get_json(silent=True) or {}
+    if not data.get("confirm"):
+        return jsonify({"error": "Must send {\"confirm\": true} to reset kill switch"}), 400
+
+    cfg = _get_config()
+    cfg.risk.kill_switch = False
+
+    conn = _get_conn()
+    try:
+        conn.execute(
+            """UPDATE kill_switch_state
+            SET is_killed = 0, kill_reason = '', killed_at = '',
+                killed_by = '', daily_pnl_at_kill = 0, bankroll_at_kill = 0
+            WHERE id = 1"""
+        )
+        conn.commit()
+    except Exception:
+        pass
+    finally:
+        conn.close()
+
+    return jsonify({"success": True, "message": "Kill switch reset"})
+
+
+@app.route("/api/daily-summaries")
+def api_daily_summaries() -> Any:
+    """Get recent daily summaries."""
+    conn = _get_conn()
+    try:
+        rows = conn.execute(
+            "SELECT * FROM daily_summaries ORDER BY summary_date DESC LIMIT 30"
+        ).fetchall()
+        return jsonify({"summaries": [dict(r) for r in rows]})
+    except Exception:
+        return jsonify({"summaries": []})
+    finally:
+        conn.close()
+
+
+# ─── API: Deployment Stage ─────────────────────────────────────
+
+@app.route("/api/deployment-stage")
+def api_deployment_stage() -> Any:
+    """Get current deployment stage and history."""
+    cfg = _get_config()
+    if not cfg:
+        return jsonify({"error": "config not loaded"}), 500
+
+    from src.policy.graduated_deployment import GraduatedDeploymentManager
+
+    conn = _get_conn()
+    try:
+        mgr = GraduatedDeploymentManager(cfg, conn)
+        stage = cfg.production.deployment_stage
+        sc = mgr.get_stage_config(stage)
+        history = mgr.get_stage_history()
+
+        return jsonify({
+            "current_stage": stage,
+            "bankroll": sc.bankroll,
+            "max_stake": sc.max_stake,
+            "min_duration_days": sc.min_duration_days,
+            "criteria": sc.criteria,
+            "production_enabled": cfg.production.enabled,
+            "auto_advance": cfg.production.auto_advance_stages,
+            "history": history,
+        })
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+    finally:
+        conn.close()
 
 
 # ─── API: Execution Quality ─────────────────────────────────────
@@ -3037,24 +3169,329 @@ def api_kill_switch() -> Any:
 def api_execution_quality() -> Any:
     conn = _get_conn()
     try:
-        tables = conn.execute(
-            "SELECT name FROM sqlite_master WHERE type='table' AND name='fill_records'"
-        ).fetchone()
-        if not tables:
+        # Check for execution_fills table (Phase 6) or legacy fill_records
+        table_name = None
+        for name in ("execution_fills", "fill_records"):
+            row = conn.execute(
+                "SELECT name FROM sqlite_master WHERE type='table' AND name=?",
+                (name,),
+            ).fetchone()
+            if row:
+                table_name = name
+                break
+
+        if not table_name:
             return jsonify({
                 "total_orders": 0,
+                "total_fills": 0,
                 "avg_fill_rate": 0,
                 "avg_slippage_bps": 0,
+                "median_time_to_fill": 0,
+                "worst_slippage_bps": 0,
+                "best_slippage_bps": 0,
                 "strategy_stats": {},
+                "slippage_distribution": [],
+                "fills": [],
             })
 
         rows = conn.execute(
-            "SELECT * FROM fill_records ORDER BY timestamp DESC LIMIT 100"
+            f"SELECT * FROM {table_name} ORDER BY id DESC LIMIT 200"
         ).fetchall()
         fills = [dict(r) for r in rows]
+
+        if not fills:
+            return jsonify({
+                "total_orders": 0,
+                "total_fills": 0,
+                "avg_fill_rate": 0,
+                "avg_slippage_bps": 0,
+                "median_time_to_fill": 0,
+                "worst_slippage_bps": 0,
+                "best_slippage_bps": 0,
+                "strategy_stats": {},
+                "slippage_distribution": [],
+                "fills": [],
+            })
+
+        filled = [f for f in fills if (f.get("size_filled") or 0) > 0]
+        slippages = [
+            f["slippage_bps"] for f in filled
+            if f.get("slippage_bps") is not None
+        ]
+
+        # Per-strategy breakdown
+        strategy_groups: dict[str, list] = {}
+        for f in fills:
+            s = f.get("execution_strategy", "simple")
+            strategy_groups.setdefault(s, []).append(f)
+
+        strategy_stats = {}
+        for strat, strat_fills in strategy_groups.items():
+            strat_filled = [
+                f for f in strat_fills if (f.get("size_filled") or 0) > 0
+            ]
+            strat_slippages = [
+                f["slippage_bps"] for f in strat_filled
+                if f.get("slippage_bps") is not None
+            ]
+            strategy_stats[strat] = {
+                "count": len(strat_fills),
+                "fills": len(strat_filled),
+                "avg_slippage_bps": round(
+                    sum(strat_slippages) / len(strat_slippages), 1
+                ) if strat_slippages else 0,
+                "avg_fill_rate": round(
+                    sum(f.get("fill_rate", 1) for f in strat_fills)
+                    / len(strat_fills), 3
+                ) if strat_fills else 0,
+                "avg_time_to_fill": round(
+                    sum(f.get("time_to_fill_secs", 0) for f in strat_filled)
+                    / len(strat_filled), 2
+                ) if strat_filled else 0,
+            }
+
+        # Slippage distribution buckets
+        slippage_buckets = _compute_slippage_distribution(slippages)
+
+        # Median helper
+        fill_times = sorted(
+            [f.get("time_to_fill_secs", 0) for f in filled]
+        ) if filled else [0]
+        median_ttf = fill_times[len(fill_times) // 2] if fill_times else 0
+
         return jsonify({
             "total_orders": len(fills),
+            "total_fills": len(filled),
+            "avg_fill_rate": round(
+                sum(f.get("fill_rate", 1) for f in fills) / len(fills), 3
+            ) if fills else 0,
+            "avg_slippage_bps": round(
+                sum(slippages) / len(slippages), 1
+            ) if slippages else 0,
+            "median_time_to_fill": round(median_ttf, 2),
+            "worst_slippage_bps": round(max(slippages), 1) if slippages else 0,
+            "best_slippage_bps": round(min(slippages), 1) if slippages else 0,
+            "strategy_stats": strategy_stats,
+            "slippage_distribution": slippage_buckets,
             "fills": fills[:20],
+        })
+    finally:
+        conn.close()
+
+
+def _compute_slippage_distribution(
+    slippages: list[float],
+) -> list[dict[str, Any]]:
+    """Bucket slippages for histogram display."""
+    if not slippages:
+        return []
+    buckets = [
+        {"label": "<0 (improvement)", "min": -9999, "max": 0, "count": 0},
+        {"label": "0-5 bps", "min": 0, "max": 5, "count": 0},
+        {"label": "5-10 bps", "min": 5, "max": 10, "count": 0},
+        {"label": "10-25 bps", "min": 10, "max": 25, "count": 0},
+        {"label": "25-50 bps", "min": 25, "max": 50, "count": 0},
+        {"label": "50+ bps", "min": 50, "max": 9999, "count": 0},
+    ]
+    for s in slippages:
+        for b in buckets:
+            if b["min"] <= s < b["max"]:
+                b["count"] += 1
+                break
+    return [{"label": b["label"], "count": b["count"]} for b in buckets]
+
+
+# ─── API: Continuous Learning (Phase 8) ──────────────────────────
+
+@app.route("/api/post-mortem/recent")
+def api_post_mortem_recent() -> Any:
+    """Return recent post-mortem trade analyses."""
+    conn = _get_conn()
+    try:
+        tbl = conn.execute(
+            "SELECT name FROM sqlite_master WHERE type='table' AND name='trade_analysis'"
+        ).fetchone()
+        if not tbl:
+            return jsonify({"analyses": [], "total": 0})
+        rows = conn.execute(
+            "SELECT * FROM trade_analysis ORDER BY analyzed_at DESC LIMIT 50"
+        ).fetchall()
+        analyses = []
+        for r in rows:
+            d = dict(r)
+            d["was_correct"] = bool(d.get("was_correct"))
+            d["was_confident_and_wrong"] = bool(d.get("was_confident_and_wrong"))
+            try:
+                d["model_errors"] = json.loads(d.get("model_errors_json") or "{}")
+            except (json.JSONDecodeError, TypeError):
+                d["model_errors"] = {}
+            try:
+                d["evidence_sources"] = json.loads(d.get("evidence_sources_json") or "[]")
+            except (json.JSONDecodeError, TypeError):
+                d["evidence_sources"] = []
+            analyses.append(d)
+        return jsonify({"analyses": analyses, "total": len(analyses)})
+    finally:
+        conn.close()
+
+
+@app.route("/api/post-mortem/summary")
+def api_post_mortem_summary() -> Any:
+    """Return weekly post-mortem summary."""
+    conn = _get_conn()
+    try:
+        tbl = conn.execute(
+            "SELECT name FROM sqlite_master WHERE type='table' AND name='trade_analysis'"
+        ).fetchone()
+        if not tbl:
+            return jsonify({
+                "total_resolved": 0, "correct_count": 0, "accuracy_pct": 0.0,
+                "top_winning_categories": [], "top_losing_categories": [],
+                "most_accurate_model": "", "least_accurate_model": "",
+                "confident_wrong_count": 0, "avg_position_sizing_score": 0.0,
+            })
+        from src.analytics.post_mortem import PostMortemAnalyzer
+        analyzer = PostMortemAnalyzer(conn)
+        summary = analyzer.generate_weekly_summary()
+        return jsonify(summary.to_dict())
+    finally:
+        conn.close()
+
+
+@app.route("/api/evidence-quality")
+def api_evidence_quality() -> Any:
+    """Return evidence source quality rankings."""
+    conn = _get_conn()
+    try:
+        tbl = conn.execute(
+            "SELECT name FROM sqlite_master WHERE type='table' AND name='evidence_source_quality'"
+        ).fetchone()
+        if not tbl:
+            return jsonify({
+                "rankings": [], "total_domains": 0,
+                "top_sources": [], "blocklist": [],
+            })
+        from src.analytics.evidence_quality import EvidenceQualityTracker
+        tracker = EvidenceQualityTracker(conn)
+        rankings = tracker.get_domain_rankings()
+        return jsonify({
+            "rankings": [r.to_dict() for r in rankings],
+            "total_domains": len(rankings),
+            "top_sources": tracker.get_top_sources(n=10),
+            "blocklist": tracker.get_blocklist(),
+        })
+    finally:
+        conn.close()
+
+
+@app.route("/api/calibration/retrain-history")
+def api_calibration_retrain_history() -> Any:
+    """Return calibration A/B test history and rolling Brier."""
+    conn = _get_conn()
+    try:
+        tbl = conn.execute(
+            "SELECT name FROM sqlite_master WHERE type='table' AND name='calibration_ab_results'"
+        ).fetchone()
+        if not tbl:
+            return jsonify({
+                "ab_tests": [], "total": 0,
+                "rolling_brier_7d": 0.0,
+            })
+        from src.analytics.smart_retrain import SmartRetrainManager
+        manager = SmartRetrainManager(conn)
+        ab_tests = manager.get_ab_history()
+        rolling_brier = manager.get_rolling_brier(window_days=7)
+        return jsonify({
+            "ab_tests": [t.to_dict() for t in ab_tests],
+            "total": len(ab_tests),
+            "rolling_brier_7d": round(rolling_brier, 4),
+        })
+    finally:
+        conn.close()
+
+
+@app.route("/api/param-optimization/runs")
+def api_param_optimization_runs() -> Any:
+    """Return all parameter optimization runs."""
+    conn = _get_conn()
+    try:
+        tbl = conn.execute(
+            "SELECT name FROM sqlite_master WHERE type='table' AND name='param_optimization_runs'"
+        ).fetchone()
+        if not tbl:
+            return jsonify({"runs": [], "total": 0})
+        from src.analytics.param_optimizer import ParameterOptimizer
+        optimizer = ParameterOptimizer(conn)
+        runs = optimizer.get_all_runs()
+        return jsonify({"runs": runs, "total": len(runs)})
+    finally:
+        conn.close()
+
+
+@app.route("/api/param-optimization/suggestions")
+def api_param_optimization_suggestions() -> Any:
+    """Return pending parameter optimization suggestions."""
+    conn = _get_conn()
+    try:
+        tbl = conn.execute(
+            "SELECT name FROM sqlite_master WHERE type='table' AND name='param_optimization_runs'"
+        ).fetchone()
+        if not tbl:
+            return jsonify({"suggestions": [], "total": 0})
+        from src.analytics.param_optimizer import ParameterOptimizer
+        optimizer = ParameterOptimizer(conn)
+        suggestions = optimizer.get_pending_suggestions()
+        return jsonify({"suggestions": suggestions, "total": len(suggestions)})
+    finally:
+        conn.close()
+
+
+@app.route("/api/param-optimization/apply/<run_id>", methods=["POST"])
+def api_param_optimization_apply(run_id: str) -> Any:
+    """Mark a parameter optimization suggestion as applied."""
+    conn = _get_conn()
+    try:
+        from src.analytics.param_optimizer import ParameterOptimizer
+        optimizer = ParameterOptimizer(conn)
+        success = optimizer.apply_suggestion(run_id)
+        return jsonify({"success": success, "run_id": run_id})
+    finally:
+        conn.close()
+
+
+# ─── API: Whale Quality Scores (Phase 7) ─────────────────────────
+
+@app.route("/api/whale-quality-scores")
+def api_whale_quality_scores() -> Any:
+    """Return whale quality scores from Phase 7 scoring."""
+    conn = _get_conn()
+    try:
+        # Check if table exists
+        tbl = conn.execute(
+            "SELECT name FROM sqlite_master WHERE type='table' AND name='whale_quality_scores'"
+        ).fetchone()
+        if not tbl:
+            return jsonify({
+                "scores": [],
+                "percentile_threshold": 60.0,
+                "qualified_count": 0,
+                "total_count": 0,
+                "scoring_enabled": False,
+            })
+
+        rows = conn.execute(
+            "SELECT * FROM whale_quality_scores ORDER BY composite_score DESC"
+        ).fetchall()
+        scores = [dict(r) for r in rows]
+        threshold = 60.0
+        qualified = [s for s in scores if (s.get("percentile") or 0) >= threshold]
+
+        return jsonify({
+            "scores": scores,
+            "percentile_threshold": threshold,
+            "qualified_count": len(qualified),
+            "total_count": len(scores),
+            "scoring_enabled": len(scores) > 0,
         })
     finally:
         conn.close()
@@ -3864,6 +4301,122 @@ def api_whale_activity() -> Any:
                 ov.setdefault("agreement_rate", 0)
                 ov.setdefault("correlation_label", "LOW")
 
+        # ── Phase 7: Quality Enrichment ─────────────────────────
+        quality_summary: dict = {
+            "scoring_enabled": False,
+            "avg_timing_score": 0.0,
+            "best_timer": "",
+            "qualified_count": 0,
+            "total_scored": 0,
+        }
+        quality_distribution: list = []
+
+        try:
+            wqs_table = conn.execute(
+                "SELECT name FROM sqlite_master WHERE type='table' AND name='whale_quality_scores'"
+            ).fetchone()
+            if wqs_table:
+                qs_rows = conn.execute(
+                    "SELECT * FROM whale_quality_scores ORDER BY composite_score DESC"
+                ).fetchall()
+                qs_list = [dict(r) for r in qs_rows]
+                threshold = 60.0
+
+                if qs_list:
+                    quality_summary["scoring_enabled"] = True
+                    quality_summary["total_scored"] = len(qs_list)
+                    quality_summary["qualified_count"] = sum(
+                        1 for q in qs_list if (q.get("percentile") or 0) >= threshold
+                    )
+                    timing_scores = [q.get("timing_score", 0) for q in qs_list if q.get("timing_score")]
+                    if timing_scores:
+                        quality_summary["avg_timing_score"] = round(
+                            sum(timing_scores) / len(timing_scores), 1
+                        )
+                    # Best timer: whale with highest timing_score
+                    best = max(qs_list, key=lambda q: q.get("timing_score", 0))
+                    quality_summary["best_timer"] = best.get("name", best.get("address", "")[:10])
+
+                    # Enrich each wallet with quality_tier
+                    qs_by_addr = {q["address"]: q for q in qs_list}
+                    for w in wallets:
+                        addr = w.get("address", "")
+                        qs = qs_by_addr.get(addr)
+                        if qs:
+                            pctl = qs.get("percentile", 0)
+                            if pctl >= 80:
+                                w["quality_tier"] = "S-TIER"
+                            elif pctl >= 60:
+                                w["quality_tier"] = "A-TIER"
+                            elif pctl >= 40:
+                                w["quality_tier"] = "B-TIER"
+                            else:
+                                w["quality_tier"] = "C-TIER"
+                            w["composite_score"] = round(qs.get("composite_score", 0), 1)
+                            w["timing_score"] = round(qs.get("timing_score", 0), 1)
+                        else:
+                            w["quality_tier"] = "UNSCORED"
+                            w["composite_score"] = 0.0
+                            w["timing_score"] = 0.0
+
+                    # Quality-weighted conviction per signal
+                    for s in signals:
+                        whale_names = s.get("whale_names", [])
+                        # Find quality weights for whales in this signal
+                        weighted_sum = 0.0
+                        weight_total = 0.0
+                        for wn in whale_names:
+                            # Look up by name
+                            matched_q = next(
+                                (q for q in qs_list if q.get("name") == wn), None
+                            )
+                            if matched_q:
+                                w_score = matched_q.get("composite_score", 50.0) / 100.0
+                            else:
+                                w_score = 0.5  # default for unknown
+                            conv = s.get("conviction_score", 0)
+                            weighted_sum += conv * w_score
+                            weight_total += w_score
+                        if weight_total > 0:
+                            s["quality_weighted_conviction"] = round(
+                                weighted_sum / weight_total, 1
+                            )
+                        else:
+                            s["quality_weighted_conviction"] = s.get("conviction_score", 0)
+
+                    # Quality distribution histogram (10-point buckets)
+                    buckets: dict = {}
+                    for q in qs_list:
+                        cs = q.get("composite_score", 0)
+                        bucket = int(cs // 10) * 10
+                        label = f"{bucket}-{bucket + 10}"
+                        buckets[label] = buckets.get(label, 0) + 1
+                    quality_distribution = [
+                        {"bucket": k, "count": v}
+                        for k, v in sorted(buckets.items())
+                    ]
+                else:
+                    for w in wallets:
+                        w["quality_tier"] = "UNSCORED"
+                        w["composite_score"] = 0.0
+                        w["timing_score"] = 0.0
+                    for s in signals:
+                        s["quality_weighted_conviction"] = s.get("conviction_score", 0)
+            else:
+                for w in wallets:
+                    w["quality_tier"] = "UNSCORED"
+                    w["composite_score"] = 0.0
+                    w["timing_score"] = 0.0
+                for s in signals:
+                    s["quality_weighted_conviction"] = s.get("conviction_score", 0)
+        except Exception:
+            for w in wallets:
+                w.setdefault("quality_tier", "UNSCORED")
+                w.setdefault("composite_score", 0.0)
+                w.setdefault("timing_score", 0.0)
+            for s in signals:
+                s.setdefault("quality_weighted_conviction", s.get("conviction_score", 0))
+
         return jsonify({
             "tracked_wallets": wallets,
             "conviction_signals": signals,
@@ -3891,6 +4444,8 @@ def api_whale_activity() -> Any:
             "risk_alerts": risk_alerts,
             "tier_summary": tier_summary,
             "alert_history": alert_history,
+            "quality_summary": quality_summary,
+            "quality_distribution": quality_distribution,
             "summary": {
                 "total_wallets": len(wallets),
                 "total_signals": len(signals),
@@ -3943,6 +4498,14 @@ def _whale_empty_response() -> dict:
         "risk_alerts": [],
         "tier_summary": {},
         "alert_history": [],
+        "quality_summary": {
+            "scoring_enabled": False,
+            "avg_timing_score": 0.0,
+            "best_timer": "",
+            "qualified_count": 0,
+            "total_scored": 0,
+        },
+        "quality_distribution": [],
         "summary": {
             "total_wallets": 0,
             "total_signals": 0,
@@ -7314,6 +7877,83 @@ def api_forecast_base_rates() -> Any:
         "pattern_count": len(patterns),
         "patterns": patterns,
         "empirical_rates": empirical,
+    })
+
+
+# ─── API: Cross-Platform Arbitrage (Phase 5) ─────────────────────
+
+
+@app.route("/api/arbitrage")
+def api_arbitrage() -> Any:
+    """Return arb opportunities, paired trades, and complementary arb data."""
+    conn = _get_conn()
+    _ensure_tables(conn)
+    try:
+        from src.storage.database import Database
+        from src.config import StorageConfig
+        db = Database(StorageConfig(sqlite_path=_db_path))
+        db._conn = conn
+
+        opps = db.get_arb_opportunities(limit=50)
+        trades = db.get_arb_trades(limit=50)
+        comp = db.get_complementary_arb(limit=50)
+        summary = db.get_arb_summary()
+
+        return jsonify({
+            "opportunities": opps,
+            "trades": trades,
+            "complementary": comp,
+            "summary": summary,
+        })
+    except Exception as e:
+        return jsonify({
+            "opportunities": [],
+            "trades": [],
+            "complementary": [],
+            "summary": {},
+            "error": str(e),
+        })
+    finally:
+        conn.close()
+
+
+@app.route("/api/arbitrage/summary")
+def api_arbitrage_summary() -> Any:
+    """Lightweight arb summary stats."""
+    conn = _get_conn()
+    _ensure_tables(conn)
+    try:
+        from src.storage.database import Database
+        from src.config import StorageConfig
+        db = Database(StorageConfig(sqlite_path=_db_path))
+        db._conn = conn
+
+        summary = db.get_arb_summary()
+        return jsonify(summary)
+    except Exception as e:
+        return jsonify({"error": str(e)})
+    finally:
+        conn.close()
+
+
+@app.route("/api/arbitrage/matches")
+def api_arbitrage_matches() -> Any:
+    """Return current cross-platform market matches from engine."""
+    engine = _engine_instance
+    if engine is None:
+        return jsonify({"matches": [], "error": "Engine not running"})
+
+    scanner = getattr(engine, "_cross_platform_scanner", None)
+    if scanner is None:
+        return jsonify({"matches": [], "enabled": False})
+
+    opps = scanner.opportunity_log
+    matches = [opp.to_dict() for opp in opps]
+
+    return jsonify({
+        "matches": matches,
+        "active_positions": len(scanner.active_positions),
+        "enabled": True,
     })
 
 

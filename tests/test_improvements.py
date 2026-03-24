@@ -287,20 +287,20 @@ class TestFallbackSearchProvider:
     def test_first_provider_succeeds(self) -> None:
         fb = FallbackSearchProvider.__new__(FallbackSearchProvider)
         fb._chain = [_SuccessProvider(), _FailingProvider()]
-        results = asyncio.get_event_loop().run_until_complete(fb.search("test"))
+        results = asyncio.new_event_loop().run_until_complete(fb.search("test"))
         assert len(results) == 1
         assert results[0].title == "Result"
 
     def test_falls_through_to_second_provider(self) -> None:
         fb = FallbackSearchProvider.__new__(FallbackSearchProvider)
         fb._chain = [_FailingProvider(), _SuccessProvider()]
-        results = asyncio.get_event_loop().run_until_complete(fb.search("test"))
+        results = asyncio.new_event_loop().run_until_complete(fb.search("test"))
         assert len(results) == 1
 
     def test_all_fail_returns_empty(self) -> None:
         fb = FallbackSearchProvider.__new__(FallbackSearchProvider)
         fb._chain = [_FailingProvider(), _FailingProvider()]
-        results = asyncio.get_event_loop().run_until_complete(fb.search("test"))
+        results = asyncio.new_event_loop().run_until_complete(fb.search("test"))
         assert results == []
 
     def test_create_search_provider_fallback(self) -> None:

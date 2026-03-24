@@ -203,7 +203,7 @@ class TestScrape:
             instance.close = AsyncMock()
 
             scraper = HistoricalDataScraper(db, min_volume=0.0)
-            result = asyncio.get_event_loop().run_until_complete(
+            result = asyncio.new_event_loop().run_until_complete(
                 scraper.scrape(max_markets=10, batch_size=10)
             )
 
@@ -226,13 +226,13 @@ class TestScrape:
 
             scraper = HistoricalDataScraper(db, min_volume=0.0)
             # First scrape
-            r1 = asyncio.get_event_loop().run_until_complete(
+            r1 = asyncio.new_event_loop().run_until_complete(
                 scraper.scrape(max_markets=10, batch_size=10)
             )
             assert r1.new_inserted == 1
 
             # Second scrape
-            r2 = asyncio.get_event_loop().run_until_complete(
+            r2 = asyncio.new_event_loop().run_until_complete(
                 scraper.scrape(max_markets=10, batch_size=10)
             )
             assert r2.duplicates_skipped == 1
@@ -254,7 +254,7 @@ class TestScrape:
             instance.close = AsyncMock()
 
             scraper = HistoricalDataScraper(db, min_volume=0.0)
-            asyncio.get_event_loop().run_until_complete(
+            asyncio.new_event_loop().run_until_complete(
                 scraper.scrape(
                     max_markets=10, batch_size=10,
                     progress_callback=lambda c, t: progress_calls.append((c, t)),
@@ -277,7 +277,7 @@ class TestScrape:
             instance.close = AsyncMock()
 
             scraper = HistoricalDataScraper(db)
-            result = asyncio.get_event_loop().run_until_complete(
+            result = asyncio.new_event_loop().run_until_complete(
                 scraper.scrape(max_markets=10, batch_size=10)
             )
 
@@ -304,7 +304,7 @@ class TestScrape:
             instance.close = AsyncMock()
 
             scraper = HistoricalDataScraper(db, min_volume=0.0)
-            result = asyncio.get_event_loop().run_until_complete(
+            result = asyncio.new_event_loop().run_until_complete(
                 scraper.scrape(max_markets=100, batch_size=3)
             )
 
@@ -324,7 +324,7 @@ class TestScrape:
             instance.close = AsyncMock()
 
             scraper = HistoricalDataScraper(db, min_volume=0.0)
-            result = asyncio.get_event_loop().run_until_complete(
+            result = asyncio.new_event_loop().run_until_complete(
                 scraper.scrape(max_markets=3, batch_size=5)
             )
 
@@ -341,7 +341,7 @@ class TestScrape:
             instance.close = AsyncMock()
 
             scraper = HistoricalDataScraper(db)
-            result = asyncio.get_event_loop().run_until_complete(
+            result = asyncio.new_event_loop().run_until_complete(
                 scraper.scrape(max_markets=10)
             )
 

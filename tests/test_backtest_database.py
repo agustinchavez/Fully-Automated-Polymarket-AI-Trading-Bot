@@ -43,19 +43,20 @@ class TestMigrations:
         assert "schema_version" in tables
 
     def test_schema_version(self, db: BacktestDatabase) -> None:
+        from src.backtest.migrations import SCHEMA_VERSION
         row = db.conn.execute(
             "SELECT MAX(version) FROM schema_version"
         ).fetchone()
-        assert row[0] == 1
+        assert row[0] == SCHEMA_VERSION
 
     def test_idempotent_migrations(self, db: BacktestDatabase) -> None:
         """Running migrations again should not error."""
-        from src.backtest.migrations import run_migrations
+        from src.backtest.migrations import run_migrations, SCHEMA_VERSION
         run_migrations(db.conn)  # second run
         row = db.conn.execute(
             "SELECT MAX(version) FROM schema_version"
         ).fetchone()
-        assert row[0] == 1
+        assert row[0] == SCHEMA_VERSION
 
 
 # ── Historical Markets ────────────────────────────────────────────────

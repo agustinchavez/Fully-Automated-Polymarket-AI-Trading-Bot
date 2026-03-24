@@ -809,5 +809,112 @@ def backtest_cache_stats(ctx: click.Context) -> None:
     db.close()
 
 
+# ── Production commands (Phase 9) ────────────────────────────────
+
+
+@cli.group()
+@click.pass_context
+def production(ctx: click.Context) -> None:
+    """Production deployment tools."""
+    pass
+
+
+@production.command("preflight")
+@click.pass_context
+def production_preflight(ctx: click.Context) -> None:
+    """Run pre-flight readiness checklist before going live."""
+    from src.observability.preflight import PreflightChecker
+
+    cfg: BotConfig = ctx.obj["config"]
+
+    conn = None
+    try:
+        import sqlite3
+        conn = sqlite3.connect(cfg.storage.sqlite_path)
+        conn.row_factory = sqlite3.Row
+    except Exception:
+        pass
+
+    checker = PreflightChecker(cfg, conn)
+    report = checker.run_all()
+
+    table = Table(title="Pre-Flight Readiness Checklist")
+    table.add_column("Check", style="bold")
+    table.add_column("Status", justify="center")
+    table.add_column("Details")
+    table.add_column("Required", justify="center")
+
+    for check in report.checks:
+        status = "[green]PASS[/]" if check.passed else "[red]FAIL[/]"
+        required = "[yellow]Yes[/]" if check.required else "No"
+        table.add_row(check.name, status, check.message, required)
+
+    console.print(table)
+
+    if report.ready_for_live:
+        console.print("\n[bold green]READY FOR LIVE TRADING[/]")
+    else:
+        console.print(f"\n[bold red]NOT READY — {len(report.blocking_failures)} blocking failure(s)[/]")
+        for fail in report.blocking_failures:
+            console.print(f"  [red]- {fail.name}: {fail.message}[/]")
+
+    if conn:
+        conn.close()
+
+
+@production.command("chaos-test")
+@click.pass_context
+def production_chaos_test(ctx: click.Context) -> None:
+    """Run chaos tests to verify graceful degradation."""
+    from src.observability.chaos import ChaosTestRunner
+
+    cfg: BotConfig = ctx.obj["config"]
+
+    conn = None
+    try:
+        import sqlite3
+        conn = sqlite3.connect(cfg.storage.sqlite_path)
+        conn.row_factory = sqlite3.Row
+        from src.storage.migrations import run_migrations
+        run_migrations(conn)
+    except Exception:
+        pass
+
+    runner = ChaosTestRunner(conn)
+    suite = runner.run_all()
+
+    table = Table(title=f"Chaos Test Results — {suite.run_id}")
+    table.add_column("Test", style="bold")
+    table.add_column("Component")
+    table.add_column("Status", justify="center")
+    table.add_column("Duration", justify="right")
+    table.add_column("Details")
+
+    for result in suite.results:
+        status = "[green]PASS[/]" if result.passed else "[red]FAIL[/]"
+        table.add_row(
+            result.test_name,
+            result.component,
+            status,
+            f"{result.duration_secs:.3f}s",
+            result.actual_behavior[:60],
+        )
+
+    console.print(table)
+
+    if suite.all_passed:
+        console.print(f"\n[bold green]ALL {len(suite.results)} TESTS PASSED[/]")
+    else:
+        console.print(
+            f"\n[bold red]{len(suite.failed)}/{len(suite.results)} TESTS FAILED[/]"
+        )
+
+    # Persist results
+    if conn:
+        runner.persist_results(suite, conn)
+        console.print(f"Results saved to DB (run_id={suite.run_id})")
+        conn.close()
+
+
 if __name__ == "__main__":
     cli()

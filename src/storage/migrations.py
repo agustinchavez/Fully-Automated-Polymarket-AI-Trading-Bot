@@ -8,7 +8,7 @@ from src.observability.logger import get_logger
 
 log = get_logger(__name__)
 
-SCHEMA_VERSION = 10
+SCHEMA_VERSION = 15
 
 _MIGRATIONS: dict[int, list[str]] = {
     1: [
@@ -725,6 +725,371 @@ _MIGRATIONS: dict[int, list[str]] = {
         """
         INSERT OR IGNORE INTO strategy_wallets (strategy_id, wallet_id, allocated_balance, created_at)
         VALUES ('default-ai', 'default-paper', 10000, datetime('now'));
+        """,
+    ],
+    # ── Migration 11: Cross-platform arbitrage tables ────────────
+    11: [
+        # Cross-platform arb opportunities (Polymarket vs Kalshi scans)
+        """
+        CREATE TABLE IF NOT EXISTS arb_opportunities (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            arb_id TEXT NOT NULL UNIQUE,
+            match_method TEXT DEFAULT '',
+            match_confidence REAL DEFAULT 0,
+            poly_market_id TEXT DEFAULT '',
+            poly_question TEXT DEFAULT '',
+            poly_yes_price REAL DEFAULT 0,
+            poly_no_price REAL DEFAULT 0,
+            kalshi_ticker TEXT DEFAULT '',
+            kalshi_title TEXT DEFAULT '',
+            kalshi_yes_price REAL DEFAULT 0,
+            kalshi_no_price REAL DEFAULT 0,
+            spread REAL DEFAULT 0,
+            net_spread REAL DEFAULT 0,
+            direction TEXT DEFAULT '',
+            buy_platform TEXT DEFAULT '',
+            sell_platform TEXT DEFAULT '',
+            buy_price REAL DEFAULT 0,
+            sell_price REAL DEFAULT 0,
+            total_fees REAL DEFAULT 0,
+            is_actionable INTEGER DEFAULT 0,
+            created_at TEXT
+        );
+        """,
+        """
+        CREATE INDEX IF NOT EXISTS idx_arb_opp_created ON arb_opportunities(created_at);
+        """,
+        """
+        CREATE INDEX IF NOT EXISTS idx_arb_opp_actionable ON arb_opportunities(is_actionable);
+        """,
+
+        # Paired arb trades (both legs logged as a unit)
+        """
+        CREATE TABLE IF NOT EXISTS arb_trades (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            arb_id TEXT NOT NULL,
+            buy_platform TEXT DEFAULT '',
+            sell_platform TEXT DEFAULT '',
+            buy_market_id TEXT DEFAULT '',
+            sell_market_id TEXT DEFAULT '',
+            buy_price REAL DEFAULT 0,
+            sell_price REAL DEFAULT 0,
+            buy_fill_price REAL DEFAULT 0,
+            sell_fill_price REAL DEFAULT 0,
+            stake_usd REAL DEFAULT 0,
+            net_pnl REAL DEFAULT 0,
+            status TEXT DEFAULT '',
+            unwind_reason TEXT DEFAULT '',
+            created_at TEXT
+        );
+        """,
+        """
+        CREATE INDEX IF NOT EXISTS idx_arb_trades_arb_id ON arb_trades(arb_id);
+        """,
+        """
+        CREATE INDEX IF NOT EXISTS idx_arb_trades_status ON arb_trades(status);
+        """,
+        """
+        CREATE INDEX IF NOT EXISTS idx_arb_trades_created ON arb_trades(created_at);
+        """,
+
+        # Complementary arb opportunities (YES+NO < 1.0)
+        """
+        CREATE TABLE IF NOT EXISTS complementary_arb (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            market_id TEXT NOT NULL,
+            question TEXT DEFAULT '',
+            yes_price REAL DEFAULT 0,
+            no_price REAL DEFAULT 0,
+            combined_cost REAL DEFAULT 0,
+            guaranteed_profit REAL DEFAULT 0,
+            fee_cost REAL DEFAULT 0,
+            net_profit REAL DEFAULT 0,
+            is_actionable INTEGER DEFAULT 0,
+            created_at TEXT
+        );
+        """,
+        """
+        CREATE INDEX IF NOT EXISTS idx_comp_arb_created ON complementary_arb(created_at);
+        """,
+        """
+        CREATE INDEX IF NOT EXISTS idx_comp_arb_actionable ON complementary_arb(is_actionable);
+        """,
+    ],
+
+    12: [
+        # Phase 6: Execution quality tracking table
+        """
+        CREATE TABLE IF NOT EXISTS execution_fills (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            order_id TEXT NOT NULL,
+            market_id TEXT DEFAULT '',
+            expected_price REAL DEFAULT 0,
+            fill_price REAL DEFAULT 0,
+            size_ordered REAL DEFAULT 0,
+            size_filled REAL DEFAULT 0,
+            is_partial INTEGER DEFAULT 0,
+            slippage_bps REAL DEFAULT 0,
+            time_to_fill_secs REAL DEFAULT 0,
+            execution_strategy TEXT DEFAULT 'simple',
+            strategy_selected_by TEXT DEFAULT 'manual',
+            fill_rate REAL DEFAULT 1.0,
+            fees_usd REAL DEFAULT 0,
+            realized_spread_bps REAL DEFAULT 0,
+            created_at TEXT
+        );
+        """,
+        """
+        CREATE INDEX IF NOT EXISTS idx_exec_fills_created
+            ON execution_fills(created_at);
+        """,
+        """
+        CREATE INDEX IF NOT EXISTS idx_exec_fills_strategy
+            ON execution_fills(execution_strategy);
+        """,
+        """
+        CREATE INDEX IF NOT EXISTS idx_exec_fills_market
+            ON execution_fills(market_id);
+        """,
+    ],
+
+    13: [
+        # Phase 7: Whale quality scores — one row per whale, updated each scoring cycle
+        """
+        CREATE TABLE IF NOT EXISTS whale_quality_scores (
+            address TEXT PRIMARY KEY,
+            name TEXT DEFAULT '',
+            historical_roi REAL DEFAULT 0,
+            calibration_quality REAL DEFAULT 0,
+            category_specialization REAL DEFAULT 0,
+            consistency REAL DEFAULT 0,
+            timing_score REAL DEFAULT 0,
+            composite_score REAL DEFAULT 0,
+            percentile REAL DEFAULT 0,
+            best_category TEXT DEFAULT '',
+            trade_count_90d INTEGER DEFAULT 0,
+            sharpe_ratio REAL DEFAULT 0,
+            scored_at TEXT
+        );
+        """,
+        """
+        CREATE INDEX IF NOT EXISTS idx_wqs_composite
+            ON whale_quality_scores(composite_score);
+        """,
+        # Phase 7: Price snapshots for whale timing analysis
+        """
+        CREATE TABLE IF NOT EXISTS whale_price_snapshots (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            wallet_address TEXT NOT NULL,
+            market_slug TEXT NOT NULL,
+            outcome TEXT DEFAULT '',
+            entry_price REAL DEFAULT 0,
+            entry_time TEXT NOT NULL,
+            price_after_24h REAL DEFAULT 0,
+            price_24h_recorded INTEGER DEFAULT 0,
+            direction TEXT DEFAULT '',
+            favorable_move INTEGER DEFAULT 0
+        );
+        """,
+        """
+        CREATE INDEX IF NOT EXISTS idx_wps_wallet
+            ON whale_price_snapshots(wallet_address);
+        """,
+        """
+        CREATE INDEX IF NOT EXISTS idx_wps_pending
+            ON whale_price_snapshots(price_24h_recorded);
+        """,
+    ],
+
+    # ── Migration 14: Continuous Learning tables (Phase 8) ────
+    14: [
+        # Post-mortem analysis results
+        """
+        CREATE TABLE IF NOT EXISTS trade_analysis (
+            market_id TEXT PRIMARY KEY,
+            question TEXT DEFAULT '',
+            category TEXT DEFAULT '',
+            forecast_prob REAL DEFAULT 0,
+            actual_outcome REAL DEFAULT 0,
+            was_correct INTEGER DEFAULT 0,
+            confidence_error REAL DEFAULT 0,
+            was_confident_and_wrong INTEGER DEFAULT 0,
+            best_model TEXT DEFAULT '',
+            worst_model TEXT DEFAULT '',
+            model_errors_json TEXT DEFAULT '{}',
+            evidence_quality REAL DEFAULT 0,
+            evidence_sources_json TEXT DEFAULT '[]',
+            position_size_appropriate TEXT DEFAULT '',
+            pnl REAL DEFAULT 0,
+            edge_at_entry REAL DEFAULT 0,
+            holding_hours REAL DEFAULT 0,
+            analyzed_at TEXT
+        );
+        """,
+        """
+        CREATE INDEX IF NOT EXISTS idx_ta_category
+            ON trade_analysis(category);
+        """,
+        """
+        CREATE INDEX IF NOT EXISTS idx_ta_confident_wrong
+            ON trade_analysis(was_confident_and_wrong);
+        """,
+
+        # Evidence source quality tracking
+        """
+        CREATE TABLE IF NOT EXISTS evidence_source_quality (
+            domain TEXT PRIMARY KEY,
+            times_cited INTEGER DEFAULT 0,
+            times_correct INTEGER DEFAULT 0,
+            correct_forecast_rate REAL DEFAULT 0,
+            avg_evidence_quality REAL DEFAULT 0,
+            avg_authority REAL DEFAULT 0,
+            quality_trend TEXT DEFAULT 'stable',
+            effective_weight REAL DEFAULT 1.0,
+            last_updated TEXT
+        );
+        """,
+        """
+        CREATE INDEX IF NOT EXISTS idx_esq_weight
+            ON evidence_source_quality(effective_weight);
+        """,
+
+        # Parameter optimization run tracking
+        """
+        CREATE TABLE IF NOT EXISTS param_optimization_runs (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            run_id TEXT UNIQUE NOT NULL,
+            status TEXT DEFAULT 'pending',
+            num_perturbations INTEGER DEFAULT 0,
+            best_sharpe REAL DEFAULT 0,
+            baseline_sharpe REAL DEFAULT 0,
+            sharpe_improvement_pct REAL DEFAULT 0,
+            p_value REAL DEFAULT 1.0,
+            significance TEXT DEFAULT 'none',
+            best_config_json TEXT DEFAULT '{}',
+            config_diff_json TEXT DEFAULT '{}',
+            applied INTEGER DEFAULT 0,
+            started_at TEXT,
+            completed_at TEXT
+        );
+        """,
+
+        # Parameter optimization individual results
+        """
+        CREATE TABLE IF NOT EXISTS param_optimization_results (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            run_id TEXT NOT NULL,
+            config_json TEXT DEFAULT '{}',
+            sharpe_ratio REAL DEFAULT 0,
+            total_pnl REAL DEFAULT 0,
+            win_rate REAL DEFAULT 0,
+            max_drawdown_pct REAL DEFAULT 0,
+            brier_score REAL DEFAULT 1.0,
+            created_at TEXT
+        );
+        """,
+        """
+        CREATE INDEX IF NOT EXISTS idx_por_run
+            ON param_optimization_results(run_id);
+        """,
+
+        # Calibration A/B test results
+        """
+        CREATE TABLE IF NOT EXISTS calibration_ab_results (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            test_id TEXT UNIQUE NOT NULL,
+            calibrated_brier REAL DEFAULT 0,
+            uncalibrated_brier REAL DEFAULT 0,
+            calibrated_count INTEGER DEFAULT 0,
+            uncalibrated_count INTEGER DEFAULT 0,
+            calibration_helps INTEGER DEFAULT 1,
+            delta_brier REAL DEFAULT 0,
+            trigger_reason TEXT DEFAULT '',
+            started_at TEXT,
+            completed_at TEXT
+        );
+        """,
+    ],
+    # ── Migration 15: Production deployment tables (Phase 9) ────
+    15: [
+        # Kill switch persistence — single-row table (id=1)
+        """
+        CREATE TABLE IF NOT EXISTS kill_switch_state (
+            id INTEGER PRIMARY KEY DEFAULT 1,
+            is_killed INTEGER DEFAULT 0,
+            kill_reason TEXT DEFAULT '',
+            killed_at TEXT DEFAULT '',
+            killed_by TEXT DEFAULT '',
+            daily_pnl_at_kill REAL DEFAULT 0,
+            bankroll_at_kill REAL DEFAULT 0
+        );
+        """,
+        # Seed the single-row state (not killed by default)
+        """
+        INSERT OR IGNORE INTO kill_switch_state (id, is_killed)
+        VALUES (1, 0);
+        """,
+
+        # Deployment stage history
+        """
+        CREATE TABLE IF NOT EXISTS deployment_stages (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            stage TEXT NOT NULL,
+            bankroll REAL DEFAULT 0,
+            max_stake REAL DEFAULT 0,
+            cumulative_pnl REAL DEFAULT 0,
+            sharpe_ratio REAL DEFAULT 0,
+            advanced_reason TEXT DEFAULT '',
+            started_at TEXT
+        );
+        """,
+        """
+        CREATE INDEX IF NOT EXISTS idx_deploy_stage
+            ON deployment_stages(stage);
+        """,
+
+        # Daily summaries
+        """
+        CREATE TABLE IF NOT EXISTS daily_summaries (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            summary_date TEXT NOT NULL UNIQUE,
+            total_pnl REAL DEFAULT 0,
+            realized_pnl REAL DEFAULT 0,
+            unrealized_pnl REAL DEFAULT 0,
+            trades_opened INTEGER DEFAULT 0,
+            trades_closed INTEGER DEFAULT 0,
+            positions_held INTEGER DEFAULT 0,
+            drawdown_pct REAL DEFAULT 0,
+            bankroll REAL DEFAULT 0,
+            best_trade_pnl REAL DEFAULT 0,
+            worst_trade_pnl REAL DEFAULT 0,
+            created_at TEXT
+        );
+        """,
+        """
+        CREATE INDEX IF NOT EXISTS idx_daily_summary_date
+            ON daily_summaries(summary_date);
+        """,
+
+        # Chaos test results
+        """
+        CREATE TABLE IF NOT EXISTS chaos_test_results (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            run_id TEXT NOT NULL,
+            test_name TEXT NOT NULL,
+            component TEXT DEFAULT '',
+            failure_type TEXT DEFAULT '',
+            expected_behavior TEXT DEFAULT '',
+            actual_behavior TEXT DEFAULT '',
+            passed INTEGER DEFAULT 0,
+            duration_secs REAL DEFAULT 0,
+            error_message TEXT DEFAULT '',
+            created_at TEXT
+        );
+        """,
+        """
+        CREATE INDEX IF NOT EXISTS idx_chaos_run
+            ON chaos_test_results(run_id);
         """,
     ],
 }

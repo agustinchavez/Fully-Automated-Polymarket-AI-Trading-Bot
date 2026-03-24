@@ -84,3 +84,9 @@ class BacktestTradeRecord(BaseModel):
     actual_outcome: float = 0.0    # 1.0 or 0.0
     forecast_correct: bool = False
     created_at: str = ""
+    # Phase 6: Realistic fill simulation fields
+    slippage_bps: float = 0.0
+    fill_rate: float = 1.0
+    simulated_impact_pct: float = 0.0
+    fill_delay_ms: int = 0
+    fee_paid_usd: float = 0.0

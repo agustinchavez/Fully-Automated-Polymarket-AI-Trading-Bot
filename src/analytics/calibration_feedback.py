@@ -69,6 +69,7 @@ class CalibrationFeedbackLoop:
         self,
         conn: sqlite3.Connection,
         record: ResolutionRecord,
+        smart_retrain_enabled: bool = False,
     ) -> None:
         """Record a market resolution and update all tracking tables."""
         now_iso = record.resolved_at or _now_iso()
@@ -83,10 +84,14 @@ class CalibrationFeedbackLoop:
         self._insert_performance_log(conn, record, now_iso)
 
         # 4. Check if we should retrain
-        self._since_last_retrain += 1
-        if self._since_last_retrain >= self._retrain_interval:
-            self.retrain_calibrator(conn)
-            self._since_last_retrain = 0
+        if smart_retrain_enabled:
+            # Phase 8: Smart retrain with A/B testing
+            self._maybe_smart_retrain(conn)
+        else:
+            self._since_last_retrain += 1
+            if self._since_last_retrain >= self._retrain_interval:
+                self.retrain_calibrator(conn)
+                self._since_last_retrain = 0
 
         log.info(
             "calibration.resolution_recorded",
@@ -200,6 +205,32 @@ class CalibrationFeedbackLoop:
             weights={k: round(v, 3) for k, v in weights.items()},
         )
         return weights
+
+    def _maybe_smart_retrain(self, conn: sqlite3.Connection) -> None:
+        """Check smart retrain triggers and run A/B-validated retraining."""
+        try:
+            from src.analytics.smart_retrain import SmartRetrainManager
+
+            manager = SmartRetrainManager(conn)
+            trigger = manager.check_retrain_trigger()
+            if trigger.should_retrain:
+                result = manager.retrain_with_ab_test(trigger)
+                if result.calibration_helps:
+                    # Re-train the global calibrator with all data
+                    self.retrain_calibrator(conn)
+                    log.info(
+                        "calibration.smart_retrain_applied",
+                        reason=trigger.reason,
+                        cal_brier=result.calibrated_brier,
+                    )
+                else:
+                    log.warning(
+                        "calibration.smart_retrain_skipped",
+                        reason="calibration_hurts",
+                        delta_brier=result.delta_brier,
+                    )
+        except Exception as e:
+            log.warning("calibration.smart_retrain_error", error=str(e))
 
     # ── Internal Methods ─────────────────────────────────────────────
 

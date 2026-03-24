@@ -11,7 +11,7 @@ from src.observability.logger import get_logger
 
 log = get_logger(__name__)
 
-SCHEMA_VERSION = 1
+SCHEMA_VERSION = 2
 
 _MIGRATIONS: dict[int, list[str]] = {
     1: [
@@ -144,6 +144,15 @@ _MIGRATIONS: dict[int, list[str]] = {
         CREATE INDEX IF NOT EXISTS idx_bt_trades_market
             ON backtest_trades(market_condition_id);
         """,
+    ],
+
+    2: [
+        # Phase 6: Realistic fill simulation columns
+        "ALTER TABLE backtest_trades ADD COLUMN slippage_bps REAL DEFAULT 0;",
+        "ALTER TABLE backtest_trades ADD COLUMN fill_rate REAL DEFAULT 1.0;",
+        "ALTER TABLE backtest_trades ADD COLUMN simulated_impact_pct REAL DEFAULT 0;",
+        "ALTER TABLE backtest_trades ADD COLUMN fill_delay_ms INTEGER DEFAULT 0;",
+        "ALTER TABLE backtest_trades ADD COLUMN fee_paid_usd REAL DEFAULT 0;",
     ],
 }
 

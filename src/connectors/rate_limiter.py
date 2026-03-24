@@ -32,6 +32,9 @@ DEFAULT_LIMITS: dict[str, BucketConfig] = {
     "bing": BucketConfig(tokens_per_second=3.0, max_burst=5, name="Bing Search"),
     "tavily": BucketConfig(tokens_per_second=2.0, max_burst=4, name="Tavily"),
     "web_fetch": BucketConfig(tokens_per_second=5.0, max_burst=15, name="Web Fetch"),
+    "open_meteo": BucketConfig(tokens_per_second=2.0, max_burst=5, name="Open-Meteo"),
+    "binance": BucketConfig(tokens_per_second=5.0, max_burst=10, name="Binance"),
+    "kalshi": BucketConfig(tokens_per_second=3.0, max_burst=6, name="Kalshi"),
 }
 
 
