@@ -8,7 +8,7 @@ from src.observability.logger import get_logger
 
 log = get_logger(__name__)
 
-SCHEMA_VERSION = 16
+SCHEMA_VERSION = 17
 
 _MIGRATIONS: dict[int, list[str]] = {
     1: [
@@ -1128,6 +1128,17 @@ _MIGRATIONS: dict[int, list[str]] = {
         CREATE INDEX IF NOT EXISTS idx_open_orders_clob
             ON open_orders(clob_order_id);
         """,
+    ],
+    # ── Migration 17: Canonical direction fields (Phase 10B) ──────
+    17: [
+        "ALTER TABLE open_orders ADD COLUMN action_side TEXT DEFAULT '';",
+        "ALTER TABLE open_orders ADD COLUMN outcome_side TEXT DEFAULT '';",
+        "ALTER TABLE trades ADD COLUMN action_side TEXT DEFAULT '';",
+        "ALTER TABLE trades ADD COLUMN outcome_side TEXT DEFAULT '';",
+        "ALTER TABLE positions ADD COLUMN action_side TEXT DEFAULT '';",
+        "ALTER TABLE positions ADD COLUMN outcome_side TEXT DEFAULT '';",
+        "ALTER TABLE closed_positions ADD COLUMN action_side TEXT DEFAULT '';",
+        "ALTER TABLE closed_positions ADD COLUMN outcome_side TEXT DEFAULT '';",
     ],
 }
 

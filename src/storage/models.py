@@ -71,6 +71,8 @@ class OrderRecord(BaseModel):
     dry_run: bool = True
     ttl_secs: int = 0
     error: str = ""
+    action_side: str = ""   # "BUY" or "SELL"
+    outcome_side: str = ""  # "YES" or "NO"
     created_at: str = Field(
         default_factory=lambda: dt.datetime.now(dt.timezone.utc).isoformat()
     )
@@ -91,6 +93,8 @@ class TradeRecord(BaseModel):
     stake_usd: float = 0.0
     status: str = ""
     dry_run: bool = True
+    action_side: str = ""   # "BUY" or "SELL"
+    outcome_side: str = ""  # "YES" or "NO"
     created_at: str = Field(
         default_factory=lambda: dt.datetime.now(dt.timezone.utc).isoformat()
     )
@@ -106,6 +110,8 @@ class PositionRecord(BaseModel):
     stake_usd: float = 0.0
     current_price: float = 0.0
     pnl: float = 0.0
+    action_side: str = ""   # "BUY" or "SELL"
+    outcome_side: str = ""  # "YES" or "NO"
     opened_at: str = Field(
         default_factory=lambda: dt.datetime.now(dt.timezone.utc).isoformat()
     )
@@ -125,6 +131,8 @@ class ClosedPositionRecord(BaseModel):
     stake_usd: float = 0.0
     pnl: float = 0.0
     close_reason: str = ""
+    action_side: str = ""   # "BUY" or "SELL"
+    outcome_side: str = ""  # "YES" or "NO"
     question: str = ""
     market_type: str = ""
     opened_at: str = ""

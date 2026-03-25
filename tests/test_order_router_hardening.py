@@ -396,10 +396,10 @@ class TestOpenOrdersTable:
         table_names = [t["name"] for t in tables]
         assert "open_orders" in table_names
 
-    def test_schema_version_is_16(self):
+    def test_schema_version_is_17(self):
         conn = _make_db()
         row = conn.execute("SELECT MAX(version) FROM schema_version").fetchone()
-        assert row[0] == 16
+        assert row[0] == 17
 
     def test_insert_order(self):
         conn = _make_db()

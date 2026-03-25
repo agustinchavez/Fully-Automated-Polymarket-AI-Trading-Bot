@@ -55,13 +55,15 @@ def _create_test_db() -> sqlite3.Connection:
             id TEXT PRIMARY KEY, order_id TEXT, market_id TEXT,
             token_id TEXT, side TEXT, price REAL, size REAL,
             stake_usd REAL, status TEXT, dry_run INTEGER DEFAULT 1,
+            action_side TEXT DEFAULT '', outcome_side TEXT DEFAULT '',
             created_at TEXT
         );
         CREATE TABLE positions (
             market_id TEXT PRIMARY KEY, token_id TEXT, direction TEXT,
             entry_price REAL, size REAL, stake_usd REAL,
             current_price REAL, pnl REAL, opened_at TEXT,
-            question TEXT DEFAULT '', market_type TEXT DEFAULT ''
+            question TEXT DEFAULT '', market_type TEXT DEFAULT '',
+            action_side TEXT DEFAULT '', outcome_side TEXT DEFAULT ''
         );
         CREATE TABLE closed_positions (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -70,6 +72,7 @@ def _create_test_db() -> sqlite3.Connection:
             size REAL DEFAULT 0, stake_usd REAL DEFAULT 0,
             pnl REAL DEFAULT 0, close_reason TEXT DEFAULT '',
             question TEXT DEFAULT '', market_type TEXT DEFAULT '',
+            action_side TEXT DEFAULT '', outcome_side TEXT DEFAULT '',
             opened_at TEXT, closed_at TEXT
         );
         CREATE TABLE performance_log (

@@ -690,6 +690,8 @@ def api_position_detail(market_id: str) -> Any:
         pnl = float(pos.get("pnl") or 0)
         size = float(pos.get("size") or 0)
         direction = pos.get("direction") or ""
+        _outcome = pos.get("outcome_side") or ""
+        _is_yes = (_outcome == "YES") if _outcome else direction in ("BUY_YES", "BUY")
 
         # Prefer market table question, fall back to position question
         question = pos.get("mkt_question") or pos.get("question") or pos.get("market_id", "")
@@ -731,7 +733,7 @@ def api_position_detail(market_id: str) -> Any:
             tp_proximity = min(pnl_pct / (tp_pct * 100), 1.0)
 
         # SL/TP in price terms
-        if direction in ("BUY_YES", "BUY"):
+        if _is_yes:
             sl_price = entry * (1 - sl_pct) if sl_pct > 0 else None
             tp_price = entry * (1 + tp_pct) if tp_pct > 0 else None
         else:
@@ -1147,6 +1149,8 @@ def api_trade_detail(market_id: str) -> Any:
             pnl = float(p.get("pnl") or 0)
             pnl_pct = (pnl / stake * 100) if stake > 0 else 0.0
             direction = p.get("direction") or "—"
+            _outcome2 = p.get("outcome_side") or ""
+            _is_yes2 = (_outcome2 == "YES") if _outcome2 else direction in ("BUY_YES", "BUY")
 
             # Duration
             hours_held = 0.0
@@ -1163,7 +1167,7 @@ def api_trade_detail(market_id: str) -> Any:
             tp_proximity = min(pnl_pct / (tp_pct * 100), 1.0) if tp_pct > 0 and pnl_pct > 0 else 0.0
 
             # TP/SL price levels
-            if direction in ("BUY_YES", "BUY"):
+            if _is_yes2:
                 sl_price = entry * (1 - sl_pct) if sl_pct > 0 else None
                 tp_price = entry * (1 + tp_pct) if tp_pct > 0 else None
             else:
@@ -1237,6 +1241,8 @@ def api_trade_detail(market_id: str) -> Any:
                 pnl = float(c.get("pnl") or 0)
                 pnl_pct = (pnl / stake * 100) if stake > 0 else 0.0
                 direction = c.get("direction") or "—"
+                _outcome3 = c.get("outcome_side") or ""
+                _is_yes3 = (_outcome3 == "YES") if _outcome3 else direction in ("BUY_YES", "BUY")
 
                 # Duration
                 hours_held = 0.0
@@ -1265,7 +1271,7 @@ def api_trade_detail(market_id: str) -> Any:
                 trade_status = status_map.get(raw_reason, "CLOSED")
 
                 # TP/SL price levels (for historical reference)
-                if direction in ("BUY_YES", "BUY"):
+                if _is_yes3:
                     sl_price = entry * (1 - sl_pct) if sl_pct > 0 else None
                     tp_price = entry * (1 + tp_pct) if tp_pct > 0 else None
                 else:
@@ -6297,6 +6303,42 @@ def api_latency() -> Any:
         if key.startswith("api_latency_ms.")
     }
     return jsonify(latency)
+
+
+# ─── API: Invariant Checks ─────────────────────────────────────────
+
+@app.route("/api/invariant-checks")
+def api_invariant_checks() -> Any:
+    """Run invariant checks and return violations."""
+    from src.observability.invariant_checker import check_invariants
+    from src.storage.database import Database
+    from src.config import StorageConfig
+    conn = _get_conn()
+    _ensure_tables(conn)
+    try:
+        db = Database(StorageConfig())
+        db._conn = conn
+        violations = check_invariants(db)
+        critical = sum(1 for v in violations if v.severity == "critical")
+        warnings = sum(1 for v in violations if v.severity == "warning")
+        return jsonify({
+            "total": len(violations),
+            "critical": critical,
+            "warnings": warnings,
+            "violations": [
+                {
+                    "check": v.check,
+                    "severity": v.severity,
+                    "market_id": v.market_id,
+                    "message": v.message,
+                }
+                for v in violations
+            ],
+        })
+    except Exception as exc:
+        return jsonify({"error": str(exc)}), 500
+    finally:
+        conn.close()
 
 
 # ─── API: Performance Analytics ────────────────────────────────────

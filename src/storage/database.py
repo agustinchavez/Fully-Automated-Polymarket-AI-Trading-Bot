@@ -139,13 +139,15 @@ class Database:
             """
             INSERT INTO trades
                 (id, order_id, market_id, token_id, side,
-                 price, size, stake_usd, status, dry_run, created_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                 price, size, stake_usd, status, dry_run,
+                 action_side, outcome_side, created_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 tid, trade.order_id, trade.market_id, trade.token_id,
                 trade.side, trade.price, trade.size, trade.stake_usd,
-                trade.status, int(trade.dry_run), trade.created_at,
+                trade.status, int(trade.dry_run),
+                trade.action_side, trade.outcome_side, trade.created_at,
             ),
         )
         self.conn.commit()
@@ -177,21 +179,29 @@ class Database:
     def get_open_positions(self) -> list[PositionRecord]:
         """Return all open positions as PositionRecord objects."""
         rows = self.conn.execute("SELECT * FROM positions").fetchall()
-        return [PositionRecord(**dict(r)) for r in rows]
+        result = []
+        for r in rows:
+            d = dict(r)
+            d.setdefault("action_side", "")
+            d.setdefault("outcome_side", "")
+            result.append(PositionRecord(**d))
+        return result
 
     def upsert_position(self, pos: PositionRecord) -> None:
         self.conn.execute(
             """
             INSERT OR REPLACE INTO positions
                 (market_id, token_id, direction, entry_price,
-                 size, stake_usd, current_price, pnl, opened_at,
+                 size, stake_usd, current_price, pnl,
+                 action_side, outcome_side, opened_at,
                  question, market_type)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 pos.market_id, pos.token_id, pos.direction,
                 pos.entry_price, pos.size, pos.stake_usd,
-                pos.current_price, pos.pnl, pos.opened_at,
+                pos.current_price, pos.pnl,
+                pos.action_side, pos.outcome_side, pos.opened_at,
                 pos.question, pos.market_type,
             ),
         )
@@ -222,13 +232,17 @@ class Database:
             self.conn.execute(
                 """INSERT INTO closed_positions
                     (market_id, token_id, direction, entry_price, exit_price,
-                     size, stake_usd, pnl, close_reason, question, market_type,
+                     size, stake_usd, pnl, close_reason,
+                     action_side, outcome_side,
+                     question, market_type,
                      opened_at, closed_at)
-                VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+                VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
                 (
                     pos.market_id, pos.token_id, pos.direction,
                     pos.entry_price, exit_price, pos.size, pos.stake_usd,
                     pnl, close_reason,
+                    getattr(pos, "action_side", ""),
+                    getattr(pos, "outcome_side", ""),
                     getattr(pos, "question", ""),
                     getattr(pos, "market_type", ""),
                     pos.opened_at,
@@ -276,9 +290,11 @@ class Database:
         ).fetchone()
         if row:
             d = dict(row)
-            # Handle older schema without question/market_type columns
+            # Handle older schema without optional columns
             d.setdefault("question", "")
             d.setdefault("market_type", "")
+            d.setdefault("action_side", "")
+            d.setdefault("outcome_side", "")
             return PositionRecord(**d)
         return None
 
@@ -730,14 +746,16 @@ class Database:
                     (order_id, clob_order_id, market_id, token_id, side,
                      order_type, price, size, filled_size, avg_fill_price,
                      stake_usd, status, dry_run, ttl_secs, error,
+                     action_side, outcome_side,
                      created_at, updated_at)
-                VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+                VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
                 (
                     order.order_id, order.clob_order_id, order.market_id,
                     order.token_id, order.side, order.order_type,
                     order.price, order.size, order.filled_size,
                     order.avg_fill_price, order.stake_usd, order.status,
                     int(order.dry_run), order.ttl_secs, order.error,
+                    order.action_side, order.outcome_side,
                     order.created_at, order.updated_at,
                 ),
             )
@@ -787,6 +805,8 @@ class Database:
             for r in rows:
                 d = dict(r)
                 d["dry_run"] = bool(d.get("dry_run", 1))
+                d.setdefault("action_side", "")
+                d.setdefault("outcome_side", "")
                 result.append(OrderRecord(**d))
             return result
         except Exception as e:
@@ -802,6 +822,8 @@ class Database:
             if row:
                 d = dict(row)
                 d["dry_run"] = bool(d.get("dry_run", 1))
+                d.setdefault("action_side", "")
+                d.setdefault("outcome_side", "")
                 return OrderRecord(**d)
         except Exception as e:
             log.warning("database.get_order_error", error=str(e))
@@ -830,10 +852,63 @@ class Database:
             for r in rows:
                 d = dict(r)
                 d["dry_run"] = bool(d.get("dry_run", 1))
+                d.setdefault("action_side", "")
+                d.setdefault("outcome_side", "")
                 result.append(OrderRecord(**d))
             return result
         except Exception as e:
             log.warning("database.get_stale_orders_error", error=str(e))
+            return []
+
+    def prune_terminal_orders(self) -> int:
+        """Remove terminal orders (filled/cancelled/expired/failed) from open_orders.
+
+        Returns the number of orders pruned.
+        """
+        try:
+            result = self.conn.execute(
+                "DELETE FROM open_orders WHERE status IN ('filled', 'cancelled', 'expired', 'failed')"
+            )
+            count = result.rowcount
+            if count > 0:
+                self.conn.commit()
+            return count
+        except Exception as e:
+            log.warning("database.prune_terminal_orders_error", error=str(e))
+            return 0
+
+    def has_active_order_for_market(self, market_id: str) -> bool:
+        """Return True if an active (non-terminal) order exists for this market."""
+        try:
+            row = self.conn.execute(
+                """SELECT 1 FROM open_orders
+                WHERE market_id = ?
+                AND status IN ('submitted', 'pending', 'partial')
+                LIMIT 1""",
+                (market_id,),
+            ).fetchone()
+            return row is not None
+        except Exception:
+            return False
+
+    def get_active_orders(self) -> list[OrderRecord]:
+        """Return all orders with non-terminal status."""
+        try:
+            rows = self.conn.execute(
+                """SELECT * FROM open_orders
+                WHERE status IN ('submitted', 'pending', 'partial')
+                ORDER BY created_at DESC"""
+            ).fetchall()
+            result = []
+            for r in rows:
+                d = dict(r)
+                d["dry_run"] = bool(d.get("dry_run", 1))
+                d.setdefault("action_side", "")
+                d.setdefault("outcome_side", "")
+                result.append(OrderRecord(**d))
+            return result
+        except Exception as e:
+            log.warning("database.get_active_orders_error", error=str(e))
             return []
 
     # ── Execution Fills (Phase 10) ───────────────────────────────────

@@ -165,6 +165,9 @@ class TradingEngine:
         self._reconciliation_task: asyncio.Task[None] | None = None
         self._reconciliation_stop: asyncio.Event | None = None
 
+        # Phase 10B: Shared exit finalizer (initialised in start())
+        self._exit_finalizer: Any = None
+
         # Phase 6: Execution fill tracker (optional)
         self._fill_tracker: Any = None
         if self.config.execution.auto_strategy_selection_enabled:
@@ -240,6 +243,11 @@ class TradingEngine:
         interval = self.config.engine.cycle_interval_secs
         self._init_db()
         self._restore_kill_switch_state()
+
+        # Phase 10B: Create shared exit finalizer
+        if self._db:
+            from src.execution.exit_finalizer import ExitFinalizer
+            self._exit_finalizer = ExitFinalizer(self._db, self.config)
 
         # Phase 10: Wire FillTracker to DB for persistence + load history
         if self._fill_tracker and self._db:
@@ -336,6 +344,7 @@ class TradingEngine:
                         stop_event=self._reconciliation_stop,
                         fill_tracker=self._fill_tracker,
                         on_buy_fill=lambda token_id: self._ws_feed.subscribe(token_id),
+                        exit_finalizer=self._exit_finalizer,
                     )
                 )
                 log.info("engine.reconciliation_loop_started")
@@ -494,6 +503,33 @@ class TradingEngine:
         except Exception as e:
             log.warning("engine.daily_summary_error", error=str(e))
 
+    def _maybe_check_invariants(self) -> None:
+        """Run invariant checks every N cycles when enabled."""
+        if not self._db:
+            return
+        if not self.config.execution.invariant_checks_enabled:
+            return
+        interval = self.config.execution.invariant_check_interval_cycles
+        if self._cycle_count % interval != 0:
+            return
+
+        try:
+            from src.observability.invariant_checker import check_invariants
+            violations = check_invariants(self._db)
+            if violations:
+                for v in violations:
+                    log.warning(
+                        "engine.invariant_violation",
+                        check=v.check,
+                        severity=v.severity,
+                        market_id=v.market_id[:8],
+                        message=v.message,
+                    )
+                    if v.severity == "critical":
+                        self._db.insert_alert("critical", v.message, "invariant_checker")
+        except Exception as e:
+            log.warning("engine.invariant_check_error", error=str(e))
+
     # ── Cycle ────────────────────────────────────────────────────────
 
     async def _run_cycle(self) -> CycleResult:
@@ -651,6 +687,9 @@ class TradingEngine:
             # ── Daily Summary ────────────────────────────────────────
             await self._maybe_send_daily_summary()
 
+            # ── Invariant Checks ───────────────────────────────────
+            self._maybe_check_invariants()
+
             cycle.status = "completed"
 
         except Exception as e:
@@ -757,12 +796,7 @@ class TradingEngine:
 
             # Also skip if there's already a submitted/pending order for this market
             try:
-                pending_orders = [
-                    o for o in self._db.get_open_orders()
-                    if o.market_id == market.id
-                    and o.status in ("submitted", "pending", "partial")
-                ]
-                if pending_orders:
+                if self._db.has_active_order_for_market(market.id):
                     log.info("engine.duplicate_order_skip", market_id=market.id[:8],
                              msg="Already have pending order — skipping")
                     ctx.result["skipped"] = "duplicate_order"
@@ -1743,6 +1777,9 @@ class TradingEngine:
         - failed: log for audit → insert order with error
         """
         from src.storage.models import TradeRecord, PositionRecord, OrderRecord
+        from src.execution.direction import parse_direction
+
+        action_side, outcome_side = parse_direction(edge_result.direction)
 
         if order_result.status in ("simulated", "filled"):
             # Confirmed fill — create trade record + position
@@ -1756,6 +1793,8 @@ class TradingEngine:
                 stake_usd=position.stake_usd,
                 status=order_result.status.upper(),
                 dry_run=order_result.status == "simulated",
+                action_side=action_side,
+                outcome_side=outcome_side,
             ))
             self._db.upsert_position(PositionRecord(
                 market_id=ctx.market_id, token_id=token_id,
@@ -1764,6 +1803,8 @@ class TradingEngine:
                 size=order_result.fill_size,
                 stake_usd=position.stake_usd,
                 current_price=order_result.fill_price, pnl=0.0,
+                action_side=action_side,
+                outcome_side=outcome_side,
                 question=ctx.question[:200] if ctx.question else "",
                 market_type=getattr(ctx.market, "market_type", ""),
             ))
@@ -1782,6 +1823,8 @@ class TradingEngine:
                 status=order_result.status,
                 dry_run=False,
                 ttl_secs=getattr(order, "ttl_secs", 0),
+                action_side=action_side,
+                outcome_side=outcome_side,
             ))
             log.info(
                 "engine.order_awaiting_fill",
@@ -1804,6 +1847,8 @@ class TradingEngine:
                 status="failed",
                 dry_run=False,
                 error=order_result.error,
+                action_side=action_side,
+                outcome_side=outcome_side,
             ))
             log.error(
                 "engine.order_failed",
@@ -2023,6 +2068,7 @@ class TradingEngine:
             return
 
         from src.connectors.polymarket_gamma import GammaClient
+        from src.execution.direction import parse_direction as _parse_dir
 
         client = GammaClient()
         snapshots: list[PositionSnapshot] = []
@@ -2049,12 +2095,13 @@ class TradingEngine:
                                 break
                         rest_hits += 1
 
-                    # Calculate PNL based on direction
-                    if pos.direction in ("BUY_YES", "BUY"):
-                        pnl = (current_price - pos.entry_price) * pos.size
-                    elif pos.direction in ("BUY_NO", "SELL"):
+                    # Calculate PNL based on outcome side
+                    _o = getattr(pos, "outcome_side", "")
+                    _a, _o = (getattr(pos, "action_side", ""), _o) if _o else _parse_dir(pos.direction)
+                    if _o == "NO":
                         pnl = (pos.entry_price - current_price) * pos.size
                     else:
+                        # YES or unknown — long position
                         pnl = (current_price - pos.entry_price) * pos.size
 
                     self._db.update_position_price(
@@ -2117,7 +2164,7 @@ class TradingEngine:
                         question=mkt_record.question if mkt_record else "",
                         category=mkt_record.category if mkt_record else "",
                         event_slug=market.slug or "",
-                        side="YES" if pos.direction in ("BUY_YES", "BUY") else "NO",
+                        side=_o if _o else ("YES" if pos.direction in ("BUY_YES", "BUY") else "NO"),
                         size_usd=pos.stake_usd,
                         entry_price=pos.entry_price,
                         current_price=current_price,
@@ -2140,12 +2187,14 @@ class TradingEngine:
                         error=str(e),
                     )
                     # Keep stale snapshot
+                    _o2 = getattr(pos, "outcome_side", "")
+                    _a2, _o2 = (getattr(pos, "action_side", ""), _o2) if _o2 else _parse_dir(pos.direction)
                     snapshots.append(PositionSnapshot(
                         market_id=pos.market_id,
                         question="",
                         category="",
                         event_slug="",
-                        side="YES" if pos.direction in ("BUY_YES", "BUY") else "NO",
+                        side=_o2 if _o2 else ("YES" if pos.direction in ("BUY_YES", "BUY") else "NO"),
                         size_usd=pos.stake_usd,
                         entry_price=pos.entry_price,
                         current_price=pos.current_price,
@@ -2213,6 +2262,8 @@ class TradingEngine:
                     elif result.status in ("submitted", "pending"):
                         # SELL order on the book — reconciliation will handle
                         from src.storage.models import OrderRecord
+                        from src.execution.direction import parse_direction as _pd
+                        _exit_outcome = getattr(pos, "outcome_side", "") or _pd(pos.direction)[1]
                         self._db.insert_order(OrderRecord(
                             order_id=result.order_id,
                             clob_order_id=result.clob_order_id,
@@ -2225,6 +2276,8 @@ class TradingEngine:
                             stake_usd=pos.stake_usd,
                             status=result.status,
                             dry_run=False,
+                            action_side="SELL",
+                            outcome_side=_exit_outcome or "YES",
                         ))
                         log.info(
                             "engine.exit_order_pending",
@@ -2248,6 +2301,8 @@ class TradingEngine:
         else:
             # Paper mode / live_exit_routing disabled — simulated exit
             from src.storage.models import TradeRecord
+            from src.execution.direction import parse_direction as _pd2
+            _sim_outcome = getattr(pos, "outcome_side", "") or _pd2(pos.direction)[1]
             self._db.insert_trade(TradeRecord(
                 id=f"exit-{pos.market_id[:8]}-{int(time.time())}",
                 order_id=f"auto-exit-{pos.market_id[:8]}",
@@ -2259,6 +2314,8 @@ class TradingEngine:
                 stake_usd=pos.stake_usd,
                 status=f"SIMULATED|{exit_reason}",
                 dry_run=True,
+                action_side="SELL",
+                outcome_side=_sim_outcome or "YES",
             ))
             self._finalize_exit(pos, current_price, pnl, exit_reason, mkt_record)
             return True
@@ -2271,27 +2328,41 @@ class TradingEngine:
         exit_reason: str,
         mkt_record: Any,
     ) -> None:
-        """Archive position, record performance, clean up."""
-        self._db.archive_position(
-            pos=pos,
-            exit_price=exit_price,
-            pnl=round(pnl, 4),
-            close_reason=exit_reason.split(":")[0],
-        )
-        self._record_performance_log(
-            pos=pos,
-            exit_price=exit_price,
-            pnl=round(pnl, 4),
-            mkt_record=mkt_record,
-        )
-        self._maybe_run_post_mortem(pos.market_id)
-        self._db.remove_position(pos.market_id)
-        self._db.insert_alert(
-            "warning",
-            f"Auto-exit {pos.market_id[:8]}: {exit_reason} "
-            f"(PNL ${pnl:.2f})",
-            "engine",
-        )
+        """Archive position, record performance, clean up.
+
+        Delegates to ExitFinalizer for the full 5-step pipeline.
+        Falls back to inline logic if finalizer not yet initialised.
+        """
+        if self._exit_finalizer:
+            self._exit_finalizer.finalize(
+                pos=pos,
+                exit_price=exit_price,
+                pnl=pnl,
+                close_reason=exit_reason,
+                mkt_record=mkt_record,
+            )
+        else:
+            # Fallback (e.g. tests that skip start())
+            self._db.archive_position(
+                pos=pos,
+                exit_price=exit_price,
+                pnl=round(pnl, 4),
+                close_reason=exit_reason.split(":")[0],
+            )
+            self._record_performance_log(
+                pos=pos,
+                exit_price=exit_price,
+                pnl=round(pnl, 4),
+                mkt_record=mkt_record,
+            )
+            self._maybe_run_post_mortem(pos.market_id)
+            self._db.remove_position(pos.market_id)
+            self._db.insert_alert(
+                "warning",
+                f"Auto-exit {pos.market_id[:8]}: {exit_reason} "
+                f"(PNL ${pnl:.2f})",
+                "engine",
+            )
 
     async def _confirm_pending_orders(self) -> None:
         """Confirm pending orders from the open_orders table.
@@ -2320,8 +2391,13 @@ class TradingEngine:
 
             # Paper mode — auto-confirm as filled
             from src.storage.models import TradeRecord, PositionRecord
+            from src.execution.direction import parse_direction as _pd_paper
             fill_price = order.price
             fill_size = order.size
+            _paper_a = getattr(order, "action_side", "") or ""
+            _paper_o = getattr(order, "outcome_side", "") or ""
+            if not _paper_a:
+                _paper_a, _paper_o = _pd_paper(order.side)
 
             self._db.update_order_status(
                 order.order_id, "filled",
@@ -2338,6 +2414,8 @@ class TradingEngine:
                 stake_usd=order.stake_usd,
                 status="SIMULATED",
                 dry_run=True,
+                action_side=_paper_a,
+                outcome_side=_paper_o,
             ))
             self._db.upsert_position(PositionRecord(
                 market_id=order.market_id,
@@ -2348,6 +2426,8 @@ class TradingEngine:
                 stake_usd=order.stake_usd,
                 current_price=fill_price,
                 pnl=0.0,
+                action_side=_paper_a,
+                outcome_side=_paper_o,
             ))
             self._ws_feed.subscribe(order.token_id)
             log.info(

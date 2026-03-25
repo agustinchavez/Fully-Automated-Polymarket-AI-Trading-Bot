@@ -19,6 +19,7 @@ from dataclasses import dataclass, field
 from typing import Any, Callable
 
 from src.config import ExecutionConfig, is_live_trading_enabled
+from src.execution.direction import parse_direction
 from src.observability.logger import get_logger
 
 log = get_logger(__name__)
@@ -46,12 +47,14 @@ class OrderReconciler:
         config: ExecutionConfig,
         fill_tracker: object | None = None,
         on_buy_fill: Callable[[str], None] | None = None,
+        exit_finalizer: object | None = None,
     ):
         self._db = db
         self._clob = clob
         self._config = config
         self._fill_tracker = fill_tracker
         self._on_buy_fill = on_buy_fill  # callback(token_id) for WS subscription
+        self._exit_finalizer = exit_finalizer
 
     def reconcile_once(self) -> ReconciliationResult:
         """Run a single reconciliation pass over all open orders.
@@ -146,9 +149,19 @@ class OrderReconciler:
             self._notify_unfilled(order.order_id)
             log.info("reconciler.order_expired", order_id=order.order_id[:8])
 
+    def _get_order_direction(self, order: object) -> tuple[str, str]:
+        """Extract canonical (action_side, outcome_side) from an order."""
+        action = getattr(order, "action_side", "") or ""
+        outcome = getattr(order, "outcome_side", "") or ""
+        if action:
+            return (action, outcome)
+        return parse_direction(order.side)
+
     def _handle_fill(self, order: object, clob_data: dict, result: ReconciliationResult) -> None:
         """Handle a fully filled order."""
         from src.storage.models import TradeRecord, PositionRecord
+
+        action_side, outcome_side = self._get_order_direction(order)
 
         # Parse fill data
         taking = clob_data.get("takingAmount", clob_data.get("taking_amount", "0"))
@@ -182,10 +195,13 @@ class OrderReconciler:
             stake_usd=order.stake_usd,
             status="FILLED",
             dry_run=False,
+            action_side=action_side,
+            outcome_side=outcome_side,
         ))
 
         # Create or update position
-        if order.side == "SELL":
+        is_sell = action_side == "SELL" or order.side == "SELL"
+        if is_sell:
             self._handle_sell_fill(order, fill_price, fill_size)
         else:
             # BUY fill — create position
@@ -198,6 +214,8 @@ class OrderReconciler:
                 stake_usd=order.stake_usd,
                 current_price=fill_price,
                 pnl=0.0,
+                action_side=action_side,
+                outcome_side=outcome_side,
             ))
             # Subscribe to WS feed for price monitoring
             if self._on_buy_fill and order.token_id:
@@ -223,15 +241,28 @@ class OrderReconciler:
             if real_pos:
                 # Compute realized PnL from actual entry vs fill exit
                 pnl = (fill_price - real_pos.entry_price) * fill_size
-                self._db.archive_position(
-                    pos=real_pos,
-                    exit_price=fill_price,
-                    pnl=round(pnl, 4),
-                    close_reason="SELL_FILLED",
-                )
-                self._db.remove_position(order.market_id)
+                if self._exit_finalizer:
+                    self._exit_finalizer.finalize(
+                        pos=real_pos,
+                        exit_price=fill_price,
+                        pnl=round(pnl, 4),
+                        close_reason="SELL_FILLED",
+                    )
+                else:
+                    self._db.archive_position(
+                        pos=real_pos,
+                        exit_price=fill_price,
+                        pnl=round(pnl, 4),
+                        close_reason="SELL_FILLED",
+                    )
+                    self._db.remove_position(order.market_id)
             else:
-                # Position already gone — archive with what we have
+                # Orphan SELL fill — no position found
+                log.warning(
+                    "reconciler.orphan_sell_fill",
+                    order_id=order.order_id[:8],
+                    market_id=order.market_id[:8],
+                )
                 self._db.archive_position(
                     pos=type("P", (), {
                         "market_id": order.market_id,
@@ -241,12 +272,23 @@ class OrderReconciler:
                         "size": fill_size,
                         "stake_usd": order.stake_usd,
                         "opened_at": order.created_at,
+                        "action_side": getattr(order, "action_side", "SELL"),
+                        "outcome_side": getattr(order, "outcome_side", ""),
                     })(),
                     exit_price=fill_price,
                     pnl=0.0,
-                    close_reason="SELL_FILLED",
+                    close_reason="SELL_FILLED_ORPHAN",
                 )
                 self._db.remove_position(order.market_id)
+                if self._exit_finalizer:
+                    try:
+                        self._db.insert_alert(
+                            "critical",
+                            f"Orphan SELL fill: {order.market_id[:8]} — no position found",
+                            "reconciler",
+                        )
+                    except Exception:
+                        pass
         except Exception as e:
             log.warning(
                 "reconciler.sell_fill_archive_error",
@@ -259,6 +301,8 @@ class OrderReconciler:
     ) -> None:
         """Handle a partial fill — update order and create/update position."""
         from src.storage.models import PositionRecord, TradeRecord
+
+        action_side, outcome_side = self._get_order_direction(order)
 
         old_filled = order.filled_size
         old_avg = order.avg_fill_price if order.avg_fill_price > 0 else order.price
@@ -288,10 +332,13 @@ class OrderReconciler:
             stake_usd=round(incremental_stake, 2),
             status="PARTIAL_FILL",
             dry_run=False,
+            action_side=action_side,
+            outcome_side=outcome_side,
         ))
 
         # Create/update position with partial fill
-        if order.side != "SELL":
+        is_sell = action_side == "SELL" or order.side == "SELL"
+        if not is_sell:
             partial_stake = order.stake_usd * (new_fill_size / order.size) if order.size > 0 else 0
             self._db.upsert_position(PositionRecord(
                 market_id=order.market_id,
@@ -302,6 +349,8 @@ class OrderReconciler:
                 stake_usd=round(partial_stake, 2),
                 current_price=round(new_avg, 6),
                 pnl=0.0,
+                action_side=action_side,
+                outcome_side=outcome_side,
             ))
             # Subscribe to WS feed on first partial fill
             if old_filled == 0 and self._on_buy_fill and order.token_id:
@@ -364,12 +413,8 @@ class OrderReconciler:
         Returns the number of orders pruned.
         """
         try:
-            result = self._db._conn.execute(
-                "DELETE FROM open_orders WHERE status IN ('filled', 'cancelled', 'expired', 'failed')"
-            )
-            count = result.rowcount
+            count = self._db.prune_terminal_orders()
             if count > 0:
-                self._db._conn.commit()
                 log.info("reconciler.pruned_terminal_orders", count=count)
             return count
         except Exception as e:
@@ -384,13 +429,17 @@ async def run_reconciliation_loop(
     stop_event: asyncio.Event,
     fill_tracker: object | None = None,
     on_buy_fill: Callable[[str], None] | None = None,
+    exit_finalizer: object | None = None,
 ) -> None:
     """Background loop that periodically reconciles open orders.
 
     Runs until stop_event is set. Only active in live mode with
     reconciliation_enabled=True.
     """
-    reconciler = OrderReconciler(db, clob, config, fill_tracker, on_buy_fill)
+    reconciler = OrderReconciler(
+        db, clob, config, fill_tracker, on_buy_fill,
+        exit_finalizer=exit_finalizer,
+    )
     interval = config.reconciliation_interval_secs
 
     log.info("reconciler.loop_started", interval_secs=interval)

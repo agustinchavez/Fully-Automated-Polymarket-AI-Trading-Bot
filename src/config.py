@@ -328,6 +328,9 @@ class ExecutionConfig(BaseModel):
     auto_strategy_large_order_pct: float = 0.10
     auto_strategy_learning_enabled: bool = False
     auto_strategy_min_samples: int = 10
+    # Phase 10B: Invariant checks
+    invariant_checks_enabled: bool = False
+    invariant_check_interval_cycles: int = 10
 
 
 class StorageConfig(BaseModel):
