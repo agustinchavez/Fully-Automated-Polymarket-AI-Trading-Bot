@@ -67,13 +67,14 @@ risk:
   min_stake_usd: 1.0
   min_annualized_edge: 0.15
   volatility_high_threshold: 0.15
-  volatility_med_threshold: 0.10
+  volatility_med_threshold: 0.1
   volatility_high_min_mult: 0.4
   volatility_med_min_mult: 0.6
   category_stake_multipliers:
     MACRO: 1.0
     CORPORATE: 0.75
     ELECTION: 0.5
+  kill_switch: true
 drawdown:
   enabled: true
   max_drawdown_pct: 0.2
@@ -124,20 +125,12 @@ wallet_scanner:
   whale_convergence_min_edge: 0.02
 scanner:
   apiPool:
-    strategy: least-loaded          # round-robin | least-loaded | weighted-random
-    # Add custom proxy mirrors below to multiply throughput.
-    # Each endpoint gets its own independent rate limiter.
-    # Built-in: data-api-primary (60 RPM) + gamma-api-primary (60 RPM) = 120 RPM base.
-    # Example:  add 2 proxies → 60 × 4 = 240 RPM.
+    strategy: least-loaded
     endpoints: []
-    # - name: my-proxy-1
-    #   base_url: https://my-polymarket-proxy.example.com
-    #   rpm: 60
-    #   weight: 1.0
 budget:
   enabled: true
   daily_limit_usd: 5.0
-  warning_pct: 0.80
+  warning_pct: 0.8
 model_tiers:
   enabled: true
   scout_models:
