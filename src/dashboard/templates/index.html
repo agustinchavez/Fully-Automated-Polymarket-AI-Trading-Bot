@@ -62,8 +62,8 @@
     <!-- ─── Header ──────────────────────────────────────────── -->
     <header>
         <div class="header-left">
-            <h1>📊 Polymarket Bot</h1>
-            <span class="subtitle">Research & Trading Dashboard</span>
+            <h1>POLYMARKET TERMINAL</h1>
+            <span class="subtitle">AUTONOMOUS TRADING SYSTEM</span>
         </div>
         <div class="header-right">
             <span id="engine-badge" class="badge badge-paper" style="display:none;">ENGINE OFF</span>
@@ -77,44 +77,34 @@
     <!-- ─── Tab Navigation ──────────────────────────────────── -->
     <nav class="tab-nav" id="tab-nav">
         <button class="tab-btn active" data-tab="overview" onclick="switchTab('overview')">
-            <span class="tab-icon">📊</span>
-            <span class="tab-label">Overview</span>
+            <span class="tab-label">F1 OVERVIEW</span>
         </button>
         <button class="tab-btn" data-tab="trading" onclick="switchTab('trading')">
-            <span class="tab-icon">💼</span>
-            <span class="tab-label">Trading</span>
+            <span class="tab-label">F2 TRADING</span>
         </button>
         <button class="tab-btn" data-tab="analytics" onclick="switchTab('analytics')">
-            <span class="tab-icon">📈</span>
-            <span class="tab-label">Analytics</span>
+            <span class="tab-label">F3 ANALYTICS</span>
         </button>
         <button class="tab-btn" data-tab="whales" onclick="switchTab('whales')">
-            <span class="tab-icon">🐋</span>
-            <span class="tab-label">Whale Tracker</span>
+            <span class="tab-label">F4 WHALES</span>
         </button>
         <button class="tab-btn" data-tab="decisions" onclick="switchTab('decisions')">
-            <span class="tab-icon">🧠</span>
-            <span class="tab-label">Decision Intel</span>
+            <span class="tab-label">F5 DECISIONS</span>
         </button>
         <button class="tab-btn" data-tab="strategies" onclick="switchTab('strategies')">
-            <span class="tab-icon">🎯</span>
-            <span class="tab-label">Strategies</span>
+            <span class="tab-label">F6 STRATEGY</span>
         </button>
         <button class="tab-btn" data-tab="journal" onclick="switchTab('journal')">
-            <span class="tab-icon">📓</span>
-            <span class="tab-label">Journal</span>
+            <span class="tab-label">F7 JOURNAL</span>
         </button>
         <button class="tab-btn" data-tab="admin" onclick="switchTab('admin')">
-            <span class="tab-icon">🛡️</span>
-            <span class="tab-label">Admin Panel</span>
+            <span class="tab-label">F8 ADMIN</span>
         </button>
         <button class="tab-btn" data-tab="backtest" onclick="switchTab('backtest')">
-            <span class="tab-icon">🧪</span>
-            <span class="tab-label">Backtest</span>
+            <span class="tab-label">F9 BACKTEST</span>
         </button>
         <button class="tab-btn" data-tab="docs" onclick="switchTab('docs')">
-            <span class="tab-icon">📖</span>
-            <span class="tab-label">Documentation</span>
+            <span class="tab-label">F10 DOCS</span>
         </button>
     </nav>
 
@@ -160,15 +150,15 @@
         <!-- ─── Charts Row ──────────────────────────────────────── -->
         <section class="charts-row">
             <div class="chart-container">
-                <h3>📈 Daily Forecasts & Trades</h3>
+                <h3>DAILY FORECASTS & TRADES</h3>
                 <canvas id="chart-daily-activity"></canvas>
             </div>
             <div class="chart-container">
-                <h3>🎯 Edge & Evidence Quality</h3>
+                <h3>EDGE & EVIDENCE QUALITY</h3>
                 <canvas id="chart-edge-eq"></canvas>
             </div>
             <div class="chart-container chart-small">
-                <h3>🏷️ Market Types</h3>
+                <h3>MARKET TYPES</h3>
                 <canvas id="chart-market-types"></canvas>
             </div>
         </section>
@@ -176,7 +166,7 @@
         <!-- ─── Equity Curve ────────────────────────────────────── -->
         <section class="charts-row charts-row-single">
             <div class="chart-container chart-wide">
-                <h3>💰 Equity Curve (Cumulative P&L)</h3>
+                <h3>EQUITY CURVE</h3>
                 <canvas id="chart-equity-curve"></canvas>
             </div>
         </section>
@@ -199,7 +189,7 @@
             </div>
             <div class="card accent-purple">
                 <div class="card-label">Heat Level</div>
-                <div class="card-value" id="heat-level">🟢 Cool</div>
+                <div class="card-value" id="heat-level">COOL</div>
                 <div class="card-sub" id="kelly-mult">Kelly multiplier: 1.0x</div>
             </div>
             <div class="card accent-orange">
@@ -215,7 +205,7 @@
         <!-- ─── Market Regime ───────────────────────────────────── -->
         <section class="panel" id="regime-panel">
             <div class="panel-header">
-                <h2>🌡️ Market Regime</h2>
+                <h2>MARKET REGIME</h2>
             </div>
             <div class="card-grid" id="regime-cards">
                 <div class="card accent-blue">
@@ -246,10 +236,10 @@
         <!-- ─── Active Positions ────────────────────────────────── -->
         <section class="panel">
             <div class="panel-header">
-                <h2>� Active Positions</h2>
+                <h2>ACTIVE POSITIONS</h2>
                 <div class="panel-tools">
-                    <input type="text" class="search-input" placeholder="🔍 Filter positions..." oninput="filterTable('positions-body', this.value)">
-                    <button class="btn btn-export" onclick="exportData('positions')">📥 Export</button>
+                    <input type="text" class="search-input" placeholder="Filter positions..." oninput="filterTable('positions-body', this.value)">
+                    <button class="btn btn-export" onclick="exportData('positions')">Export</button>
                 </div>
             </div>
             <div id="positions-summary"></div>
@@ -269,9 +259,9 @@
         <!-- ─── Pipeline Candidates Log ───────────────────────────── -->
         <section class="panel">
             <div class="panel-header">
-                <h2>🔬 Pipeline Candidates</h2>
+                <h2>PIPELINE CANDIDATES</h2>
                 <div class="panel-tools">
-                    <input type="text" class="search-input" placeholder="🔍 Filter candidates..." oninput="filterTable('candidates-body', this.value)">
+                    <input type="text" class="search-input" placeholder="Filter candidates..." oninput="filterTable('candidates-body', this.value)">
                 </div>
             </div>
             <div class="table-wrap">
@@ -291,10 +281,10 @@
         <!-- ─── Recent Forecasts ────────────────────────────────── -->
         <section class="panel">
             <div class="panel-header">
-                <h2>🔮 Recent Forecasts</h2>
+                <h2>RECENT FORECASTS</h2>
                 <div class="panel-tools">
-                    <input type="text" class="search-input" placeholder="🔍 Filter forecasts..." oninput="filterTable('forecasts-body', this.value)">
-                    <button class="btn btn-export" onclick="exportData('forecasts')">📥 Export</button>
+                    <input type="text" class="search-input" placeholder="Filter forecasts..." oninput="filterTable('forecasts-body', this.value)">
+                    <button class="btn btn-export" onclick="exportData('forecasts')">Export</button>
                 </div>
             </div>
             <div class="table-wrap">
@@ -313,34 +303,34 @@
         <!-- ─── Trade History (Enhanced) ──────────────────────────── -->
         <section class="panel">
             <div class="panel-header">
-                <h2>📜 Trade History</h2>
+                <h2>TRADE HISTORY</h2>
                 <div class="panel-tools">
                     <select id="trade-filter-status" class="search-input" style="width:140px;" onchange="filterTradesByStatus()">
                         <option value="all">All Trades</option>
-                        <option value="ACTIVE">🟢 Active</option>
-                        <option value="TP_HIT">🟢 TP Hit</option>
-                        <option value="SL_HIT">🔴 SL Hit</option>
-                        <option value="RESOLVED">📋 Resolved</option>
-                        <option value="TIME_EXIT">⏰ Time Exit</option>
+                        <option value="ACTIVE">Active</option>
+                        <option value="TP_HIT">TP Hit</option>
+                        <option value="SL_HIT">SL Hit</option>
+                        <option value="RESOLVED">Resolved</option>
+                        <option value="TIME_EXIT">Time Exit</option>
                         <option value="CLOSED">Closed</option>
                     </select>
-                    <input type="text" class="search-input" placeholder="🔍 Filter trades..." oninput="filterTable('trades-body', this.value)">
-                    <button class="btn btn-export" onclick="exportData('trades')">📥 Export</button>
+                    <input type="text" class="search-input" placeholder="Filter trades..." oninput="filterTable('trades-body', this.value)">
+                    <button class="btn btn-export" onclick="exportData('trades')">Export</button>
                 </div>
             </div>
 
             <!-- Trade Summary Strip -->
             <div class="pnl-summary-strip" id="trades-summary" style="display:none;">
                 <span class="summary-item" id="ts-total">Total: —</span>
-                <span class="summary-item" id="ts-active" style="color:var(--accent-blue)">🟢 Active: —</span>
+                <span class="summary-item" id="ts-active" style="color:var(--accent-blue)">Active: —</span>
                 <span class="summary-item" id="ts-closed">Closed: —</span>
-                <span class="summary-item" id="ts-winrate">🎯 Win Rate: —</span>
-                <span class="summary-item" id="ts-pnl">💰 P&L: —</span>
-                <span class="summary-item" id="ts-tp">🟢 TP Hits: —</span>
-                <span class="summary-item" id="ts-sl">🔴 SL Hits: —</span>
-                <span class="summary-item" id="ts-avghold">⏱ Avg Hold: —</span>
-                <span class="summary-item" id="ts-best">🏆 Best: —</span>
-                <span class="summary-item" id="ts-worst">📉 Worst: —</span>
+                <span class="summary-item" id="ts-winrate">Win Rate: —</span>
+                <span class="summary-item" id="ts-pnl">P&L: —</span>
+                <span class="summary-item" id="ts-tp">TP Hits: —</span>
+                <span class="summary-item" id="ts-sl">SL Hits: —</span>
+                <span class="summary-item" id="ts-avghold">Avg Hold: —</span>
+                <span class="summary-item" id="ts-best">Best: —</span>
+                <span class="summary-item" id="ts-worst">Worst: —</span>
             </div>
 
             <div class="table-wrap">
@@ -367,7 +357,7 @@
         <!-- ─── Performance Analytics ───────────────────────────── -->
         <section class="panel" id="analytics-panel">
             <div class="panel-header">
-                <h2>📊 Performance Analytics</h2>
+                <h2>PERFORMANCE ANALYTICS</h2>
             </div>
 
             <!-- Analytics KPI Cards -->
@@ -407,22 +397,22 @@
             <!-- Analytics Charts Row -->
             <div class="charts-row">
                 <div class="chart-container">
-                    <h3>📊 Category P&L Breakdown</h3>
+                    <h3>CATEGORY P&L BREAKDOWN</h3>
                     <canvas id="chart-category-pnl"></canvas>
                 </div>
                 <div class="chart-container">
-                    <h3>🎯 Calibration Accuracy</h3>
+                    <h3>CALIBRATION ACCURACY</h3>
                     <canvas id="chart-calibration"></canvas>
                 </div>
                 <div class="chart-container chart-small">
-                    <h3>🤖 Model Accuracy</h3>
+                    <h3>MODEL ACCURACY</h3>
                     <canvas id="chart-model-accuracy"></canvas>
                 </div>
             </div>
 
             <!-- Strategy Leaderboard -->
             <div class="table-wrap" style="margin-top:16px;">
-                <h3 style="margin:0 0 8px 0;">🏆 Strategy Leaderboard</h3>
+                <h3 style="margin:0 0 8px 0;">STRATEGY LEADERBOARD</h3>
                 <table id="leaderboard-table">
                     <thead><tr>
                         <th>Rank</th><th>Category</th><th>ROI %</th><th>Win Rate</th>
@@ -446,7 +436,7 @@
             <!-- ─── Professional Toolbar ────────────────────────── -->
             <div class="whale-toolbar">
                 <div class="whale-toolbar-left">
-                    <h2 class="whale-title">🐋 Smart Money Terminal</h2>
+                    <h2 class="whale-title">SMART MONEY TERMINAL</h2>
                     <span class="whale-pulse" id="whale-pulse">● LIVE</span>
                 </div>
                 <div class="whale-toolbar-right">
@@ -455,13 +445,13 @@
                     <span class="whale-toolbar-stat" id="whale-scan-count">0 wallets</span>
                     <span class="whale-toolbar-divider">|</span>
                     <span class="whale-toolbar-stat whale-refresh-timer" id="whale-refresh-timer">⟳ 30s</span>
-                    <button class="whale-btn-export" onclick="exportWhaleCSV()" title="Export to CSV">📥 Export</button>
+                    <button class="whale-btn-export" onclick="exportWhaleCSV()" title="Export to CSV">Export</button>
                 </div>
             </div>
 
             <!-- ─── Risk Alert Ticker ───────────────────────────── -->
             <div class="whale-alert-ticker" id="whale-alert-ticker" style="display:none;">
-                <div class="whale-alert-ticker-icon">⚠️</div>
+                <div class="whale-alert-ticker-icon">WARN</div>
                 <div class="whale-alert-ticker-scroll" id="whale-alert-ticker-scroll"></div>
                 <span class="whale-alert-ticker-count" id="whale-alert-ticker-count">0</span>
             </div>
@@ -472,14 +462,14 @@
             <div class="whale-section-card scanner-master-panel" id="whale-scanner-panel">
                 <div class="whale-table-header scanner-header">
                     <div class="scanner-header-left">
-                        <h3>🔍 Liquid Market Whale Scanner</h3>
+                        <h3>LIQUID MARKET WHALE SCANNER</h3>
                         <span class="whale-section-sub">Multi-source discovery: Leaderboard seeding · Global trade feed · Per-market scanning · Smart dedup</span>
                     </div>
                     <div class="scanner-header-right">
                         <span class="scanner-status-badge" id="scanner-status-badge">● IDLE</span>
                         <button class="scanner-btn scanner-btn-primary" id="scanner-toggle-btn" onclick="toggleWhaleScanner()">▶ Start Scanner</button>
-                        <button class="scanner-btn scanner-btn-secondary" onclick="runSingleScan()" title="Run a one-time scan">⚡ Quick Scan</button>
-                        <button class="scanner-btn scanner-btn-ghost" onclick="toggleScannerConfig()" title="Configure scanner parameters">⚙️</button>
+                        <button class="scanner-btn scanner-btn-secondary" onclick="runSingleScan()" title="Run a one-time scan">Quick Scan</button>
+                        <button class="scanner-btn scanner-btn-ghost" onclick="toggleScannerConfig()" title="Configure scanner parameters">CFG</button>
                     </div>
                 </div>
 
@@ -489,7 +479,7 @@
                 <!-- API Pool Status Panel -->
                 <div class="scanner-pool-panel" id="scanner-pool-panel" style="display:none;">
                     <div class="scanner-pool-header">
-                        <span class="scanner-pool-title">🔑 API Pool</span>
+                        <span class="scanner-pool-title">API POOL</span>
                         <span class="scanner-pool-summary" id="scanner-pool-summary"></span>
                     </div>
                     <div class="scanner-pool-endpoints" id="scanner-pool-endpoints"></div>
@@ -523,111 +513,111 @@
                             <input type="number" id="scanner-cfg-interval" value="15" min="5" step="5">
                         </div>
                     </div>
-                    <button class="scanner-btn scanner-btn-primary" onclick="saveScannerConfig()" style="margin-top:8px;">💾 Save Config</button>
+                    <button class="scanner-btn scanner-btn-primary" onclick="saveScannerConfig()" style="margin-top:8px;">Save Config</button>
                 </div>
 
                 <!-- 7-Phase Pipeline Visualization -->
                 <div class="scanner-pipeline" id="scanner-pipeline">
                     <div class="scanner-phase" id="scanner-phase-0">
-                        <div class="scanner-phase-icon">�</div>
+                        <div class="scanner-phase-icon">1</div>
                         <div class="scanner-phase-label">Leaderboard</div>
-                        <div class="scanner-phase-val" id="scanner-phase-0-val">—</div>
+                        <div class="scanner-phase-val" id="scanner-phase-0-val">--</div>
                     </div>
                     <div class="scanner-phase-arrow">→</div>
                     <div class="scanner-phase" id="scanner-phase-1">
-                        <div class="scanner-phase-icon">🏦</div>
+                        <div class="scanner-phase-icon">2</div>
                         <div class="scanner-phase-label">Markets</div>
-                        <div class="scanner-phase-val" id="scanner-phase-1-val">—</div>
+                        <div class="scanner-phase-val" id="scanner-phase-1-val">--</div>
                     </div>
                     <div class="scanner-phase-arrow">→</div>
                     <div class="scanner-phase" id="scanner-phase-2">
-                        <div class="scanner-phase-icon">📡</div>
+                        <div class="scanner-phase-icon">3</div>
                         <div class="scanner-phase-label">Global Trades</div>
-                        <div class="scanner-phase-val" id="scanner-phase-2-val">—</div>
+                        <div class="scanner-phase-val" id="scanner-phase-2-val">--</div>
                     </div>
                     <div class="scanner-phase-arrow">→</div>
                     <div class="scanner-phase" id="scanner-phase-2b">
-                        <div class="scanner-phase-icon">📊</div>
+                        <div class="scanner-phase-icon">4</div>
                         <div class="scanner-phase-label">Market Trades</div>
-                        <div class="scanner-phase-val" id="scanner-phase-2b-val">—</div>
+                        <div class="scanner-phase-val" id="scanner-phase-2b-val">--</div>
                     </div>
                     <div class="scanner-phase-arrow">→</div>
                     <div class="scanner-phase" id="scanner-phase-3">
-                        <div class="scanner-phase-icon">�</div>
+                        <div class="scanner-phase-icon">5</div>
                         <div class="scanner-phase-label">Ranking</div>
-                        <div class="scanner-phase-val" id="scanner-phase-3-val">—</div>
+                        <div class="scanner-phase-val" id="scanner-phase-3-val">--</div>
                     </div>
                     <div class="scanner-phase-arrow">→</div>
                     <div class="scanner-phase" id="scanner-phase-4">
-                        <div class="scanner-phase-icon">🔬</div>
+                        <div class="scanner-phase-icon">6</div>
                         <div class="scanner-phase-label">Analysis</div>
-                        <div class="scanner-phase-val" id="scanner-phase-4-val">—</div>
+                        <div class="scanner-phase-val" id="scanner-phase-4-val">--</div>
                     </div>
                     <div class="scanner-phase-arrow">→</div>
                     <div class="scanner-phase" id="scanner-phase-5">
-                        <div class="scanner-phase-icon">💾</div>
+                        <div class="scanner-phase-icon">7</div>
                         <div class="scanner-phase-label">Score &amp; Save</div>
-                        <div class="scanner-phase-val" id="scanner-phase-5-val">—</div>
+                        <div class="scanner-phase-val" id="scanner-phase-5-val">--</div>
                     </div>
                 </div>
 
                 <!-- Scanner Stats Row (8 cards) -->
                 <div class="scanner-stats-row" id="scanner-stats-row">
                     <div class="scanner-stat-card">
-                        <div class="scanner-stat-icon">🏦</div>
+                        <div class="scanner-stat-icon">MKT</div>
                         <div class="scanner-stat-val" id="scanner-stat-markets">0</div>
                         <div class="scanner-stat-label">Liquid Markets</div>
                     </div>
                     <div class="scanner-stat-card">
-                        <div class="scanner-stat-icon">🔄</div>
+                        <div class="scanner-stat-icon">CYC</div>
                         <div class="scanner-stat-val" id="scanner-stat-cycle-markets">0</div>
                         <div class="scanner-stat-label">Scanned / Cycle</div>
                     </div>
                     <div class="scanner-stat-card">
-                        <div class="scanner-stat-icon">📡</div>
+                        <div class="scanner-stat-icon">TRD</div>
                         <div class="scanner-stat-val" id="scanner-stat-trades">0</div>
                         <div class="scanner-stat-label">Trades Analyzed</div>
                     </div>
                     <div class="scanner-stat-card">
-                        <div class="scanner-stat-icon">🔎</div>
+                        <div class="scanner-stat-icon">ADR</div>
                         <div class="scanner-stat-val" id="scanner-stat-addresses">0</div>
                         <div class="scanner-stat-label">Addresses Found</div>
                     </div>
                     <div class="scanner-stat-card">
-                        <div class="scanner-stat-icon">👛</div>
+                        <div class="scanner-stat-icon">WAL</div>
                         <div class="scanner-stat-val" id="scanner-stat-wallets">0</div>
                         <div class="scanner-stat-label">Wallets Analyzed</div>
                     </div>
                     <div class="scanner-stat-card">
-                        <div class="scanner-stat-icon">🐋</div>
+                        <div class="scanner-stat-icon">CND</div>
                         <div class="scanner-stat-val" id="scanner-stat-candidates">0</div>
                         <div class="scanner-stat-label">Candidates</div>
                     </div>
                     <div class="scanner-stat-card">
-                        <div class="scanner-stat-icon">⭐</div>
+                        <div class="scanner-stat-icon">PRO</div>
                         <div class="scanner-stat-val" id="scanner-stat-promoted">0</div>
                         <div class="scanner-stat-label">Promoted</div>
                     </div>
                     <div class="scanner-stat-card">
-                        <div class="scanner-stat-icon">🏆</div>
+                        <div class="scanner-stat-icon">LDR</div>
                         <div class="scanner-stat-val" id="scanner-stat-leaderboard">0</div>
                         <div class="scanner-stat-label">Leaderboard</div>
                     </div>
                     <div class="scanner-stat-card">
-                        <div class="scanner-stat-icon">📊</div>
+                        <div class="scanner-stat-icon">MKT</div>
                         <div class="scanner-stat-val" id="scanner-stat-mkt-trades">0</div>
                         <div class="scanner-stat-label">Market Trades</div>
                     </div>
                     <div class="scanner-stat-card">
-                        <div class="scanner-stat-icon">⏱️</div>
-                        <div class="scanner-stat-val" id="scanner-stat-duration">—</div>
+                        <div class="scanner-stat-icon">TMR</div>
+                        <div class="scanner-stat-val" id="scanner-stat-duration">--</div>
                         <div class="scanner-stat-label">Scan Time</div>
                     </div>
                 </div>
 
                 <!-- Scanned Markets Grid -->
                 <div class="scanner-markets-wrap" id="scanner-markets-wrap" style="display:none;">
-                    <h4 class="scanner-sub-title">📈 Markets Scanned This Cycle</h4>
+                    <h4 class="scanner-sub-title">MARKETS SCANNED THIS CYCLE</h4>
                     <div class="scanner-markets-grid" id="scanner-markets-grid"></div>
                 </div>
 
@@ -641,7 +631,7 @@
                 <!-- Candidate Table -->
                 <div class="scanner-candidates-wrap">
                     <div class="scanner-candidates-header">
-                        <h4 class="scanner-sub-title">🏆 Top Whale Candidates</h4>
+                        <h4 class="scanner-sub-title">TOP WHALE CANDIDATES</h4>
                         <span class="scanner-candidate-count" id="scanner-candidate-count">0 candidates</span>
                     </div>
                     <div class="scanner-candidates-table" id="scanner-candidates-table">
@@ -651,7 +641,7 @@
 
                 <!-- Promoted Whales -->
                 <div class="scanner-promoted-wrap" id="scanner-promoted-wrap" style="display:none;">
-                    <h4 class="scanner-sub-title">✅ Promoted to Tracked</h4>
+                    <h4 class="scanner-sub-title">PROMOTED TO TRACKED</h4>
                     <div class="scanner-promoted-list" id="scanner-promoted-list"></div>
                 </div>
             </div>
@@ -659,7 +649,7 @@
             <!-- ─── 6 KPI Cards ─────────────────────────────────── -->
             <div class="whale-kpi-row">
                 <div class="whale-kpi accent-blue">
-                    <div class="whale-kpi-icon">🔭</div>
+                    <div class="whale-kpi-icon">TRK</div>
                     <div class="whale-kpi-body">
                         <div class="whale-kpi-label">Tracked Wallets</div>
                         <div class="whale-kpi-value" id="whale-total-wallets">0</div>
@@ -667,7 +657,7 @@
                     </div>
                 </div>
                 <div class="whale-kpi accent-green">
-                    <div class="whale-kpi-icon">🎯</div>
+                    <div class="whale-kpi-icon">SIG</div>
                     <div class="whale-kpi-body">
                         <div class="whale-kpi-label">Conviction Signals</div>
                         <div class="whale-kpi-value" id="whale-total-signals">0</div>
@@ -675,7 +665,7 @@
                     </div>
                 </div>
                 <div class="whale-kpi accent-purple">
-                    <div class="whale-kpi-icon">🧠</div>
+                    <div class="whale-kpi-icon">SMI</div>
                     <div class="whale-kpi-body">
                         <div class="whale-kpi-label">Smart Money Index</div>
                         <div class="whale-kpi-value" id="whale-smi">50</div>
@@ -683,7 +673,7 @@
                     </div>
                 </div>
                 <div class="whale-kpi accent-teal">
-                    <div class="whale-kpi-icon">💰</div>
+                    <div class="whale-kpi-icon">FLW</div>
                     <div class="whale-kpi-body">
                         <div class="whale-kpi-label">Net Whale Flow</div>
                         <div class="whale-kpi-value" id="whale-net-flow">$0</div>
@@ -691,7 +681,7 @@
                     </div>
                 </div>
                 <div class="whale-kpi accent-orange">
-                    <div class="whale-kpi-icon">📊</div>
+                    <div class="whale-kpi-icon">WIN</div>
                     <div class="whale-kpi-body">
                         <div class="whale-kpi-label">Avg Win Rate</div>
                         <div class="whale-kpi-value" id="whale-avg-winrate">0%</div>
@@ -699,7 +689,7 @@
                     </div>
                 </div>
                 <div class="whale-kpi accent-pink">
-                    <div class="whale-kpi-icon">🏆</div>
+                    <div class="whale-kpi-icon">TOP</div>
                     <div class="whale-kpi-body">
                         <div class="whale-kpi-label">Top Conviction</div>
                         <div class="whale-kpi-value" id="whale-top-conv-score">0</div>
@@ -711,40 +701,40 @@
             <!-- ─── Smart Money Index Gauge + Flow Breakdown ────── -->
             <div class="whale-gauge-row">
                 <div class="whale-gauge-card">
-                    <h3>🧠 Smart Money Index</h3>
+                    <h3>SMART MONEY INDEX</h3>
                     <div class="whale-gauge-wrap">
                         <div class="whale-gauge-bar">
                             <div class="whale-gauge-fill" id="whale-smi-fill" style="width:50%;"></div>
                             <div class="whale-gauge-marker" id="whale-smi-marker" style="left:50%;"></div>
                         </div>
                         <div class="whale-gauge-labels">
-                            <span class="whale-gauge-bear">🐻 Bearish</span>
+                            <span class="whale-gauge-bear">Bearish</span>
                             <span class="whale-gauge-neutral">Neutral</span>
-                            <span class="whale-gauge-bull">Bullish 🐂</span>
+                            <span class="whale-gauge-bull">Bullish</span>
                         </div>
                     </div>
                     <p class="whale-gauge-desc" id="whale-smi-desc">Smart Money Index aggregates whale conviction across all active signals, weighted by position size.</p>
                 </div>
                 <div class="whale-gauge-card">
-                    <h3>📡 Flow Breakdown</h3>
+                    <h3>FLOW BREAKDOWN</h3>
                     <div class="whale-flow-bars">
                         <div class="whale-flow-item">
-                            <span class="whale-flow-label">🟢 Entries</span>
+                            <span class="whale-flow-label">Entries</span>
                             <div class="whale-flow-bar-wrap"><div class="whale-flow-bar whale-flow-green" id="whale-flow-entries" style="width:0%;"></div></div>
                             <span class="whale-flow-count" id="whale-flow-entries-n">0</span>
                         </div>
                         <div class="whale-flow-item">
-                            <span class="whale-flow-label">📈 Size ↑</span>
+                            <span class="whale-flow-label">Size Up</span>
                             <div class="whale-flow-bar-wrap"><div class="whale-flow-bar whale-flow-teal" id="whale-flow-incr" style="width:0%;"></div></div>
                             <span class="whale-flow-count" id="whale-flow-incr-n">0</span>
                         </div>
                         <div class="whale-flow-item">
-                            <span class="whale-flow-label">📉 Size ↓</span>
+                            <span class="whale-flow-label">Size Down</span>
                             <div class="whale-flow-bar-wrap"><div class="whale-flow-bar whale-flow-orange" id="whale-flow-decr" style="width:0%;"></div></div>
                             <span class="whale-flow-count" id="whale-flow-decr-n">0</span>
                         </div>
                         <div class="whale-flow-item">
-                            <span class="whale-flow-label">🔴 Exits</span>
+                            <span class="whale-flow-label">Exits</span>
                             <div class="whale-flow-bar-wrap"><div class="whale-flow-bar whale-flow-red" id="whale-flow-exits" style="width:0%;"></div></div>
                             <span class="whale-flow-count" id="whale-flow-exits-n">0</span>
                         </div>
@@ -755,13 +745,13 @@
             <!-- ─── Momentum & Velocity Panel ───────────────────── -->
             <div class="whale-momentum-panel">
                 <div class="whale-momentum-card">
-                    <h3>📈 Whale Momentum <span class="whale-section-sub">(Net Flow by Window)</span></h3>
+                    <h3>WHALE MOMENTUM <span class="whale-section-sub">(Net Flow by Window)</span></h3>
                     <div class="whale-momentum-bars" id="whale-momentum-bars">
                         <!-- Populated by JS -->
                     </div>
                 </div>
                 <div class="whale-momentum-card">
-                    <h3>⚡ Position Velocity <span class="whale-section-sub">(Actions/Hour)</span></h3>
+                    <h3>POSITION VELOCITY <span class="whale-section-sub">(Actions/Hour)</span></h3>
                     <div class="whale-velocity-row" id="whale-velocity-row">
                         <div class="whale-velocity-item">
                             <span class="whale-velocity-label">1h</span>
@@ -777,7 +767,7 @@
                         </div>
                     </div>
                     <div class="whale-herd-index">
-                        <span class="whale-herd-label">🐑 Herd Behavior Index</span>
+                        <span class="whale-herd-label">Herd Behavior Index</span>
                         <div class="whale-herd-bar-wrap">
                             <div class="whale-herd-bar" id="whale-herd-bar" style="width:0%;"></div>
                         </div>
@@ -789,19 +779,19 @@
             <!-- ─── Charts Row (FIXED HEIGHT) ──────────────────── -->
             <div class="whale-charts-row">
                 <div class="whale-chart-card">
-                    <h3>📊 Signal Direction</h3>
+                    <h3>SIGNAL DIRECTION</h3>
                     <div class="whale-chart-container" style="height:200px;">
                         <canvas id="whale-direction-chart"></canvas>
                     </div>
                 </div>
                 <div class="whale-chart-card">
-                    <h3>🏔️ Top Markets by Whale Capital</h3>
+                    <h3>TOP MARKETS BY WHALE CAPITAL</h3>
                     <div class="whale-chart-container" style="height:200px;">
                         <canvas id="whale-markets-chart"></canvas>
                     </div>
                 </div>
                 <div class="whale-chart-card">
-                    <h3>🏷️ Category Breakdown</h3>
+                    <h3>CATEGORY BREAKDOWN</h3>
                     <div class="whale-chart-container" style="height:200px;">
                         <canvas id="whale-category-chart"></canvas>
                     </div>
@@ -810,7 +800,7 @@
 
             <!-- ─── Activity Timeline Heatmap ───────────────────── -->
             <div class="whale-timeline-section">
-                <h3>⏱️ Activity Timeline <span class="whale-section-sub">(Last 24 hours)</span></h3>
+                <h3>ACTIVITY TIMELINE <span class="whale-section-sub">(Last 24 hours)</span></h3>
                 <div class="whale-timeline-grid" id="whale-timeline-grid">
                     <!-- Populated by JS -->
                 </div>
@@ -826,7 +816,7 @@
             <!-- ─── Accumulation / Distribution ─────────────────── -->
             <div class="whale-section-card">
                 <div class="whale-table-header">
-                    <h3>🔄 Accumulation / Distribution</h3>
+                    <h3>ACCUMULATION / DISTRIBUTION</h3>
                     <span class="whale-section-sub">Net buy vs sell pressure per market</span>
                 </div>
                 <div class="whale-accum-list" id="whale-accum-list">
@@ -837,7 +827,7 @@
             <!-- ─── Whale Overlap Matrix ────────────────────────── -->
             <div class="whale-section-card">
                 <div class="whale-table-header">
-                    <h3>🔗 Whale Overlap Matrix</h3>
+                    <h3>WHALE OVERLAP MATRIX</h3>
                     <span class="whale-section-sub">Shared market positions between whales</span>
                 </div>
                 <div class="whale-overlap-grid" id="whale-overlap-grid">
@@ -852,7 +842,7 @@
 
             <!-- ─── High Consensus Alerts ───────────────────────── -->
             <div class="whale-consensus-section" id="whale-consensus-wrap">
-                <h3>🔥 High Consensus Alerts <span class="whale-consensus-badge" id="whale-consensus-count">0</span></h3>
+                <h3>HIGH CONSENSUS ALERTS <span class="whale-consensus-badge" id="whale-consensus-count">0</span></h3>
                 <p class="whale-consensus-desc">Markets where 3+ whales agree on the same outcome — strongest smart money signals.</p>
                 <div class="whale-consensus-grid" id="whale-consensus-grid">
                     <div class="empty-state" style="grid-column:1/-1;">No high consensus signals yet</div>
@@ -862,7 +852,7 @@
             <!-- ─── Conviction Signals Table (Pro) ──────────────── -->
             <div class="whale-section-card">
                 <div class="whale-table-header">
-                    <h3>🎯 Conviction Signals</h3>
+                    <h3>CONVICTION SIGNALS</h3>
                     <div class="whale-table-filters">
                         <select id="whale-signal-filter" onchange="filterWhaleSignals()" class="whale-filter-select">
                             <option value="all">All Signals</option>
@@ -873,14 +863,14 @@
                         </select>
                         <select id="whale-category-filter" onchange="filterWhaleSignals()" class="whale-filter-select">
                             <option value="all">All Categories</option>
-                            <option value="NBA">🏀 NBA</option>
-                            <option value="NFL">🏈 NFL</option>
-                            <option value="Soccer">⚽ Soccer</option>
-                            <option value="Politics">🏛️ Politics</option>
-                            <option value="Olympics">🏅 Olympics</option>
-                            <option value="MLB">⚾ MLB</option>
-                            <option value="Crypto">₿ Crypto</option>
-                            <option value="Other">📦 Other</option>
+                            <option value="NBA">NBA</option>
+                            <option value="NFL">NFL</option>
+                            <option value="Soccer">Soccer</option>
+                            <option value="Politics">Politics</option>
+                            <option value="Olympics">Olympics</option>
+                            <option value="MLB">MLB</option>
+                            <option value="Crypto">Crypto</option>
+                            <option value="Other">Other</option>
                         </select>
                         <input type="text" id="whale-signal-search" placeholder="Search markets…" oninput="filterWhaleSignals()" class="whale-filter-input">
                     </div>
@@ -888,7 +878,7 @@
                 <div class="whale-table-scroll">
                     <table id="conviction-table" class="whale-pro-table">
                         <thead><tr>
-                            <th>Market</th><th>Category</th><th>Outcome</th><th>🐋</th><th>Capital</th>
+                            <th>Market</th><th>Category</th><th>Outcome</th><th>Whales</th><th>Capital</th>
                             <th>Entry</th><th>Current</th><th>Edge</th><th>Conviction</th>
                             <th>Trend</th><th>Strength</th><th>Fresh</th><th>Age</th><th>Dir</th>
                         </tr></thead>
@@ -902,14 +892,14 @@
             <!-- ─── Live Activity Feed ──────────────────────────── -->
             <div class="whale-section-card">
                 <div class="whale-table-header">
-                    <h3>📡 Live Activity Feed</h3>
+                    <h3>LIVE ACTIVITY FEED</h3>
                     <div class="whale-table-filters">
                         <select id="whale-activity-filter" onchange="filterWhaleActivity()" class="whale-filter-select">
                             <option value="all">All Activity</option>
-                            <option value="NEW_ENTRY">🟢 Entries</option>
-                            <option value="EXIT">🔴 Exits</option>
-                            <option value="SIZE_INCREASE">📈 Size ↑</option>
-                            <option value="SIZE_DECREASE">📉 Size ↓</option>
+                            <option value="NEW_ENTRY">Entries</option>
+                            <option value="EXIT">Exits</option>
+                            <option value="SIZE_INCREASE">Size Up</option>
+                            <option value="SIZE_DECREASE">Size Down</option>
                         </select>
                     </div>
                 </div>
@@ -921,7 +911,7 @@
             <!-- ─── Whale Leaderboard ───────────────────────────── -->
             <div class="whale-section-card">
                 <div class="whale-table-header">
-                    <h3>🏆 Whale Leaderboard</h3>
+                    <h3>WHALE LEADERBOARD</h3>
                     <div class="whale-table-filters">
                         <select id="whale-lb-sort" onchange="sortWhaleLeaderboard()" class="whale-filter-select">
                             <option value="score">By Score</option>
@@ -941,7 +931,7 @@
             <!-- ─── Alert History ───────────────────────────────── -->
             <div class="whale-section-card">
                 <div class="whale-table-header">
-                    <h3>🔔 Alert History <span class="whale-consensus-badge" id="whale-alert-history-count">0</span></h3>
+                    <h3>ALERT HISTORY <span class="whale-consensus-badge" id="whale-alert-history-count">0</span></h3>
                     <span class="whale-section-sub">Persistent log of all risk alerts detected by the whale scanner</span>
                 </div>
                 <div class="whale-alert-history-list" id="whale-alert-history-list">
@@ -961,57 +951,57 @@
         <section class="panel di-panel-main">
             <div class="di-toolbar">
                 <div class="di-toolbar-left">
-                    <h2 class="di-title">🧠 Decision Intelligence Center</h2>
+                    <h2 class="di-title">DECISION INTELLIGENCE</h2>
                     <span class="di-pulse" id="di-pulse">● LIVE</span>
                 </div>
                 <div class="di-toolbar-right">
                     <span class="di-stat" id="di-last-cycle">Last cycle: —</span>
                     <span class="di-divider">|</span>
                     <span class="di-stat" id="di-total-count">0 decisions</span>
-                    <button class="di-btn-export" onclick="exportDecisionCSV()" title="Export CSV">📥 Export</button>
+                    <button class="di-btn-export" onclick="exportDecisionCSV()" title="Export CSV">Export</button>
                 </div>
             </div>
 
             <!-- ─── KPI Row ─────────────────────────────────────── -->
             <div class="di-kpi-row" id="di-kpi-row">
                 <div class="di-kpi-card">
-                    <div class="di-kpi-icon">📊</div>
+                    <div class="di-kpi-icon">TOT</div>
                     <div class="di-kpi-val" id="di-kpi-total">0</div>
                     <div class="di-kpi-label">Total Decisions</div>
                 </div>
                 <div class="di-kpi-card di-kpi-green">
-                    <div class="di-kpi-icon">✅</div>
+                    <div class="di-kpi-icon">TRD</div>
                     <div class="di-kpi-val" id="di-kpi-trade-rate">0%</div>
                     <div class="di-kpi-label">Trade Rate</div>
                 </div>
                 <div class="di-kpi-card di-kpi-blue">
-                    <div class="di-kpi-icon">🎯</div>
-                    <div class="di-kpi-val" id="di-kpi-avg-score">—</div>
+                    <div class="di-kpi-icon">SCR</div>
+                    <div class="di-kpi-val" id="di-kpi-avg-score">--</div>
                     <div class="di-kpi-label">Avg DI Score</div>
                 </div>
                 <div class="di-kpi-card di-kpi-purple">
-                    <div class="di-kpi-icon">📈</div>
-                    <div class="di-kpi-val" id="di-kpi-avg-edge">—</div>
+                    <div class="di-kpi-icon">EDG</div>
+                    <div class="di-kpi-val" id="di-kpi-avg-edge">--</div>
                     <div class="di-kpi-label">Avg Edge</div>
                 </div>
                 <div class="di-kpi-card di-kpi-teal">
-                    <div class="di-kpi-icon">📚</div>
-                    <div class="di-kpi-val" id="di-kpi-avg-eq">—</div>
+                    <div class="di-kpi-icon">EQ</div>
+                    <div class="di-kpi-val" id="di-kpi-avg-eq">--</div>
                     <div class="di-kpi-label">Avg Evidence Quality</div>
                 </div>
                 <div class="di-kpi-card di-kpi-orange">
-                    <div class="di-kpi-icon">⚡</div>
-                    <div class="di-kpi-val" id="di-kpi-pipeline">—</div>
+                    <div class="di-kpi-icon">PIP</div>
+                    <div class="di-kpi-val" id="di-kpi-pipeline">--</div>
                     <div class="di-kpi-label">Pipeline Completion</div>
                 </div>
                 <div class="di-kpi-card di-kpi-pink">
-                    <div class="di-kpi-icon">🏷️</div>
-                    <div class="di-kpi-val" id="di-kpi-top-cat">—</div>
+                    <div class="di-kpi-icon">CAT</div>
+                    <div class="di-kpi-val" id="di-kpi-top-cat">--</div>
                     <div class="di-kpi-label">Top Category</div>
                 </div>
                 <div class="di-kpi-card">
-                    <div class="di-kpi-icon">🏆</div>
-                    <div class="di-kpi-val" id="di-kpi-avg-grade">—</div>
+                    <div class="di-kpi-icon">GRD</div>
+                    <div class="di-kpi-val" id="di-kpi-avg-grade">--</div>
                     <div class="di-kpi-label">Avg Grade</div>
                 </div>
             </div>
@@ -1019,39 +1009,39 @@
             <!-- ─── Charts Row ──────────────────────────────────── -->
             <div class="di-charts-row">
                 <div class="di-chart-card">
-                    <h3>📊 Decision Distribution</h3>
+                    <h3>DECISION DISTRIBUTION</h3>
                     <canvas id="di-chart-decisions"></canvas>
                 </div>
                 <div class="di-chart-card">
-                    <h3>🏆 Grade Distribution</h3>
+                    <h3>GRADE DISTRIBUTION</h3>
                     <canvas id="di-chart-grades"></canvas>
                 </div>
                 <div class="di-chart-card">
-                    <h3>📈 Edge Distribution</h3>
+                    <h3>EDGE DISTRIBUTION</h3>
                     <canvas id="di-chart-edge"></canvas>
                 </div>
                 <div class="di-chart-card">
-                    <h3>🏷️ Category Breakdown</h3>
+                    <h3>CATEGORY BREAKDOWN</h3>
                     <canvas id="di-chart-categories"></canvas>
                 </div>
             </div>
 
             <!-- ─── Decision Timeline Heatmap ───────────────────── -->
             <div class="di-timeline-section">
-                <h3>🕐 Decision Activity Timeline</h3>
+                <h3>DECISION ACTIVITY TIMELINE</h3>
                 <div class="di-timeline-strip" id="di-timeline-strip"></div>
             </div>
 
             <!-- ─── Pipeline Flow Funnel ────────────────────────── -->
             <div class="di-funnel-section">
-                <h3>⚡ Pipeline Funnel</h3>
+                <h3>PIPELINE FUNNEL</h3>
                 <div class="di-funnel" id="di-funnel"></div>
             </div>
 
             <!-- ─── Auto Insights ───────────────────────────────── -->
             <div class="di-insights-section">
                 <div class="di-section-header">
-                    <h3>💡 Auto-Generated Insights</h3>
+                    <h3>AUTO-GENERATED INSIGHTS</h3>
                     <span class="di-badge" id="di-insights-count">0</span>
                 </div>
                 <div class="di-insights-grid" id="di-insights">
@@ -1061,7 +1051,7 @@
 
             <!-- ─── DI Score Trend ──────────────────────────────── -->
             <div class="di-score-trend-section">
-                <h3>📈 DI Score &amp; Trade Rate Trend</h3>
+                <h3>DI SCORE &amp; TRADE RATE TREND</h3>
                 <div class="di-chart-wrap">
                     <canvas id="di-score-trend" height="220"></canvas>
                 </div>
@@ -1070,13 +1060,13 @@
             <!-- ─── Two-Column: Calibration + Category Rank ─────── -->
             <div class="di-two-col-row">
                 <div class="di-calibration-section">
-                    <h3>🎯 Confidence Calibration</h3>
+                    <h3>CONFIDENCE CALIBRATION</h3>
                     <div id="di-calibration">
                         <div class="empty-state" style="padding:20px 0;">No calibration data yet.</div>
                     </div>
                 </div>
                 <div class="di-category-rank-section">
-                    <h3>🏆 Category Performance Ranking</h3>
+                    <h3>CATEGORY PERFORMANCE RANKING</h3>
                     <div id="di-category-rank">
                         <div class="empty-state" style="padding:20px 0;">No category data yet.</div>
                     </div>
@@ -1086,7 +1076,7 @@
             <!-- ─── Trade Outcomes ──────────────────────────────── -->
             <div class="di-outcomes-section">
                 <div class="di-section-header">
-                    <h3>🎯 Trade Outcomes</h3>
+                    <h3>TRADE OUTCOMES</h3>
                     <span class="di-badge" id="di-outcomes-count">0</span>
                 </div>
                 <div class="di-outcomes-grid" id="di-outcomes-list">
@@ -1096,7 +1086,7 @@
 
             <!-- ─── Research ROI ────────────────────────────────── -->
             <div class="di-research-roi-section">
-                <h3>📚 Research Quality ROI</h3>
+                <h3>RESEARCH QUALITY ROI</h3>
                 <div id="di-research-roi">
                     <div class="empty-state" style="padding:20px 0;">No research ROI data yet.</div>
                 </div>
@@ -1105,7 +1095,7 @@
             <!-- ─── Missed Opportunities ────────────────────────── -->
             <div class="di-missed-section">
                 <div class="di-section-header">
-                    <h3>🔍 Missed Opportunities</h3>
+                    <h3>MISSED OPPORTUNITIES</h3>
                     <span class="di-badge di-badge-warn" id="di-missed-count">0</span>
                 </div>
                 <div class="di-missed-grid" id="di-missed-opps">
@@ -1115,15 +1105,15 @@
 
             <!-- ─── Enhanced Filter Bar ─────────────────────────── -->
             <div class="di-filter-bar">
-                <input type="text" class="di-search" id="di-search" placeholder="🔍 Search markets, questions…" oninput="filterDecisionCards()">
+                <input type="text" class="di-search" id="di-search" placeholder="Search markets, questions..." oninput="filterDecisionCards()">
                 <select id="decision-cycle-filter" class="di-select" onchange="updateDecisionLog()">
                     <option value="">All Cycles</option>
                 </select>
                 <select id="decision-filter" class="di-select" onchange="filterDecisionCards()">
                     <option value="">All Decisions</option>
-                    <option value="TRADE">✅ Trade</option>
-                    <option value="NO TRADE">❌ No Trade</option>
-                    <option value="SKIP">⏭️ Skip</option>
+                    <option value="TRADE">Trade</option>
+                    <option value="NO TRADE">No Trade</option>
+                    <option value="SKIP">Skip</option>
                 </select>
                 <select id="di-grade-filter" class="di-select" onchange="filterDecisionCards()">
                     <option value="">All Grades</option>
@@ -1156,7 +1146,7 @@
             <!-- ─── Header Toolbar ──────────────────────────────── -->
             <div class="sw-toolbar">
                 <div class="sw-toolbar-left">
-                    <h2 class="sw-title">🎯 Strategies & Wallets</h2>
+                    <h2 class="sw-title">STRATEGIES & WALLETS</h2>
                     <span class="sw-pulse" id="sw-pulse">● LIVE</span>
                 </div>
                 <div class="sw-toolbar-right">
@@ -1168,32 +1158,32 @@
             <!-- ─── Summary KPIs ────────────────────────────────── -->
             <div class="sw-kpi-row" id="sw-kpi-row">
                 <div class="sw-kpi-card">
-                    <div class="sw-kpi-icon">💰</div>
+                    <div class="sw-kpi-icon">BAL</div>
                     <div class="sw-kpi-val" id="sw-kpi-balance">$0</div>
                     <div class="sw-kpi-label">Total Balance</div>
                 </div>
                 <div class="sw-kpi-card sw-kpi-green">
-                    <div class="sw-kpi-icon">📈</div>
+                    <div class="sw-kpi-icon">P&L</div>
                     <div class="sw-kpi-val" id="sw-kpi-pnl">$0</div>
                     <div class="sw-kpi-label">Total P&L</div>
                 </div>
                 <div class="sw-kpi-card sw-kpi-blue">
-                    <div class="sw-kpi-icon">📄</div>
+                    <div class="sw-kpi-icon">PPR</div>
                     <div class="sw-kpi-val" id="sw-kpi-paper">0</div>
                     <div class="sw-kpi-label">Paper Wallets</div>
                 </div>
                 <div class="sw-kpi-card sw-kpi-purple">
-                    <div class="sw-kpi-icon">🔑</div>
+                    <div class="sw-kpi-icon">LIV</div>
                     <div class="sw-kpi-val" id="sw-kpi-live">0</div>
                     <div class="sw-kpi-label">Live Wallets</div>
                 </div>
                 <div class="sw-kpi-card sw-kpi-orange">
-                    <div class="sw-kpi-icon">🤖</div>
+                    <div class="sw-kpi-icon">STR</div>
                     <div class="sw-kpi-val" id="sw-kpi-strategies">0</div>
                     <div class="sw-kpi-label">Active Strategies</div>
                 </div>
                 <div class="sw-kpi-card sw-kpi-teal">
-                    <div class="sw-kpi-icon">📊</div>
+                    <div class="sw-kpi-icon">TRD</div>
                     <div class="sw-kpi-val" id="sw-kpi-trades">0</div>
                     <div class="sw-kpi-label">Total Trades</div>
                 </div>
@@ -1202,12 +1192,12 @@
             <!-- ─── Wallets Section ─────────────────────────────── -->
             <div class="sw-section">
                 <div class="sw-section-header">
-                    <h3>💰 Wallets</h3>
+                    <h3>WALLETS</h3>
                     <div class="sw-section-controls">
                         <select id="sw-wallet-filter" class="sw-select" onchange="filterWalletCards()">
                             <option value="">All Wallets</option>
-                            <option value="paper">📄 Paper</option>
-                            <option value="live">🔑 Live</option>
+                            <option value="paper">Paper</option>
+                            <option value="live">Live</option>
                         </select>
                     </div>
                 </div>
@@ -1219,7 +1209,7 @@
             <!-- ─── Strategies Section ──────────────────────────── -->
             <div class="sw-section">
                 <div class="sw-section-header">
-                    <h3>🤖 Strategies</h3>
+                    <h3>STRATEGIES</h3>
                 </div>
                 <div class="sw-strategy-grid" id="sw-strategy-grid">
                     <div class="empty-state" style="padding:30px 0;">Loading strategies…</div>
@@ -1229,7 +1219,7 @@
             <!-- ─── Wallet Performance Detail ───────────────────── -->
             <div class="sw-section" id="sw-perf-section" style="display:none;">
                 <div class="sw-section-header">
-                    <h3 id="sw-perf-title">📊 Wallet Performance</h3>
+                    <h3 id="sw-perf-title">WALLET PERFORMANCE</h3>
                     <button class="sw-btn sw-btn-sm" onclick="closePerfPanel()">✕ Close</button>
                 </div>
                 <div class="sw-perf-kpis" id="sw-perf-kpis"></div>
@@ -1245,7 +1235,7 @@
         <div class="modal-overlay" id="modal-create-wallet" style="display:none;">
             <div class="modal-content sw-modal">
                 <div class="modal-header">
-                    <h3>💰 Create New Wallet</h3>
+                    <h3>CREATE NEW WALLET</h3>
                     <button class="modal-close" onclick="closeSWModal('modal-create-wallet')">✕</button>
                 </div>
                 <div class="modal-body">
@@ -1256,8 +1246,8 @@
                     <div class="sw-form-group">
                         <label>Type</label>
                         <div class="sw-type-toggle">
-                            <button class="sw-type-btn active" data-type="paper" onclick="selectWalletType('paper')">📄 Paper Trading</button>
-                            <button class="sw-type-btn" data-type="live" onclick="selectWalletType('live')">🔑 Live Wallet</button>
+                            <button class="sw-type-btn active" data-type="paper" onclick="selectWalletType('paper')">Paper Trading</button>
+                            <button class="sw-type-btn" data-type="live" onclick="selectWalletType('live')">Live Wallet</button>
                         </div>
                     </div>
                     <div class="sw-form-group" id="sw-address-group" style="display:none;">
@@ -1295,7 +1285,7 @@
         <div class="modal-overlay" id="modal-create-strategy" style="display:none;">
             <div class="modal-content sw-modal">
                 <div class="modal-header">
-                    <h3>🤖 Create New Strategy</h3>
+                    <h3>CREATE NEW STRATEGY</h3>
                     <button class="modal-close" onclick="closeSWModal('modal-create-strategy')">✕</button>
                 </div>
                 <div class="modal-body">
@@ -1306,21 +1296,21 @@
                     <div class="sw-form-group">
                         <label>Strategy Type</label>
                         <select id="sw-new-strat-type" class="sw-select-full">
-                            <option value="ai_trading">🤖 AI Trading — Automated AI-powered ensemble forecasting</option>
-                            <option value="manual">🎯 Manual — User-directed manual trades</option>
-                            <option value="momentum">🚀 Momentum — Follow price trends and whale activity</option>
-                            <option value="mean_reversion">📉 Mean Reversion — Bet on prices returning to fair value</option>
-                            <option value="whale_follow">🐋 Whale Follow — Mirror smart-money whale positions</option>
-                            <option value="arbitrage">⚖️ Arbitrage — Exploit price discrepancies across markets</option>
-                            <option value="custom">🔧 Custom — User-defined custom strategy</option>
+                            <option value="ai_trading">AI Trading -- Automated AI-powered ensemble forecasting</option>
+                            <option value="manual">Manual -- User-directed manual trades</option>
+                            <option value="momentum">Momentum -- Follow price trends and whale activity</option>
+                            <option value="mean_reversion">Mean Reversion -- Bet on prices returning to fair value</option>
+                            <option value="whale_follow">Whale Follow -- Mirror smart-money whale positions</option>
+                            <option value="arbitrage">Arbitrage -- Exploit price discrepancies across markets</option>
+                            <option value="custom">Custom -- User-defined custom strategy</option>
                         </select>
                     </div>
                     <div class="sw-form-group">
                         <label>Risk Profile</label>
                         <div class="sw-risk-toggle">
-                            <button class="sw-risk-btn" data-risk="conservative" onclick="selectRiskProfile('conservative')">🛡️ Conservative</button>
-                            <button class="sw-risk-btn active" data-risk="moderate" onclick="selectRiskProfile('moderate')">⚖️ Moderate</button>
-                            <button class="sw-risk-btn" data-risk="aggressive" onclick="selectRiskProfile('aggressive')">🔥 Aggressive</button>
+                            <button class="sw-risk-btn" data-risk="conservative" onclick="selectRiskProfile('conservative')">Conservative</button>
+                            <button class="sw-risk-btn active" data-risk="moderate" onclick="selectRiskProfile('moderate')">Moderate</button>
+                            <button class="sw-risk-btn" data-risk="aggressive" onclick="selectRiskProfile('aggressive')">Aggressive</button>
                         </div>
                     </div>
                     <div class="sw-form-group">
@@ -1348,7 +1338,7 @@
         <div class="modal-overlay" id="modal-assign-strategy" style="display:none;">
             <div class="modal-content sw-modal">
                 <div class="modal-header">
-                    <h3>🔗 Assign Strategy to Wallet</h3>
+                    <h3>ASSIGN STRATEGY TO WALLET</h3>
                     <button class="modal-close" onclick="closeSWModal('modal-assign-strategy')">✕</button>
                 </div>
                 <div class="modal-body">
@@ -1379,7 +1369,7 @@
 
         <!-- ─── Portfolio VaR ─────────────────────────────────── -->
         <section class="card" style="margin-bottom:16px;">
-            <h2>📉 Portfolio Value-at-Risk</h2>
+            <h2>PORTFOLIO VALUE-AT-RISK</h2>
             <div class="kpi-grid" style="grid-template-columns: repeat(4,1fr);">
                 <div class="kpi-card"><div class="kpi-label">VaR 95%</div><div class="kpi-value" id="var-95">$0.00</div></div>
                 <div class="kpi-card"><div class="kpi-label">VaR 99%</div><div class="kpi-value" id="var-99">$0.00</div></div>
@@ -1390,7 +1380,7 @@
 
         <!-- ─── Equity Snapshots Chart ────────────────────────── -->
         <section class="card" style="margin-bottom:16px;">
-            <h2>📈 Equity Timeline (5-min snapshots)</h2>
+            <h2>EQUITY TIMELINE</h2>
             <div class="chart-container">
                 <canvas id="equity-snapshots-chart"></canvas>
             </div>
@@ -1398,7 +1388,7 @@
 
         <!-- ─── Market Watchlist ──────────────────────────────── -->
         <section class="card" style="margin-bottom:16px;">
-            <h2>👁️ Market Watchlist</h2>
+            <h2>MARKET WATCHLIST</h2>
             <div class="watchlist-actions">
                 <input type="text" id="watchlist-market-id" placeholder="Market ID (condition_id)">
                 <input type="text" id="watchlist-question" placeholder="Market question / name">
@@ -1412,7 +1402,7 @@
 
         <!-- ─── Trade Journal ─────────────────────────────────── -->
         <section class="card">
-            <h2>📓 Trade Journal</h2>
+            <h2>TRADE JOURNAL</h2>
             <div id="journal-entries">
                 <p style="text-align:center;color:var(--text-muted);padding:24px 0;">No journal entries yet. Entries are auto-created when trades close.</p>
             </div>
@@ -1440,20 +1430,20 @@
                 <div class="health-gauge-label">System Health</div>
             </div>
             <div class="admin-quick-actions">
-                <button class="btn btn-sm btn-action" onclick="refreshAdminPanel()" title="Refresh all admin data">🔄 Refresh</button>
-                <button class="btn btn-sm btn-action" onclick="adminBackupDB()" title="Create database backup">💾 Backup DB</button>
-                <button class="btn btn-sm btn-action" onclick="adminVacuumDB()" title="Compact the database">🗜️ Vacuum</button>
-                <button class="btn btn-sm btn-action" onclick="adminClearCache()" title="Clear in-memory cache">🗑️ Clear Cache</button>
-                <button class="btn btn-sm btn-action" onclick="adminRotateLogs()" title="Rotate log files">📜 Rotate Logs</button>
-                <button class="btn btn-sm btn-action" onclick="adminResetMetrics()" title="Reset metric counters">📊 Reset Metrics</button>
-                <button class="btn btn-sm btn-action" onclick="adminTestAlert()" title="Send test alert">🔔 Test Alert</button>
+                <button class="btn btn-sm btn-action" onclick="refreshAdminPanel()" title="Refresh all admin data">Refresh</button>
+                <button class="btn btn-sm btn-action" onclick="adminBackupDB()" title="Create database backup">Backup DB</button>
+                <button class="btn btn-sm btn-action" onclick="adminVacuumDB()" title="Compact the database">Vacuum</button>
+                <button class="btn btn-sm btn-action" onclick="adminClearCache()" title="Clear in-memory cache">Clear Cache</button>
+                <button class="btn btn-sm btn-action" onclick="adminRotateLogs()" title="Rotate log files">Rotate Logs</button>
+                <button class="btn btn-sm btn-action" onclick="adminResetMetrics()" title="Reset metric counters">Reset Metrics</button>
+                <button class="btn btn-sm btn-action" onclick="adminTestAlert()" title="Send test alert">Test Alert</button>
             </div>
         </section>
 
         <!-- ─── Health Issues ───────────────────────────────────── -->
         <section class="admin-health-issues" id="admin-health-issues" style="display:none;">
             <div class="panel" style="border-left: 3px solid var(--accent-orange);">
-                <div class="panel-header"><h2>⚠️ Health Issues</h2></div>
+                <div class="panel-header"><h2>HEALTH ISSUES</h2></div>
                 <div id="admin-issues-list"></div>
             </div>
         </section>
@@ -1505,7 +1495,7 @@
         <!-- ─── Cycle Performance Chart ─────────────────────────── -->
         <section class="panel">
             <div class="panel-header">
-                <h2>📉 Cycle Performance</h2>
+                <h2>CYCLE PERFORMANCE</h2>
                 <div class="panel-tools">
                     <span class="badge badge-paper" id="admin-cycle-stats">—</span>
                 </div>
@@ -1518,7 +1508,7 @@
         <!-- ─── Engine Health ───────────────────────────────────── -->
         <section class="panel">
             <div class="panel-header">
-                <h2>🏥 Engine Health</h2>
+                <h2>ENGINE HEALTH</h2>
                 <div class="panel-tools">
                     <span class="badge" id="admin-engine-badge">—</span>
                 </div>
@@ -1553,7 +1543,7 @@
 
         <!-- ─── Risk Monitor (from System) ──────────────────────── -->
         <section class="panel">
-            <h2>⚠️ Risk Monitor</h2>
+            <h2>RISK MONITOR</h2>
             <div class="risk-grid" id="risk-grid">
                 <div class="risk-item">
                     <div class="risk-label">Daily Exposure</div>
@@ -1589,10 +1579,10 @@
         <!-- ─── API Keys & Credentials ──────────────────────────── -->
         <section class="panel">
             <div class="panel-header">
-                <h2>🔑 API Keys & Credentials</h2>
+                <h2>API KEYS & CREDENTIALS</h2>
                 <div class="panel-tools">
                     <span class="badge badge-paper" id="admin-keys-badge">0 / 0 configured</span>
-                    <button class="btn btn-sm btn-save" onclick="saveAllEnvVars()" title="Save all key changes">💾 Save Keys</button>
+                    <button class="btn btn-sm btn-save" onclick="saveAllEnvVars()" title="Save all key changes">Save Keys</button>
                 </div>
             </div>
             <p class="config-hint">Enter your API keys below. Values are stored in <code>.env</code> and loaded at runtime. Some changes require an engine restart.</p>
@@ -1605,7 +1595,7 @@
         <!-- ─── Feature Flags ───────────────────────────────────── -->
         <section class="panel">
             <div class="panel-header">
-                <h2>🚩 Feature Flags</h2>
+                <h2>FEATURE FLAGS</h2>
                 <div class="panel-tools">
                     <span style="font-size:0.72rem;color:var(--text-dim);">Click toggles to change — saves immediately</span>
                 </div>
@@ -1619,11 +1609,11 @@
         <!-- ─── Full Configuration Editor ───────────────────────── -->
         <section class="panel">
             <div class="panel-header">
-                <h2>📋 All Configuration</h2>
+                <h2>ALL CONFIGURATION</h2>
                 <div class="panel-tools">
-                    <button class="btn btn-sm btn-action" onclick="reloadConfigForSettings()">🔄 Reload</button>
-                    <button class="btn btn-sm btn-save" onclick="saveAllConfig()">💾 Save All</button>
-                    <button class="btn btn-sm btn-danger" onclick="confirmResetConfig()">🔃 Reset Defaults</button>
+                    <button class="btn btn-sm btn-action" onclick="reloadConfigForSettings()">Reload</button>
+                    <button class="btn btn-sm btn-save" onclick="saveAllConfig()">Save All</button>
+                    <button class="btn btn-sm btn-danger" onclick="confirmResetConfig()">Reset Defaults</button>
                 </div>
             </div>
             <p class="config-hint">Edit any value and click <strong>Save</strong> to persist to config.yaml. Changes take effect immediately.</p>
@@ -1639,7 +1629,7 @@
         <!-- ─── LLM & API Cost Tracker ──────────────────────────── -->
         <section class="panel">
             <div class="panel-header">
-                <h2>💰 API Usage & Cost Tracker</h2>
+                <h2>API USAGE & COST TRACKER</h2>
             </div>
             <div class="card-grid" id="admin-cost-cards">
                 <div class="card accent-blue">
@@ -1672,7 +1662,7 @@
         <!-- ─── Rate Limiter Stats ──────────────────────────────── -->
         <section class="panel">
             <div class="panel-header">
-                <h2>⏱️ Rate Limiter</h2>
+                <h2>RATE LIMITER</h2>
             </div>
             <div class="table-wrap">
                 <table id="admin-rate-table">
@@ -1689,7 +1679,7 @@
         <!-- ─── Trading Activity Summary ────────────────────────── -->
         <section class="panel">
             <div class="panel-header">
-                <h2>📊 Trading Activity Summary</h2>
+                <h2>TRADING ACTIVITY SUMMARY</h2>
             </div>
             <div class="admin-health-grid" id="admin-trading-summary">
                 <div class="admin-health-item">
@@ -1724,9 +1714,9 @@
         <!-- ─── Audit Trail (from System) ───────────────────────── -->
         <section class="panel">
             <div class="panel-header">
-                <h2>🔒 Audit Trail</h2>
+                <h2>AUDIT TRAIL</h2>
                 <div class="panel-tools">
-                    <input type="text" class="search-input" placeholder="🔍 Filter audit..." oninput="filterTable('audit-body', this.value)">
+                    <input type="text" class="search-input" placeholder="Filter audit..." oninput="filterTable('audit-body', this.value)">
                 </div>
             </div>
             <div class="table-wrap">
@@ -1744,7 +1734,7 @@
 
         <!-- ─── Alerts Table (from System) ──────────────────────── -->
         <section class="panel">
-            <h2>🔔 Alerts Table</h2>
+            <h2>ALERTS TABLE</h2>
             <div class="table-wrap">
                 <table id="alerts-table">
                     <thead><tr>
@@ -1760,10 +1750,10 @@
         <!-- ─── Database Tables ─────────────────────────────────── -->
         <section class="panel">
             <div class="panel-header">
-                <h2>🗄️ Database Tables</h2>
+                <h2>DATABASE TABLES</h2>
                 <div class="panel-tools">
-                    <button class="btn btn-muted btn-sm" onclick="adminVacuumDB()">🗜️ Vacuum DB</button>
-                    <button class="btn btn-muted btn-sm" onclick="adminClearCache()">🗑️ Clear Cache</button>
+                    <button class="btn btn-muted btn-sm" onclick="adminVacuumDB()">Vacuum DB</button>
+                    <button class="btn btn-muted btn-sm" onclick="adminClearCache()">Clear Cache</button>
                 </div>
             </div>
             <div class="table-wrap">
@@ -1783,7 +1773,7 @@
         <!-- ─── Storage Breakdown ───────────────────────────────── -->
         <section class="panel">
             <div class="panel-header">
-                <h2>💿 Storage Breakdown</h2>
+                <h2>STORAGE BREAKDOWN</h2>
             </div>
             <div class="admin-storage-grid" id="admin-storage-grid"></div>
         </section>
@@ -1791,9 +1781,9 @@
         <!-- ─── Internal Metrics ────────────────────────────────── -->
         <section class="panel">
             <div class="panel-header">
-                <h2>📈 Internal Metrics</h2>
+                <h2>INTERNAL METRICS</h2>
                 <div class="panel-tools">
-                    <button class="btn btn-muted btn-sm" onclick="adminResetMetrics()">🔄 Reset</button>
+                    <button class="btn btn-muted btn-sm" onclick="adminResetMetrics()">Reset</button>
                 </div>
             </div>
             <div class="admin-metrics-section">
@@ -1813,7 +1803,7 @@
         <!-- ─── Recent Alerts Feed ──────────────────────────────── -->
         <section class="panel">
             <div class="panel-header">
-                <h2>🔔 Recent Alerts</h2>
+                <h2>RECENT ALERTS</h2>
                 <div class="panel-tools">
                     <select id="admin-alert-filter" class="admin-select" onchange="filterAdminAlerts()">
                         <option value="all">All Levels</option>
@@ -1832,7 +1822,7 @@
         <!-- ─── System Information ──────────────────────────────── -->
         <section class="panel">
             <div class="panel-header">
-                <h2>💻 System Information</h2>
+                <h2>SYSTEM INFORMATION</h2>
             </div>
             <div class="admin-health-grid" id="admin-sys-info">
                 <div class="admin-health-item">
@@ -1881,9 +1871,9 @@
         <!-- ─── Backup Files ────────────────────────────────────── -->
         <section class="panel">
             <div class="panel-header">
-                <h2>💾 Backup Files</h2>
+                <h2>BACKUP FILES</h2>
                 <div class="panel-tools">
-                    <button class="btn btn-muted btn-sm" onclick="adminBackupDB()">➕ Create Backup</button>
+                    <button class="btn btn-muted btn-sm" onclick="adminBackupDB()">CREATE BACKUP</button>
                 </div>
             </div>
             <div class="table-wrap">
@@ -1901,7 +1891,7 @@
         <!-- ─── Recent Log Tail ─────────────────────────────────── -->
         <section class="panel">
             <div class="panel-header">
-                <h2>📜 Recent Log Output</h2>
+                <h2>RECENT LOG OUTPUT</h2>
                 <div class="panel-tools">
                     <select id="admin-log-lines-select" class="admin-select" onchange="refreshLogTail()">
                         <option value="50">50 lines</option>
@@ -1909,7 +1899,7 @@
                         <option value="200">200 lines</option>
                         <option value="500">500 lines</option>
                     </select>
-                    <button class="btn btn-muted btn-sm" onclick="refreshLogTail()">🔄 Refresh</button>
+                    <button class="btn btn-muted btn-sm" onclick="refreshLogTail()">REFRESH</button>
                 </div>
             </div>
             <div class="admin-log-stats" id="admin-log-stats"></div>
@@ -1921,7 +1911,7 @@
         <!-- ─── Danger Zone ─────────────────────────────────────── -->
         <section class="panel admin-danger-zone">
             <div class="panel-header">
-                <h2>⛔ Danger Zone</h2>
+                <h2>DANGER ZONE</h2>
             </div>
             <p class="admin-danger-warning">These actions are destructive and cannot be undone. Proceed with extreme caution.</p>
             <div class="admin-danger-grid">
@@ -1930,21 +1920,21 @@
                         <strong>Purge Old Data</strong>
                         <span>Delete candidates, alerts, and model logs older than 30 days</span>
                     </div>
-                    <button class="btn btn-danger btn-sm" onclick="adminPurgeOld()">🗑️ Purge</button>
+                    <button class="btn btn-danger btn-sm" onclick="adminPurgeOld()">PURGE</button>
                 </div>
                 <div class="admin-danger-card">
                     <div class="admin-danger-info">
                         <strong>Rotate Log Files</strong>
                         <span>Archive current log and start fresh</span>
                     </div>
-                    <button class="btn btn-danger btn-sm" onclick="adminRotateLogs()">📜 Rotate</button>
+                    <button class="btn btn-danger btn-sm" onclick="adminRotateLogs()">ROTATE</button>
                 </div>
                 <div class="admin-danger-card">
                     <div class="admin-danger-info">
                         <strong>Reset All Metrics</strong>
                         <span>Clear all in-memory counters, gauges, and histograms</span>
                     </div>
-                    <button class="btn btn-danger btn-sm" onclick="adminResetMetrics()">📊 Reset</button>
+                    <button class="btn btn-danger btn-sm" onclick="adminResetMetrics()">RESET</button>
                 </div>
             </div>
         </section>
@@ -2097,32 +2087,32 @@
                     <h3>Key Capabilities</h3>
                     <div class="docs-feature-grid">
                         <div class="docs-feature-card">
-                            <div class="docs-feature-icon">🔍</div>
+                            <div class="docs-feature-icon">SRC</div>
                             <h4>Market Discovery</h4>
                             <p>Auto-scans Polymarket's Gamma API for markets matching volume, liquidity, spread, and category filters.</p>
                         </div>
                         <div class="docs-feature-card">
-                            <div class="docs-feature-icon">📚</div>
+                            <div class="docs-feature-icon">RES</div>
                             <h4>Evidence-Based Research</h4>
                             <p>Fetches sources from whitelisted authoritative domains (bls.gov, sec.gov, etc.) with LLM-powered evidence extraction.</p>
                         </div>
                         <div class="docs-feature-card">
-                            <div class="docs-feature-icon">🧠</div>
+                            <div class="docs-feature-icon">AI</div>
                             <h4>Multi-Model Ensemble</h4>
                             <p>Queries GPT-4o, Claude 3.5 Sonnet, and Gemini 1.5 Pro in parallel with adaptive weighting and Platt calibration.</p>
                         </div>
                         <div class="docs-feature-card">
-                            <div class="docs-feature-icon">🛡️</div>
+                            <div class="docs-feature-icon">RSK</div>
                             <h4>15-Check Risk Engine</h4>
                             <p>Kill switch, drawdown management, portfolio limits, min edge, evidence quality gates, and more. ALL must pass.</p>
                         </div>
                         <div class="docs-feature-card">
-                            <div class="docs-feature-icon">📐</div>
+                            <div class="docs-feature-icon">KEL</div>
                             <h4>Kelly Position Sizing</h4>
                             <p>Fractional Kelly criterion with confidence scaling, drawdown heat multiplier, and liquidity-aware caps.</p>
                         </div>
                         <div class="docs-feature-card">
-                            <div class="docs-feature-icon">🐋</div>
+                            <div class="docs-feature-icon">WHL</div>
                             <h4>Whale Tracking</h4>
                             <p>Monitors top Polymarket leaderboard wallets for smart-money conviction signals to boost or penalize edge.</p>
                         </div>
@@ -2684,9 +2674,9 @@
                     <table class="docs-table">
                         <thead><tr><th>Strength</th><th>Score Range</th><th>Dashboard Badge</th></tr></thead>
                         <tbody>
-                            <tr><td>🟢 <strong>STRONG</strong></td><td>≥70</td><td>Green pill — highest confidence signals</td></tr>
-                            <tr><td>🟡 <strong>MODERATE</strong></td><td>45-69</td><td>Orange pill — worth monitoring</td></tr>
-                            <tr><td>⚪ <strong>WEAK</strong></td><td>30-44</td><td>Gray pill — low confidence</td></tr>
+                            <tr><td><strong>STRONG</strong></td><td>≥70</td><td>Green pill — highest confidence signals</td></tr>
+                            <tr><td><strong>MODERATE</strong></td><td>45-69</td><td>Orange pill — worth monitoring</td></tr>
+                            <tr><td><strong>WEAK</strong></td><td>30-44</td><td>Gray pill — low confidence</td></tr>
                         </tbody>
                     </table>
 
@@ -2706,10 +2696,10 @@
                     <table class="docs-table">
                         <thead><tr><th>Tier</th><th>P&amp;L Threshold</th><th>Icon</th></tr></thead>
                         <tbody>
-                            <tr><td>👑 <strong>LEGENDARY</strong></td><td>≥$2M</td><td>Gold crown</td></tr>
-                            <tr><td>💎 <strong>ELITE</strong></td><td>≥$1M</td><td>Purple diamond</td></tr>
-                            <tr><td>⭐ <strong>PRO</strong></td><td>≥$500K</td><td>Blue star</td></tr>
-                            <tr><td>🌱 <strong>RISING</strong></td><td>&lt;$500K</td><td>Green seedling</td></tr>
+                            <tr><td><strong>LEGENDARY</strong></td><td>≥$2M</td><td>Gold crown</td></tr>
+                            <tr><td><strong>ELITE</strong></td><td>≥$1M</td><td>Purple diamond</td></tr>
+                            <tr><td><strong>PRO</strong></td><td>≥$500K</td><td>Blue star</td></tr>
+                            <tr><td><strong>RISING</strong></td><td>&lt;$500K</td><td>Green seedling</td></tr>
                         </tbody>
                     </table>
 
@@ -2718,10 +2708,10 @@
                     <table class="docs-table">
                         <thead><tr><th>Action</th><th>Trigger</th><th>Feed Icon</th></tr></thead>
                         <tbody>
-                            <tr><td><strong>NEW_ENTRY</strong></td><td>Position appears for first time</td><td>🟢</td></tr>
-                            <tr><td><strong>EXIT</strong></td><td>Position disappears from snapshot</td><td>🔴</td></tr>
-                            <tr><td><strong>SIZE_INCREASE</strong></td><td>Position size grows &gt;10%</td><td>📈</td></tr>
-                            <tr><td><strong>SIZE_DECREASE</strong></td><td>Position size shrinks &gt;10%</td><td>📉</td></tr>
+                            <tr><td><strong>NEW_ENTRY</strong></td><td>Position appears for first time</td><td>+</td></tr>
+                            <tr><td><strong>EXIT</strong></td><td>Position disappears from snapshot</td><td>−</td></tr>
+                            <tr><td><strong>SIZE_INCREASE</strong></td><td>Position size grows &gt;10%</td><td>UP</td></tr>
+                            <tr><td><strong>SIZE_DECREASE</strong></td><td>Position size shrinks &gt;10%</td><td>DN</td></tr>
                         </tbody>
                     </table>
 
@@ -2804,7 +2794,7 @@
                     <p>Returns: <code>entries</code> (decision records with id, market_id, decision, stage, details, integrity_hash, timestamp), <code>summary</code> (total, by_stage breakdown, by_decision breakdown, recent_rate).</p>
 
                     <h3>Data Integrity</h3>
-                    <p>Each decision entry includes a SHA-256 <code>integrity_hash</code> computed from the decision data, ensuring the audit trail cannot be tampered with. The dashboard shows a ✅ indicator for verified entries.</p>
+                    <p>Each decision entry includes a SHA-256 <code>integrity_hash</code> computed from the decision data, ensuring the audit trail cannot be tampered with. The dashboard shows a verified indicator.</p>
                 </section>
 
                 <!-- ── STRATEGIES & WALLETS ──────────────────────── -->
@@ -3172,11 +3162,11 @@ ruff check src/ tests/                   # Linting</pre>
 
             <!-- Tabs -->
             <div class="wm-tabs">
-                <button class="wm-tab active" onclick="switchWhaleProfileTab('overview')">📊 Overview</button>
-                <button class="wm-tab" onclick="switchWhaleProfileTab('positions')">🎯 Positions</button>
-                <button class="wm-tab" onclick="switchWhaleProfileTab('activity')">📡 Activity</button>
-                <button class="wm-tab" onclick="switchWhaleProfileTab('backtest')">📈 Back-Analysis</button>
-                <button class="wm-tab" onclick="switchWhaleProfileTab('mentor')">🤖 Strategy Mentor</button>
+                <button class="wm-tab active" onclick="switchWhaleProfileTab('overview')">Overview</button>
+                <button class="wm-tab" onclick="switchWhaleProfileTab('positions')">Positions</button>
+                <button class="wm-tab" onclick="switchWhaleProfileTab('activity')">Activity</button>
+                <button class="wm-tab" onclick="switchWhaleProfileTab('backtest')">Back-Analysis</button>
+                <button class="wm-tab" onclick="switchWhaleProfileTab('mentor')">Strategy Mentor</button>
             </div>
 
             <!-- Tab: Overview -->
@@ -3186,16 +3176,16 @@ ruff check src/ tests/                   # Linting</pre>
                 <div class="wm-card wm-live-stats-card" id="wm-whale-live-stats" style="display:none;"></div>
                 <div class="wm-two-col">
                     <div class="wm-card">
-                        <h3>🎯 Direction Split</h3>
+                        <h3>DIRECTION SPLIT</h3>
                         <div class="wm-direction-bar" id="wm-whale-direction"></div>
                     </div>
                     <div class="wm-card">
-                        <h3>🏷️ Category Distribution</h3>
+                        <h3>CATEGORY DISTRIBUTION</h3>
                         <div id="wm-whale-categories"></div>
                     </div>
                 </div>
                 <div class="wm-card">
-                    <h3>🏔️ Top Markets</h3>
+                    <h3>TOP MARKETS</h3>
                     <div id="wm-whale-top-markets"></div>
                 </div>
             </div>
@@ -3227,7 +3217,7 @@ ruff check src/ tests/                   # Linting</pre>
                 <div class="wm-mentor-wrap">
                     <div class="wm-mentor-messages" id="wm-mentor-messages">
                         <div class="wm-mentor-welcome">
-                            <div class="wm-mentor-avatar">🤖</div>
+                            <div class="wm-mentor-avatar">AI</div>
                             <p>I'm your <strong>Strategy Mentor</strong>. I can analyze this whale's trading patterns, identify strategies, and provide actionable insights.</p>
                             <p class="wm-mentor-suggestions">Try asking:</p>
                             <div class="wm-mentor-chips">
@@ -3240,8 +3230,8 @@ ruff check src/ tests/                   # Linting</pre>
                     </div>
                     <div class="wm-mentor-input-row">
                         <input type="text" class="wm-mentor-input" id="wm-mentor-input" placeholder="Ask the Strategy Mentor…" onkeydown="if(event.key==='Enter')sendMentorMessage()">
-                        <button class="wm-mentor-send" onclick="sendMentorMessage()">Send ➤</button>
-                        <button class="wm-mentor-clear" onclick="clearMentorChat()" title="Clear history">🗑️</button>
+                        <button class="wm-mentor-send" onclick="sendMentorMessage()">SEND</button>
+                        <button class="wm-mentor-clear" onclick="clearMentorChat()" title="Clear history">CLR</button>
                     </div>
                 </div>
             </div>
@@ -3259,7 +3249,7 @@ ruff check src/ tests/                   # Linting</pre>
             <div class="wm-market-link-row" id="wm-market-links"></div>
             <div class="wm-kpi-row" id="wm-market-kpis"></div>
             <div class="wm-card">
-                <h3>🐋 Whale Signals</h3>
+                <h3>WHALE SIGNALS</h3>
                 <div class="wm-table-scroll">
                     <table class="wm-table">
                         <thead><tr><th>Outcome</th><th>Whales</th><th>Capital</th><th>Conviction</th><th>Direction</th><th>Price</th></tr></thead>
@@ -3268,7 +3258,7 @@ ruff check src/ tests/                   # Linting</pre>
                 </div>
             </div>
             <div class="wm-card">
-                <h3>📡 Recent Activity</h3>
+                <h3>RECENT ACTIVITY</h3>
                 <div class="wm-feed" id="wm-market-activity-feed"></div>
             </div>
         </div>
@@ -3276,7 +3266,7 @@ ruff check src/ tests/                   # Linting</pre>
         <!-- ─── Activity Detail Modal ───────────────────────── -->
         <div class="wm-modal wm-modal-small" id="wm-activity-detail" onclick="event.stopPropagation()">
             <div class="wm-header">
-                <h2>📡 Activity Detail</h2>
+                <h2>ACTIVITY DETAIL</h2>
                 <button class="wm-close" onclick="closeWhaleModal()">&times;</button>
             </div>
             <div id="wm-activity-content"></div>
@@ -3285,5 +3275,14 @@ ruff check src/ tests/                   # Linting</pre>
     </div>
 
     <script src="/static/dashboard.js?v=38"></script>
+<div class="status-bar">
+    <span class="status-bar-item"><span class="status-bar-dot" id="status-dot"></span>
+        <span id="status-bar-engine">ENGINE: OFF</span></span>
+    <span id="status-bar-mode">MODE: PAPER</span>
+    <span id="status-bar-time">--:--:--</span>
+    <span id="status-bar-bankroll">BANKROLL: $0.00</span>
+    <span id="status-bar-pnl">P&amp;L: $0.00</span>
+    <span style="margin-left:auto;" id="status-bar-positions">POSITIONS: 0</span>
+</div>
 </body>
 </html>

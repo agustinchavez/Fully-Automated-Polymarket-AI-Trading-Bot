@@ -135,8 +135,8 @@ function showToast(message, type='info') {
     if (!container) return;
     const toast = document.createElement('div');
     toast.className = `toast toast-${type}`;
-    const icons = {success:'✅',error:'❌',info:'ℹ️',warning:'⚠️'};
-    toast.innerHTML = `<span class="toast-icon">${icons[type]||'ℹ️'}</span><span class="toast-msg">${message}</span>`;
+    const icons = {success:'+',error:'x',info:'>',warning:'!'};
+    toast.innerHTML = `<span class="toast-icon">${icons[type]||'>'}</span><span class="toast-msg">${message}</span>`;
     container.appendChild(toast);
     requestAnimationFrame(() => toast.classList.add('toast-show'));
     setTimeout(() => {
@@ -183,7 +183,7 @@ async function openPositionDetail(marketId) {
 
     const d = await apiFetch(`/api/positions/${encodeURIComponent(marketId)}`);
     if (!d || d.error) {
-        safeHTML(body, `<div class="pos-detail-loading">❌ ${d?.error || 'Failed to load position data'}</div>`);
+        safeHTML(body, `<div class="pos-detail-loading">ERR ${d?.error || 'Failed to load position data'}</div>`);
         titleEl.textContent = 'Error';
         return;
     }
@@ -209,12 +209,12 @@ async function openPositionDetail(marketId) {
 
     // Forecast section
     const fc = d.forecast;
-    let forecastHTML = '<div class="pd-section"><div class="pd-section-title">🔮 Latest Forecast</div><div style="color:var(--text-muted);font-size:0.82rem;">No forecast data available</div></div>';
+    let forecastHTML = '<div class="pd-section"><div class="pd-section-title">LATEST FORECAST</div><div style="color:var(--text-muted);font-size:0.82rem;">No forecast data available</div></div>';
     if (fc) {
         const edgeCls = (fc.edge||0) > 0 ? 'pnl-positive' : 'pnl-negative';
         forecastHTML = `
         <div class="pd-section">
-            <div class="pd-section-title">🔮 Latest Forecast</div>
+            <div class="pd-section-title">LATEST FORECAST</div>
             <div class="pd-grid">
                 <div class="pd-field"><span class="pd-label">Model Prob</span><span class="pd-value">${fmtP((fc.model_probability||0)*100)}</span></div>
                 <div class="pd-field"><span class="pd-label">Implied Prob</span><span class="pd-value">${fmtP((fc.implied_probability||0)*100)}</span></div>
@@ -233,7 +233,7 @@ async function openPositionDetail(marketId) {
         const et = d.entry_trade;
         entryTradeHTML = `
         <div class="pd-section">
-            <div class="pd-section-title">📝 Entry Trade</div>
+            <div class="pd-section-title">ENTRY TRADE</div>
             <div class="pd-grid">
                 <div class="pd-field"><span class="pd-label">Side</span><span class="pd-value">${et.side||'—'}</span></div>
                 <div class="pd-field"><span class="pd-label">Price</span><span class="pd-value">${fmt(et.price||0, 4)}</span></div>
@@ -252,7 +252,7 @@ async function openPositionDetail(marketId) {
     safeHTML(body, `
         <!-- Price & P&L -->
         <div class="pd-section">
-            <div class="pd-section-title">💰 Price & P&L</div>
+            <div class="pd-section-title">PRICE & P&L</div>
             <div class="pd-grid">
                 <div class="pd-field"><span class="pd-label">Entry Price</span><span class="pd-value big">${fmt(d.entry_price, 4)}</span></div>
                 <div class="pd-field"><span class="pd-label">Current Price</span><span class="pd-value big ${priceCls}">${fmt(d.current_price, 4)}</span></div>
@@ -268,11 +268,11 @@ async function openPositionDetail(marketId) {
 
         <!-- TP/SL Proximity -->
         <div class="pd-section">
-            <div class="pd-section-title">🎯 Risk Levels & Proximity</div>
+            <div class="pd-section-title">RISK LEVELS & PROXIMITY</div>
 
             <div class="pd-bar-group">
                 <div class="pd-bar-header">
-                    <span class="pd-bar-label">🟢 Take Profit (${fmtP(d.take_profit_pct * 100)})</span>
+                    <span class="pd-bar-label">TP (${fmtP(d.take_profit_pct * 100)})</span>
                     <span class="pd-bar-value pnl-positive">${fmtP(tpPct)} reached</span>
                 </div>
                 <div class="pd-bar-track"><div class="pd-bar-fill bar-green" style="width:${tpPct}%"></div></div>
@@ -281,7 +281,7 @@ async function openPositionDetail(marketId) {
 
             <div class="pd-bar-group">
                 <div class="pd-bar-header">
-                    <span class="pd-bar-label">🔴 Stop Loss (${fmtP(d.stop_loss_pct * 100)})</span>
+                    <span class="pd-bar-label">SL (${fmtP(d.stop_loss_pct * 100)})</span>
                     <span class="pd-bar-value pnl-negative">${fmtP(slPct)} reached</span>
                 </div>
                 <div class="pd-bar-track"><div class="pd-bar-fill bar-red" style="width:${slPct}%"></div></div>
@@ -290,7 +290,7 @@ async function openPositionDetail(marketId) {
 
             <div class="pd-bar-group">
                 <div class="pd-bar-header">
-                    <span class="pd-bar-label">⏱️ Holding Period (${d.max_holding_hours}h max)</span>
+                    <span class="pd-bar-label">HOLD (${d.max_holding_hours}h max)</span>
                     <span class="pd-bar-value" style="color:${holdPct > 80 ? 'var(--accent-red)' : holdPct > 50 ? 'var(--accent-orange)' : 'var(--accent-blue)'}">${fmtP(holdPct)}</span>
                 </div>
                 <div class="pd-bar-track"><div class="pd-bar-fill ${holdBarColor}" style="width:${holdPct}%"></div></div>
@@ -300,7 +300,7 @@ async function openPositionDetail(marketId) {
 
         <!-- Market Info -->
         <div class="pd-section">
-            <div class="pd-section-title">📊 Market Info</div>
+            <div class="pd-section-title">MARKET INFO</div>
             <div class="pd-grid">
                 <div class="pd-field"><span class="pd-label">Volume</span><span class="pd-value">${fmtD(d.volume)}</span></div>
                 <div class="pd-field"><span class="pd-label">Liquidity</span><span class="pd-value">${fmtD(d.liquidity)}</span></div>
@@ -315,7 +315,7 @@ async function openPositionDetail(marketId) {
 
     // Footer
     safeHTML(footer, `
-        <a href="${d.polymarket_url}" target="_blank" rel="noopener">🔗 View on Polymarket ↗</a>
+        <a href="${d.polymarket_url}" target="_blank" rel="noopener">View on Polymarket ↗</a>
         <span class="pos-detail-id" title="${d.market_id}">${d.market_id}</span>
     `);
 }
@@ -444,6 +444,14 @@ async function updatePortfolio() {
     } else {
         modeBadge.textContent = 'PAPER MODE'; modeBadge.className = 'badge badge-paper';
     }
+
+    // Update status bar
+    updateStatusBar({
+        bankroll: d.bankroll,
+        daily_pnl: d.total_pnl,
+        open_positions: d.open_positions,
+        paper_mode: !(d.live_trading_enabled && !d.dry_run),
+    });
 }
 
 // ─── Risk Monitor ───────────────────────────────────────────────
@@ -481,7 +489,7 @@ async function updateRisk() {
     const btnOn   = $('#btn-kill-on');
     const btnOff  = $('#btn-kill-off');
     if (d.kill_switch) {
-        ksBadge.textContent = '🛑 KILL SWITCH ON'; ksBadge.className = 'badge badge-danger'; ksBadge.style.display = '';
+        ksBadge.textContent = 'KILL SWITCH ON'; ksBadge.className = 'badge badge-danger'; ksBadge.style.display = '';
         btnOn.style.display = 'none'; btnOff.style.display = '';
     } else {
         ksBadge.style.display = 'none';
@@ -521,12 +529,12 @@ async function updatePositions() {
     if (strip) {
         safeHTML(strip, `
             <div class="pnl-summary-strip">
-                <span class="pnl-stat">📊 <strong>${s.count||0}</strong> positions</span>
+                <span class="pnl-stat"><strong>${s.count||0}</strong> positions</span>
                 <span class="pnl-stat ${pnlClass(s.total_pnl)}">P&L: <strong>${fmtD(s.total_pnl)}</strong> (${fmtP(s.pnl_pct)})</span>
                 <span class="pnl-stat">Invested: <strong>${fmtD(s.total_invested)}</strong></span>
-                <span class="pnl-stat pnl-positive">✅ ${s.winners||0}W</span>
-                <span class="pnl-stat pnl-negative">❌ ${s.losers||0}L</span>
-                <span class="pnl-stat pnl-zero">➖ ${s.flat||0}F</span>
+                <span class="pnl-stat pnl-positive">+${s.winners||0}W</span>
+                <span class="pnl-stat pnl-negative">x${s.losers||0}L</span>
+                <span class="pnl-stat pnl-zero">=${s.flat||0}F</span>
             </div>
         `);
     }
@@ -594,13 +602,13 @@ let _allTrades = [];  // Store for client-side filtering
 
 function tradeStatusBadge(status) {
     const map = {
-        'ACTIVE':   '<span class="trade-badge trade-active">🟢 Active</span>',
-        'TP_HIT':   '<span class="trade-badge trade-tp">🎯 TP Hit</span>',
-        'SL_HIT':   '<span class="trade-badge trade-sl">🛑 SL Hit</span>',
-        'RESOLVED': '<span class="trade-badge trade-resolved">📋 Resolved</span>',
-        'TIME_EXIT':'<span class="trade-badge trade-time">⏰ Time Exit</span>',
-        'CLOSED':   '<span class="trade-badge trade-closed">🔒 Closed</span>',
-        'ENTRY':    '<span class="trade-badge trade-entry">📝 Entry</span>',
+        'ACTIVE':   '<span class="trade-badge trade-active">ACTIVE</span>',
+        'TP_HIT':   '<span class="trade-badge trade-tp">TP HIT</span>',
+        'SL_HIT':   '<span class="trade-badge trade-sl">SL HIT</span>',
+        'RESOLVED': '<span class="trade-badge trade-resolved">RESOLVED</span>',
+        'TIME_EXIT':'<span class="trade-badge trade-time">TIME EXIT</span>',
+        'CLOSED':   '<span class="trade-badge trade-closed">CLOSED</span>',
+        'ENTRY':    '<span class="trade-badge trade-entry">ENTRY</span>',
     };
     return map[status] || `<span class="trade-badge">${status||'—'}</span>`;
 }
@@ -646,7 +654,7 @@ function renderTradeRow(t) {
         <td>${tradeStatusBadge(t.trade_status)}</td>
         <td>${reasonLabel}</td>
         <td>${formatDuration(t.hours_held)}</td>
-        <td>${t.is_paper ? '🧪 Paper' : '💰 Live'}</td>
+        <td>${t.is_paper ? 'PAPER' : 'LIVE'}</td>
         <td>${shortDate(t.opened_at)}</td>
     </tr>`;
 }
@@ -671,16 +679,16 @@ async function updateTrades() {
         summaryDiv.style.display = 'flex';
         const pnlCls = s.total_pnl >= 0 ? 'pnl-positive' : 'pnl-negative';
         const pnlSign = s.total_pnl >= 0 ? '+' : '';
-        safeHTML($('#ts-total'), `📊 Total: <strong>${s.total_trades}</strong>`);
-        safeHTML($('#ts-active'), `🟢 Active: <strong>${s.active_count}</strong>`);
+        safeHTML($('#ts-total'), `Total: <strong>${s.total_trades}</strong>`);
+        safeHTML($('#ts-active'), `Active: <strong>${s.active_count}</strong>`);
         safeHTML($('#ts-closed'), `Closed: <strong>${s.closed_count}</strong>`);
-        safeHTML($('#ts-winrate'), `🎯 Win Rate: <strong>${s.win_rate}%</strong> (${s.winners}W / ${s.losers}L)`);
-        safeHTML($('#ts-pnl'), `💰 P&L: <strong class="${pnlCls}">${pnlSign}$${Math.abs(s.total_pnl).toFixed(2)}</strong> (${s.pnl_pct>=0?'+':''}${s.pnl_pct}%)`);
-        safeHTML($('#ts-tp'), `🟢 TP: <strong>${s.tp_hits}</strong>`);
-        safeHTML($('#ts-sl'), `🔴 SL: <strong>${s.sl_hits}</strong>`);
-        safeHTML($('#ts-avghold'), `⏱ Avg: <strong>${formatDuration(s.avg_hold_hours)}</strong>`);
-        safeHTML($('#ts-best'), `🏆 Best: <strong class="pnl-positive">+$${Math.abs(s.best_trade).toFixed(2)}</strong>`);
-        safeHTML($('#ts-worst'), `📉 Worst: <strong class="pnl-negative">-$${Math.abs(s.worst_trade).toFixed(2)}</strong>`);
+        safeHTML($('#ts-winrate'), `Win Rate: <strong>${s.win_rate}%</strong> (${s.winners}W / ${s.losers}L)`);
+        safeHTML($('#ts-pnl'), `P&L: <strong class="${pnlCls}">${pnlSign}$${Math.abs(s.total_pnl).toFixed(2)}</strong> (${s.pnl_pct>=0?'+':''}${s.pnl_pct}%)`);
+        safeHTML($('#ts-tp'), `TP: <strong>${s.tp_hits}</strong>`);
+        safeHTML($('#ts-sl'), `SL: <strong>${s.sl_hits}</strong>`);
+        safeHTML($('#ts-avghold'), `Avg: <strong>${formatDuration(s.avg_hold_hours)}</strong>`);
+        safeHTML($('#ts-best'), `Best: <strong class="pnl-positive">+$${Math.abs(s.best_trade).toFixed(2)}</strong>`);
+        safeHTML($('#ts-worst'), `Worst: <strong class="pnl-negative">-$${Math.abs(s.worst_trade).toFixed(2)}</strong>`);
     }
 
     // Render rows
@@ -717,7 +725,7 @@ async function openTradeDetail(marketId) {
 
     const d = await apiFetch(`/api/trade-detail/${encodeURIComponent(marketId)}`);
     if (!d || d.error) {
-        safeHTML(body, `<div class="pos-detail-loading">❌ ${d?.error || 'Failed to load trade data'}</div>`);
+        safeHTML(body, `<div class="pos-detail-loading">ERR ${d?.error || 'Failed to load trade data'}</div>`);
         titleEl.textContent = 'Error';
         return;
     }
@@ -730,7 +738,7 @@ async function openTradeDetail(marketId) {
         <span class="pos-detail-badge ${dirBuy ? 'badge-direction-buy' : 'badge-direction-sell'}">${d.direction || '—'}</span>
         <span class="pos-detail-badge badge-type">${d.market_type || '—'}</span>
         ${d.category && d.category !== '—' ? `<span class="pos-detail-badge badge-cat">${d.category}</span>` : ''}
-        <span class="pos-detail-badge" style="background:rgba(255,255,255,0.06);color:var(--text-muted)">${d.is_paper ? '🧪 Paper' : '💰 Live'}</span>
+        <span class="pos-detail-badge" style="background:rgba(255,255,255,0.06);color:var(--text-muted)">${d.is_paper ? 'PAPER' : 'LIVE'}</span>
     `);
 
     // ── Build body sections ─────────────────────────────────
@@ -742,7 +750,7 @@ async function openTradeDetail(marketId) {
     // ── Outcome Banner (for closed trades) ──────────────────
     let outcomeBanner = '';
     if (isClosed) {
-        const outcomeIcon = d.pnl >= 0 ? '🏆' : '📉';
+        const outcomeIcon = d.pnl >= 0 ? 'W' : 'L';
         const outcomeCls = d.pnl >= 0 ? 'td-outcome-win' : 'td-outcome-loss';
         outcomeBanner = `
         <div class="td-outcome-banner ${outcomeCls}">
@@ -760,7 +768,7 @@ async function openTradeDetail(marketId) {
     const exitVal = isActive ? d.current_price : d.exit_price;
     const priceHTML = `
     <div class="pd-section">
-        <div class="pd-section-title">💰 Price & P&L</div>
+        <div class="pd-section-title">PRICE & P&L</div>
         <div class="pd-grid">
             <div class="pd-field"><span class="pd-label">Entry Price</span><span class="pd-value big">${fmt(d.entry_price, 4)}</span></div>
             <div class="pd-field"><span class="pd-label">${exitLabel}</span><span class="pd-value big ${priceCls}">${exitVal != null ? fmt(exitVal, 4) : '—'}</span></div>
@@ -785,10 +793,10 @@ async function openTradeDetail(marketId) {
             : '—';
         riskHTML = `
         <div class="pd-section">
-            <div class="pd-section-title">🎯 Risk Levels & Proximity</div>
+            <div class="pd-section-title">RISK LEVELS & PROXIMITY</div>
             <div class="pd-bar-group">
                 <div class="pd-bar-header">
-                    <span class="pd-bar-label">🟢 Take Profit (${fmtP(d.tp_pct * 100)})</span>
+                    <span class="pd-bar-label">TP (${fmtP(d.tp_pct * 100)})</span>
                     <span class="pd-bar-value pnl-positive">${fmtP(tpPct)} reached</span>
                 </div>
                 <div class="pd-bar-track"><div class="pd-bar-fill bar-green" style="width:${tpPct}%"></div></div>
@@ -796,7 +804,7 @@ async function openTradeDetail(marketId) {
             </div>
             <div class="pd-bar-group">
                 <div class="pd-bar-header">
-                    <span class="pd-bar-label">🔴 Stop Loss (${fmtP(d.sl_pct * 100)})</span>
+                    <span class="pd-bar-label">SL (${fmtP(d.sl_pct * 100)})</span>
                     <span class="pd-bar-value pnl-negative">${fmtP(slPct)} reached</span>
                 </div>
                 <div class="pd-bar-track"><div class="pd-bar-fill bar-red" style="width:${slPct}%"></div></div>
@@ -804,7 +812,7 @@ async function openTradeDetail(marketId) {
             </div>
             <div class="pd-bar-group">
                 <div class="pd-bar-header">
-                    <span class="pd-bar-label">⏱️ Holding Period (${d.max_holding_hours}h max)</span>
+                    <span class="pd-bar-label">HOLD (${d.max_holding_hours}h max)</span>
                     <span class="pd-bar-value" style="color:${holdPct > 80 ? 'var(--accent-red)' : holdPct > 50 ? 'var(--accent-orange)' : 'var(--accent-blue)'}">${fmtP(holdPct)}</span>
                 </div>
                 <div class="pd-bar-track"><div class="pd-bar-fill ${holdBarColor}" style="width:${holdPct}%"></div></div>
@@ -815,7 +823,7 @@ async function openTradeDetail(marketId) {
         // Show what the TP/SL levels were for the closed trade
         riskHTML = `
         <div class="pd-section">
-            <div class="pd-section-title">🎯 Risk Levels (at close)</div>
+            <div class="pd-section-title">RISK LEVELS (AT CLOSE)</div>
             <div class="pd-grid">
                 <div class="pd-field"><span class="pd-label">Stop Loss</span><span class="pd-value">${fmtP(d.sl_pct * 100)} (${d.sl_price != null ? fmt(d.sl_price, 4) : '—'})</span></div>
                 <div class="pd-field"><span class="pd-label">Take Profit</span><span class="pd-value">${fmtP(d.tp_pct * 100)} (${d.tp_price != null ? fmt(d.tp_price, 4) : '—'})</span></div>
@@ -828,7 +836,7 @@ async function openTradeDetail(marketId) {
     // ── Timing Section ──────────────────────────────────────
     let timingHTML = `
     <div class="pd-section">
-        <div class="pd-section-title">⏱ Timing</div>
+        <div class="pd-section-title">TIMING</div>
         <div class="pd-grid">
             <div class="pd-field"><span class="pd-label">Opened</span><span class="pd-value" style="font-size:0.8rem">${d.opened_at ? new Date(d.opened_at).toLocaleString() : '—'}</span></div>
             <div class="pd-field"><span class="pd-label">${isActive ? 'Duration (so far)' : 'Closed'}</span><span class="pd-value" style="font-size:0.8rem">${isActive ? formatDuration(d.hours_held) : (d.closed_at ? new Date(d.closed_at).toLocaleString() : '—')}</span></div>
@@ -839,7 +847,7 @@ async function openTradeDetail(marketId) {
     // ── Market Info Section ──────────────────────────────────
     let marketHTML = `
     <div class="pd-section">
-        <div class="pd-section-title">📊 Market Info</div>
+        <div class="pd-section-title">MARKET INFO</div>
         <div class="pd-grid">
             <div class="pd-field"><span class="pd-label">Volume</span><span class="pd-value">${d.volume ? fmtD(d.volume) : '—'}</span></div>
             <div class="pd-field"><span class="pd-label">Liquidity</span><span class="pd-value">${d.liquidity ? fmtD(d.liquidity) : '—'}</span></div>
@@ -855,7 +863,7 @@ async function openTradeDetail(marketId) {
         const edgeCls = (fc.edge||0) > 0 ? 'pnl-positive' : 'pnl-negative';
         forecastHTML = `
         <div class="pd-section">
-            <div class="pd-section-title">🔮 Forecast Analysis</div>
+            <div class="pd-section-title">FORECAST ANALYSIS</div>
             <div class="pd-grid">
                 <div class="pd-field"><span class="pd-label">Model Prob</span><span class="pd-value">${fmtP((fc.model_probability||0)*100)}</span></div>
                 <div class="pd-field"><span class="pd-label">Implied Prob</span><span class="pd-value">${fmtP((fc.implied_probability||0)*100)}</span></div>
@@ -876,7 +884,7 @@ async function openTradeDetail(marketId) {
     if (records.length > 0) {
         const timelineRows = records.map(r => {
             const isBuy = (r.side||'').includes('BUY');
-            const sideIcon = isBuy ? '🟢' : '🔴';
+            const sideIcon = isBuy ? 'BUY' : 'SELL';
             const statusParts = (r.status||'').split('|');
             const mainStatus = statusParts[0] || '—';
             const exitInfo = statusParts.length > 1 ? statusParts[1] : '';
@@ -900,7 +908,7 @@ async function openTradeDetail(marketId) {
         }).join('');
         timelineHTML = `
         <div class="pd-section">
-            <div class="pd-section-title">📜 Trade Timeline (${records.length} record${records.length!==1?'s':''})</div>
+            <div class="pd-section-title">TRADE TIMELINE (${records.length} record${records.length!==1?'s':''})</div>
             <div class="td-timeline">${timelineRows}</div>
         </div>`;
     }
@@ -910,8 +918,8 @@ async function openTradeDetail(marketId) {
     let decisionsHTML = '';
     if (decisions.length > 0) {
         const decRows = decisions.map(dec => {
-            const stageIcons = {SCAN:'🔍', RESEARCH:'📚', FORECAST:'🔮', EDGE:'📐', RISK:'🛡️', SIZE:'📏', EXECUTE:'⚡', MONITOR:'👁️'};
-            const icon = stageIcons[(dec.stage||'').toUpperCase()] || '📋';
+            const stageIcons = {SCAN:'>',RESEARCH:'>',FORECAST:'>',EDGE:'>',RISK:'!',SIZE:'>',EXECUTE:'>',MONITOR:'>'};
+            const icon = stageIcons[(dec.stage||'').toUpperCase()] || '>';
             return `
             <div class="td-decision-item">
                 <div class="td-dec-icon">${icon}</div>
@@ -923,12 +931,12 @@ async function openTradeDetail(marketId) {
                     </div>
                     ${dec.details ? `<div class="td-dec-details">${escapeHTML(dec.details).substring(0,200)}${(dec.details||'').length>200?'…':''}</div>` : ''}
                 </div>
-                ${dec.integrity_hash ? '<div class="td-dec-hash" title="Integrity verified">✅</div>' : ''}
+                ${dec.integrity_hash ? '<div class="td-dec-hash" title="Integrity verified">OK</div>' : ''}
             </div>`;
         }).join('');
         decisionsHTML = `
         <div class="pd-section">
-            <div class="pd-section-title">🧠 Decision Trail (${decisions.length} decision${decisions.length!==1?'s':''})</div>
+            <div class="pd-section-title">DECISION TRAIL (${decisions.length} decision${decisions.length!==1?'s':''})</div>
             <div class="td-decisions-list">${decRows}</div>
         </div>`;
     }
@@ -951,7 +959,7 @@ async function openTradeDetail(marketId) {
         }).join('');
         perfHTML = `
         <div class="pd-section">
-            <div class="pd-section-title">📈 Performance Record</div>
+            <div class="pd-section-title">PERFORMANCE RECORD</div>
             ${perfRows}
         </div>`;
     }
@@ -971,7 +979,7 @@ async function openTradeDetail(marketId) {
 
     // Footer
     safeHTML(footer, `
-        <a href="${d.polymarket_url}" target="_blank" rel="noopener">🔗 View on Polymarket ↗</a>
+        <a href="${d.polymarket_url}" target="_blank" rel="noopener">View on Polymarket ↗</a>
         <span class="pos-detail-id" title="${d.market_id}">${d.market_id}</span>
     `);
 }
@@ -1006,7 +1014,7 @@ async function updateAudit() {
         <td><span class="pill ${pillClass(e.decision)}">${e.decision||'—'}</span></td>
         <td>${e.stage||'—'}</td>
         <td style="max-width:300px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${e.details||''}">${(e.details||'—').substring(0,60)}</td>
-        <td>${e.integrity_hash ? '✅' : '—'}</td>
+        <td>${e.integrity_hash ? 'OK' : '—'}</td>
         <td>${shortDate(e.timestamp)}</td>
     </tr>`).join(''));
 }
@@ -1075,9 +1083,9 @@ async function updateEngineStatus() {
 
     const engineBadge = $('#engine-badge');
     if (isRunning) {
-        engineBadge.textContent = '🟢 ENGINE ON'; engineBadge.className = 'badge badge-ok'; engineBadge.style.display = '';
+        engineBadge.textContent = 'ENGINE ON'; engineBadge.className = 'badge badge-ok'; engineBadge.style.display = '';
     } else {
-        engineBadge.textContent = '⚫ ENGINE OFF'; engineBadge.className = 'badge badge-paper'; engineBadge.style.display = '';
+        engineBadge.textContent = 'ENGINE OFF'; engineBadge.className = 'badge badge-paper'; engineBadge.style.display = '';
     }
 
     // Toggle start/stop buttons
@@ -1101,8 +1109,11 @@ async function updateEngineStatus() {
 
     // Show error if engine crashed
     if (d.engine_error && !isRunning) {
-        $('#engine-cycles').textContent = `⚠️ Error: ${d.engine_error.substring(0, 80)}`;
+        $('#engine-cycles').textContent = `ERR: ${d.engine_error.substring(0, 80)}`;
     }
+
+    // Update status bar engine state
+    updateStatusBar({ engine_running: isRunning });
 }
 
 async function toggleEngine(start) {
@@ -1128,75 +1139,75 @@ async function updateDrawdown() {
 
     const heat = d.heat_level || 0;
     const heatEl = $('#heat-level');
-    if (heat === 0) { heatEl.textContent = '🟢 Cool'; }
-    else if (heat === 1) { heatEl.textContent = '🟡 Warm'; }
-    else if (heat === 2) { heatEl.textContent = '🟠 Hot'; }
-    else { heatEl.textContent = '🔴 Critical'; }
+    if (heat === 0) { heatEl.textContent = 'COOL'; }
+    else if (heat === 1) { heatEl.textContent = 'WARM'; }
+    else if (heat === 2) { heatEl.textContent = 'HOT'; }
+    else { heatEl.textContent = 'CRITICAL'; }
 
     $('#kelly-mult').textContent = `Kelly multiplier: ${fmt(d.kelly_multiplier, 2)}x`;
 
     const ksStatus = $('#kill-switch-status');
-    ksStatus.textContent = d.is_killed ? '🛑 ACTIVE' : 'OFF';
+    ksStatus.textContent = d.is_killed ? 'ACTIVE' : 'OFF';
     ksStatus.className = `card-value ${d.is_killed ? 'pnl-negative' : 'pnl-zero'}`;
 }
 
 // ─── Charts ─────────────────────────────────────────────────────
 const chartColors = {
-    blue:   'rgba(76,141,255,0.9)',
-    green:  'rgba(0,214,143,0.9)',
-    orange: 'rgba(255,159,67,0.9)',
+    blue:   'rgba(59,130,246,0.9)',
+    green:  'rgba(34,197,94,0.9)',
+    orange: 'rgba(249,115,22,0.9)',
     purple: 'rgba(168,85,247,0.9)',
-    red:    'rgba(255,77,106,0.9)',
+    red:    'rgba(239,68,68,0.9)',
     teal:   'rgba(20,184,166,0.9)',
     pink:   'rgba(244,114,182,0.9)',
     yellow: 'rgba(251,191,36,0.9)',
 };
 const chartBg = {
-    blue:   'rgba(76,141,255,0.12)',
-    green:  'rgba(0,214,143,0.12)',
-    orange: 'rgba(255,159,67,0.12)',
-    purple: 'rgba(168,85,247,0.12)',
-    red:    'rgba(255,77,106,0.12)',
+    blue:   'rgba(59,130,246,0.08)',
+    green:  'rgba(34,197,94,0.08)',
+    orange: 'rgba(249,115,22,0.08)',
+    purple: 'rgba(168,85,247,0.08)',
+    red:    'rgba(239,68,68,0.08)',
 };
 const chartDefaults = {
     responsive: true,
     maintainAspectRatio: false,
     animation: {
-        duration: 600,
+        duration: 400,
         easing: 'easeOutQuart',
     },
     plugins: {
         legend: {
             labels: {
-                color: '#8b8fa3',
-                font: { size: 11, weight: '600' },
-                padding: 16,
+                color: '#94a3b8',
+                font: { size: 11, weight: '600', family: "'JetBrains Mono', monospace" },
+                padding: 12,
                 usePointStyle: true,
                 pointStyleWidth: 8,
             },
         },
         tooltip: {
-            backgroundColor: 'rgba(15,17,23,0.9)',
-            titleColor: '#e2e4ed',
-            bodyColor: '#b0b4c8',
-            borderColor: 'rgba(255,255,255,0.08)',
+            backgroundColor: '#0d1117',
+            titleColor: '#e2e8f0',
+            bodyColor: '#94a3b8',
+            borderColor: '#1e293b',
             borderWidth: 1,
-            cornerRadius: 8,
-            padding: 12,
-            titleFont: { weight: '700', size: 12 },
-            bodyFont: { size: 11 },
+            cornerRadius: 2,
+            padding: 10,
+            titleFont: { weight: '700', size: 11, family: "'JetBrains Mono', monospace" },
+            bodyFont: { size: 10, family: "'JetBrains Mono', monospace" },
             displayColors: true,
             boxPadding: 4,
         },
     },
     scales: {
         x: {
-            ticks: { color: '#5a5e72', font: { size: 10 } },
-            grid: { color: 'rgba(255,255,255,0.03)', drawBorder: false },
+            ticks: { color: '#475569', font: { size: 10, family: "'JetBrains Mono', monospace" } },
+            grid: { color: '#1e293b', drawBorder: false },
         },
         y: {
-            ticks: { color: '#5a5e72', font: { size: 10 } },
-            grid: { color: 'rgba(255,255,255,0.03)', drawBorder: false },
+            ticks: { color: '#475569', font: { size: 10, family: "'JetBrains Mono', monospace" } },
+            grid: { color: '#1e293b', drawBorder: false },
         },
     },
 };
@@ -1301,20 +1312,20 @@ async function updateEquityCurve() {
 // ═══════════════════════════════════════════════════════════════
 
 const CONFIG_SECTION_LABELS = {
-    scanning: '🔍 Scanning',
-    research: '📚 Research',
-    forecasting: '🎯 Forecasting',
-    ensemble: '🧩 Ensemble',
-    risk: '⚠️ Risk',
-    drawdown: '📉 Drawdown',
-    portfolio: '💼 Portfolio',
-    timeline: '⏱️ Timeline',
-    microstructure: '🔬 Microstructure',
-    execution: '⚡ Execution',
-    cache: '💾 Cache',
-    engine: '🏗️ Engine',
-    alerts: '🔔 Alerts',
-    observability: '📊 Observability',
+    scanning: 'SCANNING',
+    research: 'RESEARCH',
+    forecasting: 'FORECASTING',
+    ensemble: 'ENSEMBLE',
+    risk: 'RISK',
+    drawdown: 'DRAWDOWN',
+    portfolio: 'PORTFOLIO',
+    timeline: 'TIMELINE',
+    microstructure: 'MICROSTRUCTURE',
+    execution: 'EXECUTION',
+    cache: 'CACHE',
+    engine: 'ENGINE',
+    alerts: 'ALERTS',
+    observability: 'OBSERVABILITY',
 };
 
 async function updateConfig() {
@@ -1359,7 +1370,7 @@ function renderConfigSection(section) {
     let html = `<div class="config-editor">`;
     html += `<div class="config-section-header">
         <h3>${CONFIG_SECTION_LABELS[section] || section}</h3>
-        <button class="btn btn-save btn-sm" onclick="saveSection('${section}')">💾 Save ${section}</button>
+        <button class="btn btn-save btn-sm" onclick="saveSection('${section}')">Save ${section}</button>
     </div>`;
     html += `<div class="config-fields">`;
 
@@ -1503,21 +1514,21 @@ let _settingsConfigDirty = {};
 let _activeSettingsSection = null;
 
 const FLAG_LABELS = {
-    ensemble_enabled: { icon: '🤖', label: 'Ensemble Forecasting', desc: 'Combine multiple LLM models for consensus forecasts' },
-    drawdown_enabled: { icon: '📉', label: 'Drawdown Guard', desc: 'Automatically halt trading during drawdowns' },
-    wallet_scanner_enabled: { icon: '🐋', label: 'Whale Scanner', desc: 'Monitor large wallet movements' },
-    alerts_enabled: { icon: '🔔', label: 'Alerts', desc: 'Send notifications on important events' },
-    cache_enabled: { icon: '💾', label: 'Cache', desc: 'Cache API responses and market data' },
-    twap_enabled: { icon: '📊', label: 'TWAP Execution', desc: 'Use time-weighted average price for large orders' },
-    adaptive_pricing: { icon: '🎯', label: 'Adaptive Pricing', desc: 'Dynamically adjust order prices based on microstructure' },
-    dry_run: { icon: '🧪', label: 'Dry Run', desc: 'Simulate order execution without placing real trades' },
-    kill_switch: { icon: '🛑', label: 'Kill Switch', desc: 'Emergency stop for all trading activity' },
-    paper_mode: { icon: '📝', label: 'Paper Mode', desc: 'Record trades in DB only — no real execution' },
-    auto_start: { icon: '▶️', label: 'Auto Start Engine', desc: 'Start engine automatically when dashboard launches' },
-    daily_summary: { icon: '📧', label: 'Daily Summary', desc: 'Send daily performance summary via alerts' },
-    metrics_enabled: { icon: '📈', label: 'Metrics Collection', desc: 'Collect internal performance metrics' },
-    fetch_full_content: { icon: '📄', label: 'Full Content Fetch', desc: 'Fetch full article text in research phase' },
-    track_leaderboard: { icon: '🏆', label: 'Track Leaderboard', desc: 'Monitor top trader leaderboard positions' },
+    ensemble_enabled: { icon: '>', label: 'Ensemble Forecasting', desc: 'Combine multiple LLM models for consensus forecasts' },
+    drawdown_enabled: { icon: '>', label: 'Drawdown Guard', desc: 'Automatically halt trading during drawdowns' },
+    wallet_scanner_enabled: { icon: '>', label: 'Whale Scanner', desc: 'Monitor large wallet movements' },
+    alerts_enabled: { icon: '>', label: 'Alerts', desc: 'Send notifications on important events' },
+    cache_enabled: { icon: '>', label: 'Cache', desc: 'Cache API responses and market data' },
+    twap_enabled: { icon: '>', label: 'TWAP Execution', desc: 'Use time-weighted average price for large orders' },
+    adaptive_pricing: { icon: '>', label: 'Adaptive Pricing', desc: 'Dynamically adjust order prices based on microstructure' },
+    dry_run: { icon: '>', label: 'Dry Run', desc: 'Simulate order execution without placing real trades' },
+    kill_switch: { icon: '!', label: 'Kill Switch', desc: 'Emergency stop for all trading activity' },
+    paper_mode: { icon: '>', label: 'Paper Mode', desc: 'Record trades in DB only — no real execution' },
+    auto_start: { icon: '>', label: 'Auto Start Engine', desc: 'Start engine automatically when dashboard launches' },
+    daily_summary: { icon: '>', label: 'Daily Summary', desc: 'Send daily performance summary via alerts' },
+    metrics_enabled: { icon: '>', label: 'Metrics Collection', desc: 'Collect internal performance metrics' },
+    fetch_full_content: { icon: '>', label: 'Full Content Fetch', desc: 'Fetch full article text in research phase' },
+    track_leaderboard: { icon: '>', label: 'Track Leaderboard', desc: 'Monitor top trader leaderboard positions' },
 };
 
 async function updateSettingsTab() {
@@ -1588,7 +1599,7 @@ function renderSettingsEnvVars() {
                 <div class="env-key-input-wrap">
                     <input type="${inputType}" class="env-key-input" id="senv-${item.key}"
                            placeholder="${placeholder}" data-env-key="${item.key}" autocomplete="off">
-                    ${item.is_secret ? `<button class="env-reveal-btn" onclick="toggleEnvReveal(this)" title="Show/hide value">👁️</button>` : ''}
+                    ${item.is_secret ? `<button class="env-reveal-btn" onclick="toggleEnvReveal(this)" title="Show/hide value">SHOW</button>` : ''}
                 </div>
             </div>`;
         }
@@ -1604,10 +1615,10 @@ function toggleEnvReveal(btn) {
     if (!input) return;
     if (input.type === 'password') {
         input.type = 'text';
-        btn.textContent = '🔒';
+        btn.textContent = 'LOCK';
     } else {
         input.type = 'password';
-        btn.textContent = '👁️';
+        btn.textContent = 'SHOW';
     }
 }
 
@@ -1646,7 +1657,7 @@ async function saveAllEnvVars() {
     });
 
     if (result && result.ok) {
-        showToast(`✅ ${result.message}`, 'success');
+        showToast(`${result.message}`, 'success');
         // Clear inputs
         inputs.forEach(i => i.value = '');
         adminInputs.forEach(i => i.value = '');
@@ -1654,7 +1665,7 @@ async function saveAllEnvVars() {
         updateSettingsTab();
         updateAdminPanel();
     } else {
-        showToast(`❌ Failed: ${result?.error || 'Unknown error'}`, 'error');
+        showToast(`Failed: ${result?.error || 'Unknown error'}`, 'error');
     }
 }
 
@@ -1664,7 +1675,7 @@ function renderSettingsFlags(flags) {
 
     let html = '<div class="flags-grid-inner">';
     for (const [key, val] of Object.entries(flags)) {
-        const info = FLAG_LABELS[key] || { icon: '⚙️', label: key, desc: '' };
+        const info = FLAG_LABELS[key] || { icon: '>', label: key, desc: '' };
         const isOn = val === true;
         html += `<div class="flag-card ${isOn ? 'flag-card-on' : 'flag-card-off'}">
             <div class="flag-card-left">
@@ -1735,7 +1746,7 @@ function renderSettingsConfigSection(section) {
     let html = `<div class="config-editor">`;
     html += `<div class="config-section-header">
         <h3>${CONFIG_SECTION_LABELS[section] || section}</h3>
-        <button class="btn btn-save btn-sm" onclick="saveSettingsSection('${section}')">💾 Save ${section}</button>
+        <button class="btn btn-save btn-sm" onclick="saveSettingsSection('${section}')">Save ${section}</button>
     </div>`;
     html += `<div class="config-fields">`;
 
@@ -1946,18 +1957,18 @@ function _renderDICharts(stats) {
         _diChartDecisions = new Chart(dc, {
             type: 'doughnut',
             data: {
-                labels: ['✅ Trade', '❌ No Trade', '⏭️ Skip'],
+                labels: ['TRADE', 'NO TRADE', 'SKIP'],
                 datasets: [{
                     data: [stats.trade_count || 0, stats.no_trade_count || 0, stats.skip_count || 0],
                     backgroundColor: ['rgba(0,230,138,0.7)', 'rgba(255,77,106,0.7)', 'rgba(148,153,179,0.5)'],
-                    borderColor: ['#00e68a', '#ff4d6a', '#9499b3'],
+                    borderColor: ['#22c55e', '#ef4444', '#64748b'],
                     borderWidth: 1,
                 }],
             },
             options: {
                 responsive: true, maintainAspectRatio: false, cutout: '65%',
                 plugins: {
-                    legend: { position: 'bottom', labels: { color: '#9499b3', padding: 8, font: { size: 11 }, boxWidth: 12 } },
+                    legend: { position: 'bottom', labels: { color: '#64748b', padding: 8, font: { size: 11 }, boxWidth: 12 } },
                     tooltip: { callbacks: { label: ctx => `${ctx.label}: ${ctx.raw} (${((ctx.raw/Math.max(stats.total,1))*100).toFixed(0)}%)` } },
                 },
             },
@@ -1969,7 +1980,7 @@ function _renderDICharts(stats) {
     if (gc) {
         if (_diChartGrades) _diChartGrades.destroy();
         const gradeOrder = ['A+', 'A', 'B+', 'B', 'C+', 'C', 'D', 'F'];
-        const gradeColors = { 'A+': '#00e68a', 'A': '#00d68f', 'B+': '#4c8dff', 'B': '#3b82f6', 'C+': '#f59e0b', 'C': '#eab308', 'D': '#f97316', 'F': '#ef4444' };
+        const gradeColors = { 'A+': '#22c55e', 'A': '#22c55e', 'B+': '#3b82f6', 'B': '#3b82f6', 'C+': '#fbbf24', 'C': '#f97316', 'D': '#ef4444', 'F': '#64748b' };
         const gd = stats.grade_distribution || {};
         _diChartGrades = new Chart(gc, {
             type: 'bar',
@@ -1978,8 +1989,8 @@ function _renderDICharts(stats) {
                 datasets: [{
                     label: 'Count',
                     data: gradeOrder.map(g => gd[g] || 0),
-                    backgroundColor: gradeOrder.map(g => (gradeColors[g] || '#9499b3') + '80'),
-                    borderColor: gradeOrder.map(g => gradeColors[g] || '#9499b3'),
+                    backgroundColor: gradeOrder.map(g => (gradeColors[g] || '#64748b') + '80'),
+                    borderColor: gradeOrder.map(g => gradeColors[g] || '#64748b'),
                     borderWidth: 1, borderRadius: 4, barThickness: 22,
                 }],
             },
@@ -1987,8 +1998,8 @@ function _renderDICharts(stats) {
                 responsive: true, maintainAspectRatio: false,
                 plugins: { legend: { display: false } },
                 scales: {
-                    x: { ticks: { color: '#9499b3', font: { size: 11 } }, grid: { display: false } },
-                    y: { beginAtZero: true, ticks: { color: '#9499b3', stepSize: 1, font: { size: 10 } }, grid: { color: 'rgba(255,255,255,0.03)' } },
+                    x: { ticks: { color: '#64748b', font: { size: 11 } }, grid: { display: false } },
+                    y: { beginAtZero: true, ticks: { color: '#64748b', stepSize: 1, font: { size: 10 } }, grid: { color: '#1e293b' } },
                 },
             },
         });
@@ -2018,8 +2029,8 @@ function _renderDICharts(stats) {
                 responsive: true, maintainAspectRatio: false,
                 plugins: { legend: { display: false } },
                 scales: {
-                    x: { ticks: { color: '#9499b3', font: { size: 9 }, maxRotation: 45 }, grid: { display: false } },
-                    y: { beginAtZero: true, ticks: { color: '#9499b3', stepSize: 1, font: { size: 10 } }, grid: { color: 'rgba(255,255,255,0.03)' } },
+                    x: { ticks: { color: '#64748b', font: { size: 9 }, maxRotation: 45 }, grid: { display: false } },
+                    y: { beginAtZero: true, ticks: { color: '#64748b', stepSize: 1, font: { size: 10 } }, grid: { color: '#1e293b' } },
                 },
             },
         });
@@ -2040,21 +2051,21 @@ function _renderDICharts(stats) {
                         label: 'Trades',
                         data: catNames.map(c => cd[c].trades || 0),
                         backgroundColor: 'rgba(0,230,138,0.6)',
-                        borderColor: '#00e68a',
+                        borderColor: '#22c55e',
                         borderWidth: 1, borderRadius: 3,
                     },
                     {
                         label: 'No Trade',
                         data: catNames.map(c => cd[c].no_trades || 0),
                         backgroundColor: 'rgba(255,77,106,0.5)',
-                        borderColor: '#ff4d6a',
+                        borderColor: '#ef4444',
                         borderWidth: 1, borderRadius: 3,
                     },
                     {
                         label: 'Other',
                         data: catNames.map(c => (cd[c].total - (cd[c].trades||0) - (cd[c].no_trades||0)) || 0),
                         backgroundColor: 'rgba(148,153,179,0.4)',
-                        borderColor: '#9499b3',
+                        borderColor: '#64748b',
                         borderWidth: 1, borderRadius: 3,
                     },
                 ],
@@ -2062,11 +2073,11 @@ function _renderDICharts(stats) {
             options: {
                 responsive: true, maintainAspectRatio: false, indexAxis: 'y',
                 plugins: {
-                    legend: { position: 'bottom', labels: { color: '#9499b3', padding: 8, font: { size: 10 }, boxWidth: 10 } },
+                    legend: { position: 'bottom', labels: { color: '#64748b', padding: 8, font: { size: 10 }, boxWidth: 10 } },
                 },
                 scales: {
-                    x: { stacked: true, ticks: { color: '#9499b3', font: { size: 10 } }, grid: { color: 'rgba(255,255,255,0.03)' } },
-                    y: { stacked: true, ticks: { color: '#9499b3', font: { size: 10 } }, grid: { display: false } },
+                    x: { stacked: true, ticks: { color: '#64748b', font: { size: 10 } }, grid: { color: '#1e293b' } },
+                    y: { stacked: true, ticks: { color: '#64748b', font: { size: 10 } }, grid: { display: false } },
                 },
             },
         });
@@ -2103,11 +2114,11 @@ function _renderDIFunnel(funnel) {
         return;
     }
     const maxTotal = Math.max(...funnel.map(f => f.total), 1);
-    const stageIcons = {'Discovery & Filter':'🔍','Classification':'🏷️','Research':'📚','Forecast':'🎯','Risk Check':'⚠️','Execution':'⚡'};
+    const stageIcons = {'Discovery & Filter':'>','Classification':'>','Research':'>','Forecast':'>','Risk Check':'!','Execution':'>'};
     const html = funnel.map((f, i) => {
         const widthPct = Math.max(20, (f.passed / maxTotal) * 100);
         const passRate = ((f.passed / Math.max(f.total, 1)) * 100).toFixed(0);
-        const icon = stageIcons[f.stage] || '📋';
+        const icon = stageIcons[f.stage] || '>';
         return `<div class="di-funnel-stage">
             <div class="di-funnel-label">${icon} ${f.stage}</div>
             <div class="di-funnel-bar-wrap">
@@ -2181,7 +2192,7 @@ function _renderDIScoreTrend(cycleTrend) {
                 {
                     label: 'DI Score',
                     data: cycleTrend.map(c => c.avg_score),
-                    borderColor: '#4c8dff',
+                    borderColor: '#3b82f6',
                     backgroundColor: 'rgba(76,141,255,0.1)',
                     fill: true, tension: 0.35, pointRadius: 4, pointHoverRadius: 6,
                     borderWidth: 2, yAxisID: 'y',
@@ -2189,7 +2200,7 @@ function _renderDIScoreTrend(cycleTrend) {
                 {
                     label: 'Avg Edge %',
                     data: cycleTrend.map(c => c.avg_edge),
-                    borderColor: '#00e68a',
+                    borderColor: '#22c55e',
                     backgroundColor: 'rgba(0,230,138,0.1)',
                     fill: false, tension: 0.35, pointRadius: 3, pointHoverRadius: 5,
                     borderWidth: 2, borderDash: [4, 2], yAxisID: 'y',
@@ -2208,12 +2219,12 @@ function _renderDIScoreTrend(cycleTrend) {
             responsive: true, maintainAspectRatio: false,
             interaction: { mode: 'index', intersect: false },
             plugins: {
-                legend: { position: 'bottom', labels: { color: '#9499b3', padding: 8, font: { size: 10 }, boxWidth: 10 } },
+                legend: { position: 'bottom', labels: { color: '#64748b', padding: 8, font: { size: 10 }, boxWidth: 10 } },
                 tooltip: { backgroundColor: 'rgba(15,17,23,0.95)', borderColor: 'rgba(255,255,255,0.1)', borderWidth: 1 },
             },
             scales: {
-                x: { ticks: { color: '#9499b3', font: { size: 10 } }, grid: { display: false } },
-                y: { position: 'left', beginAtZero: true, max: 100, ticks: { color: '#9499b3', font: { size: 10 } }, grid: { color: 'rgba(255,255,255,0.03)' }, title: { display: true, text: 'Score / Edge', color: '#9499b3', font: { size: 10 } } },
+                x: { ticks: { color: '#64748b', font: { size: 10 } }, grid: { display: false } },
+                y: { position: 'left', beginAtZero: true, max: 100, ticks: { color: '#64748b', font: { size: 10 } }, grid: { color: '#1e293b' }, title: { display: true, text: 'Score / Edge', color: '#64748b', font: { size: 10 } } },
                 y1: { position: 'right', beginAtZero: true, max: 100, ticks: { color: '#f59e0b', font: { size: 10 } }, grid: { display: false }, title: { display: true, text: 'Trade Rate %', color: '#f59e0b', font: { size: 10 } } },
             },
         },
@@ -2228,11 +2239,11 @@ function _renderDICalibration(calibData) {
         safeHTML(container, '<div class="empty-state" style="padding:16px 0;font-size:0.8rem;">No calibration data yet</div>');
         return;
     }
-    const levelColors = { HIGH: '#00e68a', MEDIUM: '#f59e0b', LOW: '#ff4d6a', NONE: '#5a5f78' };
-    const levelIcons = { HIGH: '🟢', MEDIUM: '🟡', LOW: '🔴', NONE: '⚪' };
+    const levelColors = { HIGH: '#22c55e', MEDIUM: '#f59e0b', LOW: '#ef4444', NONE: '#475569' };
+    const levelIcons = { HIGH: '+', MEDIUM: '~', LOW: '×', NONE: '—' };
     const html = calibData.map(c => {
-        const color = levelColors[c.level] || '#5a5f78';
-        const icon = levelIcons[c.level] || '⚪';
+        const color = levelColors[c.level] || '#475569';
+        const icon = levelIcons[c.level] || '—';
         const accText = c.accuracy != null ? `${c.accuracy}%` : 'N/A';
         const accClass = c.accuracy != null ? (c.accuracy >= 60 ? 'di-cal-good' : c.accuracy >= 40 ? 'di-cal-mid' : 'di-cal-bad') : 'di-cal-na';
         return `<div class="di-cal-card" style="border-top:3px solid ${color};">
@@ -2251,8 +2262,8 @@ function _renderDICalibration(calibData) {
                 <span class="di-cal-acc-val">${accText}</span>
             </div>
             <div class="di-cal-outcomes">
-                <span class="di-cal-win">✅ ${c.positive_outcomes} W</span>
-                <span class="di-cal-loss">❌ ${c.negative_outcomes} L</span>
+                <span class="di-cal-win">+${c.positive_outcomes} W</span>
+                <span class="di-cal-loss">x${c.negative_outcomes} L</span>
             </div>
         </div>`;
     }).join('');
@@ -2268,9 +2279,9 @@ function _renderDICategoryRank(catPerf) {
         return;
     }
     const html = catPerf.map((c, i) => {
-        const rankMedal = i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : `#${i + 1}`;
+        const rankMedal = i === 0 ? '#1' : i === 1 ? '#2' : i === 2 ? '#3' : `#${i + 1}`;
         const scorePct = Math.min(100, c.avg_score);
-        const scoreColor = scorePct >= 70 ? '#00e68a' : scorePct >= 45 ? '#f59e0b' : '#ff4d6a';
+        const scoreColor = scorePct >= 70 ? '#22c55e' : scorePct >= 45 ? '#f59e0b' : '#ef4444';
         return `<div class="di-catrank-row">
             <div class="di-catrank-rank">${rankMedal}</div>
             <div class="di-catrank-name">${categoryIcon(c.category)} ${c.category}</div>
@@ -2300,13 +2311,13 @@ function _renderDIMissedOpps(missedOpps) {
         return;
     }
     const html = missedOpps.map(m => {
-        const gradeColor = m.di_grade.startsWith('A') ? '#00e68a' :
-                           m.di_grade.startsWith('B') ? '#4c8dff' :
-                           m.di_grade.startsWith('C') ? '#f59e0b' : '#ff4d6a';
+        const gradeColor = m.di_grade.startsWith('A') ? '#22c55e' :
+                           m.di_grade.startsWith('B') ? '#3b82f6' :
+                           m.di_grade.startsWith('C') ? '#f59e0b' : '#ef4444';
         const reasonsList = (m.rejection_reasons || []).map(r => `<span class="di-mo-reason">• ${escHtml(r)}</span>`).join('');
         return `<div class="di-mo-card">
             <div class="di-mo-header">
-                <span class="di-mo-edge" title="Edge">📈 ${m.edge.toFixed(1)}%</span>
+                <span class="di-mo-edge" title="Edge">${m.edge.toFixed(1)}%</span>
                 <span class="di-mo-grade" style="color:${gradeColor};">${m.di_grade}</span>
                 <span class="di-mo-cat">${categoryIcon(m.category)} ${m.category || '—'}</span>
                 <span class="di-mo-time">${shortDate(m.created_at)}</span>
@@ -2328,8 +2339,8 @@ function _renderDIResearchROI(roi) {
         return;
     }
     const tierOrder = ['excellent', 'good', 'fair', 'poor'];
-    const tierColors = { excellent: '#00e68a', good: '#4c8dff', fair: '#f59e0b', poor: '#ff4d6a' };
-    const tierIcons = { excellent: '🌟', good: '✅', fair: '🟡', poor: '❌' };
+    const tierColors = { excellent: '#22c55e', good: '#3b82f6', fair: '#f59e0b', poor: '#ef4444' };
+    const tierIcons = { excellent: '+', good: '+', fair: '~', poor: '×' };
     const maxEdge = Math.max(...tierOrder.map(t => (roi[t] || {}).avg_edge || 0), 1);
     const html = tierOrder.map(t => {
         const d = roi[t] || { count: 0, avg_edge: 0, max_edge: 0 };
@@ -2362,14 +2373,14 @@ function _renderDIInsights(insights) {
         safeHTML(container, '<div class="empty-state" style="padding:16px 0;font-size:0.8rem;">No insights generated — more decision data needed</div>');
         return;
     }
-    const typeColors = { WARNING: '#f59e0b', INFO: '#4c8dff', SUCCESS: '#00e68a', OPPORTUNITY: '#a855f7' };
+    const typeColors = { WARNING: '#f59e0b', INFO: '#3b82f6', SUCCESS: '#22c55e', OPPORTUNITY: '#a855f7' };
     const typeBg = { WARNING: 'rgba(245,158,11,0.08)', INFO: 'rgba(76,141,255,0.08)', SUCCESS: 'rgba(0,230,138,0.08)', OPPORTUNITY: 'rgba(168,85,247,0.08)' };
     const html = insights.map(ins => {
-        const color = typeColors[ins.type] || '#9499b3';
+        const color = typeColors[ins.type] || '#64748b';
         const bg = typeBg[ins.type] || 'rgba(255,255,255,0.03)';
         return `<div class="di-insight-card" style="border-left:3px solid ${color};background:${bg};">
             <div class="di-insight-header">
-                <span class="di-insight-icon">${ins.icon || '💡'}</span>
+                <span class="di-insight-icon">${ins.icon || '*'}</span>
                 <span class="di-insight-title">${escHtml(ins.title)}</span>
                 <span class="di-insight-type" style="color:${color};">${ins.type}</span>
             </div>
@@ -2433,8 +2444,8 @@ function renderDecisionCard(entry, idx) {
     const decision = (entry.decision || 'SKIP').toUpperCase();
     const decClass = decision === 'TRADE' ? 'dc-trade' :
                      decision === 'NO TRADE' ? 'dc-no-trade' : 'dc-skip';
-    const decIcon = decision === 'TRADE' ? '✅' :
-                    decision === 'NO TRADE' ? '❌' : '⏭️';
+    const decIcon = decision === 'TRADE' ? '+' :
+                    decision === 'NO TRADE' ? 'x' : '>';
 
     const edgeVal = (entry.edge || 0) * 100;
     const edgeSign = edgeVal >= 0 ? '+' : '';
@@ -2509,11 +2520,11 @@ function renderDecisionCard(entry, idx) {
 
 function categoryIcon(cat) {
     const icons = {
-        MACRO: '📈', ELECTION: '🗳️', CRYPTO: '₿', CORPORATE: '🏢',
-        LEGAL: '⚖️', SCIENCE: '🔬', TECH: '💻', SPORTS: '🏆',
-        WEATHER: '🌦️', GEOPOLITICS: '🌍', SOCIAL_MEDIA: '📱', UNKNOWN: '❓'
+        MACRO: 'MCR', ELECTION: 'ELC', CRYPTO: 'CRY', CORPORATE: 'CRP',
+        LEGAL: 'LGL', SCIENCE: 'SCI', TECH: 'TCH', SPORTS: 'SPT',
+        WEATHER: 'WTH', GEOPOLITICS: 'GEO', SOCIAL_MEDIA: 'SOC', UNKNOWN: '—'
     };
-    return icons[(cat || '').toUpperCase()] || '❓';
+    return icons[(cat || '').toUpperCase()] || '—';
 }
 
 function renderDecisionDetail(entry, idx) {
@@ -2540,7 +2551,7 @@ function renderDecisionDetail(entry, idx) {
     const completeness = entry.pipeline_completeness || 0;
 
     // Verdict text
-    const verdictIcon = decision === 'TRADE' ? '🟢' : decision === 'NO TRADE' ? '🔴' : '🟡';
+    const verdictIcon = decision === 'TRADE' ? '+' : decision === 'NO TRADE' ? '×' : '—';
     const verdictText = decision === 'TRADE'
         ? `Trade executed with ${edgeVal >= 0 ? '+' : ''}${edgeVal.toFixed(1)}% edge and ${conf} confidence`
         : decision === 'NO TRADE'
@@ -2611,7 +2622,7 @@ function renderDecisionDetail(entry, idx) {
 
         <div class="dc-summary-bottom">
             <div class="dc-summary-reasons">
-                <div class="dc-reasons-title">📋 Decision Breakdown</div>
+                <div class="dc-reasons-title">DECISION BREAKDOWN</div>
                 <ul class="dc-reasons-list">${reasonsList || '<li>No specific reasons recorded</li>'}</ul>
             </div>
             <div class="dc-summary-completeness">
@@ -2630,7 +2641,7 @@ function renderDecisionDetail(entry, idx) {
 
     // ═══ PIPELINE SECTION HEADER ═══
     html += '<div class="dc-pipeline-section">';
-    html += '<div class="dc-pipeline-title">⚡ Pipeline Stage Breakdown</div>';
+    html += '<div class="dc-pipeline-title">PIPELINE STAGE BREAKDOWN</div>';
     html += '<div class="dc-pipeline">';
 
     stages.forEach((stage, si) => {
@@ -2670,9 +2681,9 @@ function renderDecisionDetail(entry, idx) {
 
             // Researchability bar
             const rPct = d.researchability || 0;
-            const rColor = rPct >= 70 ? '#00d68f' : rPct >= 40 ? '#f59e0b' : '#ef4444';
+            const rColor = rPct >= 70 ? '#22c55e' : rPct >= 40 ? '#f59e0b' : '#ef4444';
             html += `<div class="dc-quality-breakdown">
-                <div class="dc-evidence-title">🔬 Researchability Score</div>
+                <div class="dc-evidence-title">RESEARCHABILITY SCORE</div>
                 <div class="dc-quality-row">
                     <span class="dc-quality-label">Score</span>
                     <div class="dc-quality-track"><div class="dc-quality-fill" style="width:${rPct}%;background:${rColor}"></div></div>
@@ -2683,7 +2694,7 @@ function renderDecisionDetail(entry, idx) {
             // Researchability reasons
             if (d.researchability_reasons && d.researchability_reasons.length > 0) {
                 html += '<div class="dc-research-summary">';
-                html += '<div class="dc-evidence-title">💡 Why this score</div>';
+                html += '<div class="dc-evidence-title">WHY THIS SCORE</div>';
                 d.researchability_reasons.forEach(r => {
                     html += `<div class="dc-summary-text" style="margin-bottom:4px;">• ${escHtml(r)}</div>`;
                 });
@@ -2693,7 +2704,7 @@ function renderDecisionDetail(entry, idx) {
             // Primary sources
             if (d.primary_sources && d.primary_sources.length > 0) {
                 html += '<div class="dc-research-summary">';
-                html += '<div class="dc-evidence-title">📡 Primary Sources</div>';
+                html += '<div class="dc-evidence-title">PRIMARY SOURCES</div>';
                 html += '<div class="dc-kv-grid">';
                 d.primary_sources.forEach(s => {
                     html += `<div class="dc-kv"><span class="dc-kv-value" style="font-size:12px;">${escHtml(s)}</span></div>`;
@@ -2704,11 +2715,11 @@ function renderDecisionDetail(entry, idx) {
             // Tags
             if (d.tags && d.tags.length > 0) {
                 html += '<div class="dc-research-summary">';
-                html += '<div class="dc-evidence-title">🏷️ Tags</div>';
+                html += '<div class="dc-evidence-title">TAGS</div>';
                 html += '<div class="dc-kv-grid">';
                 d.tags.forEach(t => {
                     const tagColor = t === 'scheduled_event' ? '#3b82f6' :
-                                     t === 'high_signal' ? '#00d68f' :
+                                     t === 'high_signal' ? '#22c55e' :
                                      t === 'unpredictable' ? '#ef4444' :
                                      t === 'volatile' ? '#f59e0b' : '#a78bfa';
                     html += `<div class="dc-kv"><span class="dc-kv-value" style="font-size:11px;background:${tagColor}20;color:${tagColor};padding:2px 8px;border-radius:10px;">${escHtml(t.replace(/_/g, ' '))}</span></div>`;
@@ -2730,9 +2741,9 @@ function renderDecisionDetail(entry, idx) {
             if (d.quality_breakdown && Object.keys(d.quality_breakdown).length > 0) {
                 const qb = d.quality_breakdown;
                 html += '<div class="dc-quality-breakdown">';
-                html += '<div class="dc-evidence-title">📊 Quality Breakdown</div>';
+                html += '<div class="dc-evidence-title">QUALITY BREAKDOWN</div>';
                 const dims = [
-                    {label: 'Recency', key: 'recency', color: '#00d68f'},
+                    {label: 'Recency', key: 'recency', color: '#22c55e'},
                     {label: 'Authority', key: 'authority', color: '#3b82f6'},
                     {label: 'Agreement', key: 'agreement', color: '#a78bfa'},
                     {label: 'Numeric Data', key: 'numeric_density', color: '#f59e0b'},
@@ -2753,7 +2764,7 @@ function renderDecisionDetail(entry, idx) {
             // Research summary
             if (d.summary) {
                 html += `<div class="dc-research-summary">
-                    <div class="dc-evidence-title">📋 Research Summary</div>
+                    <div class="dc-evidence-title">RESEARCH SUMMARY</div>
                     <div class="dc-summary-text">${escHtml(d.summary)}</div>
                 </div>`;
             }
@@ -2761,7 +2772,7 @@ function renderDecisionDetail(entry, idx) {
             // Evidence bullets with clickable source links
             if (d.evidence_bullets && d.evidence_bullets.length > 0) {
                 html += '<div class="dc-evidence-list">';
-                html += '<div class="dc-evidence-title">� Key Evidence from Sources</div>';
+                html += '<div class="dc-evidence-title">Key Evidence from Sources</div>';
                 d.evidence_bullets.forEach(b => {
                     const text = typeof b === 'string' ? b : (b.text || JSON.stringify(b));
                     const citation = (typeof b === 'object' && b.citation) ? b.citation : null;
@@ -2782,7 +2793,7 @@ function renderDecisionDetail(entry, idx) {
                     if (isNumeric && b.metric_name) {
                         const metricVal = b.metric_value || '';
                         const metricUnit = b.metric_unit || '';
-                        numericBadge = `<span class="dc-numeric-badge">📊 ${escHtml(b.metric_name)}: ${escHtml(metricVal)}${metricUnit ? ' ' + escHtml(metricUnit) : ''}</span>`;
+                        numericBadge = `<span class="dc-numeric-badge">${escHtml(b.metric_name)}: ${escHtml(metricVal)}${metricUnit ? ' ' + escHtml(metricUnit) : ''}</span>`;
                     }
 
                     // Relevance indicator
@@ -2805,7 +2816,7 @@ function renderDecisionDetail(entry, idx) {
 
                         if (url) {
                             const linkText = title || publisher || url;
-                            sourceLink = `<a href="${escHtml(url)}" target="_blank" rel="noopener" class="dc-source-link" title="${escHtml(url)}">🔗 ${escHtml(linkText.substring(0, 80))}</a>`;
+                            sourceLink = `<a href="${escHtml(url)}" target="_blank" rel="noopener" class="dc-source-link" title="${escHtml(url)}">${escHtml(linkText.substring(0, 80))}</a>`;
                         }
                         if (publisher) {
                             sourceLink += `<span class="dc-publisher">${escHtml(publisher)}</span>`;
@@ -2817,7 +2828,7 @@ function renderDecisionDetail(entry, idx) {
                         // Fallback for LLM evidence format {text, source, url, date, impact}
                         const url = b.url || '';
                         if (url) {
-                            sourceLink = `<a href="${escHtml(url)}" target="_blank" rel="noopener" class="dc-source-link">🔗 ${escHtml(b.source || url)}</a>`;
+                            sourceLink = `<a href="${escHtml(url)}" target="_blank" rel="noopener" class="dc-source-link">${escHtml(b.source || url)}</a>`;
                         } else if (b.source) {
                             sourceLink = `<span class="dc-publisher">${escHtml(b.source)}</span>`;
                         }
@@ -2838,7 +2849,7 @@ function renderDecisionDetail(entry, idx) {
             // Contradictions
             if (d.contradictions && d.contradictions.length > 0) {
                 html += '<div class="dc-contradictions">';
-                html += '<div class="dc-evidence-title">⚖️ Contradictions Found</div>';
+                html += '<div class="dc-evidence-title">CONTRADICTIONS</div>';
                 d.contradictions.forEach(c => {
                     html += `<div class="dc-contradiction-item">
                         <div class="dc-contradiction-claim">
@@ -2883,13 +2894,13 @@ function renderDecisionDetail(entry, idx) {
 
             if (d.reasoning) {
                 html += `<div class="dc-reasoning">
-                    <div class="dc-reasoning-title">💭 LLM Reasoning</div>
+                    <div class="dc-reasoning-title">LLM REASONING</div>
                     <div class="dc-reasoning-text">${escHtml(d.reasoning)}</div>
                 </div>`;
             }
             if (d.invalidation_triggers && d.invalidation_triggers.length > 0) {
                 html += `<div class="dc-triggers">
-                    <div class="dc-triggers-title">⚠️ Invalidation Triggers</div>
+                    <div class="dc-triggers-title">INVALIDATION TRIGGERS</div>
                     <ul class="dc-triggers-list">
                         ${d.invalidation_triggers.map(t => `<li>${escHtml(t)}</li>`).join('')}
                     </ul>
@@ -2904,7 +2915,7 @@ function renderDecisionDetail(entry, idx) {
             html += '</div>';
             if (d.violations && d.violations.length > 0) {
                 html += '<div class="dc-violations">';
-                html += '<div class="dc-violations-title">🚫 Violations</div>';
+                html += '<div class="dc-violations-title">Violations</div>';
                 d.violations.forEach(v => {
                     html += `<div class="dc-violation-item">${escHtml(v)}</div>`;
                 });
@@ -3069,20 +3080,20 @@ function renderWalletGrid(wallets) {
     }
     const html = wallets.map(w => {
         const typeBadge = w.wallet_type === 'paper'
-            ? '<span class="sw-badge sw-badge-paper">📄 Paper</span>'
-            : '<span class="sw-badge sw-badge-live">🔑 Live</span>';
+            ? '<span class="sw-badge sw-badge-paper">Paper</span>'
+            : '<span class="sw-badge sw-badge-live">Live</span>';
         const pnl = w.total_pnl || 0;
         const pnlClass = pnl >= 0 ? 'pnl-positive' : 'pnl-negative';
         const pnlStr = `${pnl >= 0 ? '+' : ''}$${pnl.toFixed(2)}`;
         const roi = w.initial_balance > 0 ? ((pnl / w.initial_balance) * 100).toFixed(1) : '0.0';
         const roiStr = `${pnl >= 0 ? '+' : ''}${roi}%`;
         const stratBadges = (w.strategies || []).map(s =>
-            `<span class="sw-strat-badge" style="border-color:${s.color||'#4c8dff'};">${s.icon||'📋'} ${s.name}</span>`
+            `<span class="sw-strat-badge" style="border-color:${s.color||'#3b82f6'};">${s.icon||'STR'} ${s.name}</span>`
         ).join('') || '<span class="sw-no-strat">No strategies assigned</span>';
         const isDefault = w.id === 'default-paper';
-        return `<div class="sw-wallet-card" data-wallet-type="${w.wallet_type}" data-wallet-id="${w.id}" style="border-top: 3px solid ${w.color || '#4c8dff'}">
+        return `<div class="sw-wallet-card" data-wallet-type="${w.wallet_type}" data-wallet-id="${w.id}" style="border-top: 3px solid ${w.color || '#3b82f6'}">
             <div class="sw-wc-header">
-                <div class="sw-wc-name">${w.icon || '💰'} ${w.name}</div>
+                <div class="sw-wc-name">${w.icon || '$'} ${w.name}</div>
                 ${typeBadge}
             </div>
             <div class="sw-wc-balance">$${(w.current_balance || 0).toLocaleString(undefined, {minimumFractionDigits: 2})}</div>
@@ -3095,9 +3106,9 @@ function renderWalletGrid(wallets) {
             </div>
             <div class="sw-wc-strategies">${stratBadges}</div>
             <div class="sw-wc-actions">
-                <button class="sw-btn sw-btn-sm" onclick="showWalletPerformance('${w.id}')">📊 Performance</button>
-                <button class="sw-btn sw-btn-sm" onclick="showAssignModal('${w.id}','wallet')">🔗 Assign Strategy</button>
-                ${!isDefault ? `<button class="sw-btn sw-btn-sm sw-btn-danger" onclick="deleteWallet('${w.id}','${w.name}')">🗑️</button>` : ''}
+                <button class="sw-btn sw-btn-sm" onclick="showWalletPerformance('${w.id}')">PERF</button>
+                <button class="sw-btn sw-btn-sm" onclick="showAssignModal('${w.id}','wallet')">Assign Strategy</button>
+                ${!isDefault ? `<button class="sw-btn sw-btn-sm sw-btn-danger" onclick="deleteWallet('${w.id}','${w.name}')">DEL</button>` : ''}
             </div>
         </div>`;
     }).join('');
@@ -3111,34 +3122,34 @@ function renderStrategyGrid(strategies) {
         safeHTML(grid, '<div class="empty-state" style="padding:30px 0;">No strategies yet — create one to get started.</div>');
         return;
     }
-    const riskIcons = {conservative: '🛡️', moderate: '⚖️', aggressive: '🔥'};
+    const riskIcons = {conservative: 'DEF', moderate: 'BAL', aggressive: 'AGR'};
     const typeLabels = {ai_trading: 'AI Trading', manual: 'Manual', momentum: 'Momentum',
         mean_reversion: 'Mean Reversion', whale_follow: 'Whale Follow',
         arbitrage: 'Arbitrage', custom: 'Custom'};
     const html = strategies.map(s => {
         const walletBadges = (s.wallets || []).map(w =>
-            `<span class="sw-wallet-badge" style="border-color:${w.color||'#4c8dff'};">
-                ${w.icon||'💰'} ${w.name}
+            `<span class="sw-wallet-badge" style="border-color:${w.color||'#3b82f6'};">
+                ${w.icon||'$'} ${w.name}
                 <span class="sw-badge-alloc">$${(w.allocated_balance||0).toLocaleString()}</span>
-                ${w.binding_active ? '' : '<span class="sw-badge-paused">⏸</span>'}
+                ${w.binding_active ? '' : '<span class="sw-badge-paused">PAUSED</span>'}
             </span>`
         ).join('') || '<span class="sw-no-strat">No wallets assigned</span>';
         const isDefault = s.id === 'default-ai';
         const statusDot = s.is_active ? '<span class="sw-status-dot sw-dot-active"></span>' : '<span class="sw-status-dot sw-dot-inactive"></span>';
-        return `<div class="sw-strategy-card" style="border-top: 3px solid ${s.color || '#00e68a'}">
+        return `<div class="sw-strategy-card" style="border-top: 3px solid ${s.color || '#22c55e'}">
             <div class="sw-sc-header">
-                <div class="sw-sc-name">${s.icon || '📋'} ${s.name} ${statusDot}</div>
+                <div class="sw-sc-name">${s.icon || 'STR'} ${s.name} ${statusDot}</div>
                 <span class="sw-badge sw-badge-type">${typeLabels[s.strategy_type] || s.strategy_type}</span>
             </div>
             <div class="sw-sc-meta">
-                <span>${riskIcons[s.risk_profile] || '⚖️'} ${(s.risk_profile || 'moderate').charAt(0).toUpperCase() + (s.risk_profile || 'moderate').slice(1)}</span>
+                <span>${riskIcons[s.risk_profile] || 'BAL'} ${(s.risk_profile || 'moderate').charAt(0).toUpperCase() + (s.risk_profile || 'moderate').slice(1)}</span>
                 ${s.description ? `<span class="sw-sc-desc">${s.description.substring(0, 80)}</span>` : ''}
             </div>
             <div class="sw-sc-wallets">${walletBadges}</div>
             <div class="sw-wc-actions">
-                <button class="sw-btn sw-btn-sm" onclick="toggleStrategy('${s.id}', ${s.is_active ? 0 : 1})">${s.is_active ? '⏸ Pause' : '▶ Activate'}</button>
-                <button class="sw-btn sw-btn-sm" onclick="showAssignModal('${s.id}','strategy')">🔗 Assign Wallet</button>
-                ${!isDefault ? `<button class="sw-btn sw-btn-sm sw-btn-danger" onclick="deleteStrategy('${s.id}','${s.name}')">🗑️</button>` : ''}
+                <button class="sw-btn sw-btn-sm" onclick="toggleStrategy('${s.id}', ${s.is_active ? 0 : 1})">${s.is_active ? 'Pause' : 'Activate'}</button>
+                <button class="sw-btn sw-btn-sm" onclick="showAssignModal('${s.id}','strategy')">Assign Wallet</button>
+                ${!isDefault ? `<button class="sw-btn sw-btn-sm sw-btn-danger" onclick="deleteStrategy('${s.id}','${s.name}')">DEL</button>` : ''}
             </div>
         </div>`;
     }).join('');
@@ -3155,11 +3166,11 @@ function filterWalletCards() {
 
 // ─── Wallet CRUD ────────────────────────────────────────────────
 let _swNewWalletType = 'paper';
-let _swNewWalletColor = '#4c8dff';
+let _swNewWalletColor = '#3b82f6';
 
 function showCreateWalletModal() {
     _swNewWalletType = 'paper';
-    _swNewWalletColor = '#4c8dff';
+    _swNewWalletColor = '#3b82f6';
     const m = $('#modal-create-wallet');
     if (m) m.style.display = 'flex';
     const nameEl = $('#sw-new-wallet-name');
@@ -3175,7 +3186,7 @@ function showCreateWalletModal() {
         b.classList.toggle('active', b.dataset.type === 'paper');
     });
     document.querySelectorAll('#modal-create-wallet .sw-color-swatch').forEach(b => {
-        b.classList.toggle('active', b.dataset.color === '#4c8dff');
+        b.classList.toggle('active', b.dataset.color === '#3b82f6');
     });
     if ($('#sw-address-group')) $('#sw-address-group').style.display = 'none';
     if ($('#sw-balance-group')) $('#sw-balance-group').style.display = '';
@@ -3351,7 +3362,7 @@ function populateWalletDropdowns(wallets) {
             ? '<option value="">No wallet (assign later)</option>'
             : '<option value="">Select wallet…</option>';
         wallets.forEach(w => {
-            opts += `<option value="${w.id}" ${w.id === cur ? 'selected' : ''}>${w.icon||'💰'} ${w.name} (${w.wallet_type})</option>`;
+            opts += `<option value="${w.id}" ${w.id === cur ? 'selected' : ''}>${w.icon||'$'} ${w.name} (${w.wallet_type})</option>`;
         });
         safeHTML(el, opts);
     });
@@ -3371,7 +3382,7 @@ function populateStrategyDropdowns(strategies) {
     const cur = el.value;
     let opts = '<option value="">Select strategy…</option>';
     strategies.forEach(s => {
-        opts += `<option value="${s.id}" ${s.id === cur ? 'selected' : ''}>${s.icon||'📋'} ${s.name}</option>`;
+        opts += `<option value="${s.id}" ${s.id === cur ? 'selected' : ''}>${s.icon||'STR'} ${s.name}</option>`;
     });
     safeHTML(el, opts);
 }
@@ -3387,7 +3398,7 @@ async function showWalletPerformance(walletId) {
     if (!d) return;
 
     // Title
-    safeText($('#sw-perf-title'), `📊 ${d.wallet?.name || 'Wallet'} Performance`);
+    safeText($('#sw-perf-title'), `${d.wallet?.name || 'Wallet'} Performance`);
 
     // KPI row
     const s = d.stats || {};
@@ -3415,8 +3426,8 @@ async function showWalletPerformance(walletId) {
                 datasets: [{
                     label: 'Equity',
                     data: ec.map(p => p.equity || 0),
-                    borderColor: d.wallet?.color || '#4c8dff',
-                    backgroundColor: (d.wallet?.color || '#4c8dff') + '20',
+                    borderColor: d.wallet?.color || '#3b82f6',
+                    backgroundColor: (d.wallet?.color || '#3b82f6') + '20',
                     fill: true, tension: 0.3, pointRadius: 0, borderWidth: 2,
                 }],
             },
@@ -3424,8 +3435,8 @@ async function showWalletPerformance(walletId) {
                 responsive: true, maintainAspectRatio: false,
                 plugins: { legend: { display: false } },
                 scales: {
-                    x: { ticks: { color: '#9499b3', maxTicksLimit: 8, font: {size: 10} }, grid: { display: false } },
-                    y: { ticks: { color: '#9499b3', font: {size: 10}, callback: v => '$' + v.toLocaleString() }, grid: { color: 'rgba(255,255,255,0.03)' } },
+                    x: { ticks: { color: '#64748b', maxTicksLimit: 8, font: {size: 10} }, grid: { display: false } },
+                    y: { ticks: { color: '#64748b', font: {size: 10}, callback: v => '$' + v.toLocaleString() }, grid: { color: '#1e293b' } },
                 },
             },
         });
@@ -3509,7 +3520,7 @@ async function updateAnalytics() {
             $('#ana-roi-sub').textContent = `Staked: $${(analytics.total_staked || 0).toFixed(2)}`;
 
             const streak = analytics.current_streak || 0;
-            const streakEmoji = streak > 0 ? '🔥' : streak < 0 ? '❄️' : '—';
+            const streakEmoji = streak > 0 ? 'W' : streak < 0 ? 'L' : '—';
             $('#ana-streak').textContent = `${streakEmoji} ${Math.abs(streak)}`;
             $('#ana-streak-sub').textContent = `Best: ${analytics.best_streak || 0} | Worst: ${analytics.worst_streak || 0}`;
 
@@ -3699,15 +3710,15 @@ let _whaleRefreshCountdown = 30;
 
 // ── Category config ──────────────────────────────────────────
 const CATEGORY_META = {
-    'NBA':      { icon: '🏀', color: '#ff6b35' },
-    'NFL':      { icon: '🏈', color: '#4c8dff' },
-    'Soccer':   { icon: '⚽', color: '#00e68a' },
-    'Politics': { icon: '🏛️', color: '#a855f7' },
-    'Olympics': { icon: '🏅', color: '#ffd700' },
-    'MLB':      { icon: '⚾', color: '#e74c3c' },
-    'Golf':     { icon: '⛳', color: '#2ecc71' },
-    'Crypto':   { icon: '₿', color: '#f7931a' },
-    'Other':    { icon: '📦', color: '#9499b3' },
+    'NBA':      { icon: 'NBA', color: '#f97316' },
+    'NFL':      { icon: 'NFL', color: '#3b82f6' },
+    'Soccer':   { icon: 'SOC', color: '#22c55e' },
+    'Politics': { icon: 'POL', color: '#a855f7' },
+    'Olympics': { icon: 'OLY', color: '#fbbf24' },
+    'MLB':      { icon: 'MLB', color: '#ef4444' },
+    'Golf':     { icon: 'GLF', color: '#22c55e' },
+    'Crypto':   { icon: 'CRY', color: '#f97316' },
+    'Other':    { icon: 'OTH', color: '#64748b' },
 };
 
 async function updateWhaleTracker() {
@@ -3764,9 +3775,9 @@ async function updateWhaleTracker() {
     if (smiFill) smiFill.style.width = `${smiPct}%`;
     if (smiMarker) smiMarker.style.left = `${smiPct}%`;
     if (smiFill) {
-        if (smiPct >= 60) smiFill.style.background = 'linear-gradient(90deg, #3b82f6, #00e68a)';
-        else if (smiPct <= 40) smiFill.style.background = 'linear-gradient(90deg, #ff4d6a, #ff9f43)';
-        else smiFill.style.background = 'linear-gradient(90deg, #ff9f43, #3b82f6)';
+        if (smiPct >= 60) smiFill.style.background = '#22c55e';
+        else if (smiPct <= 40) smiFill.style.background = '#ef4444';
+        else smiFill.style.background = '#f97316';
     }
     const descEl = $('#whale-smi-desc');
     if (descEl) {
@@ -3865,7 +3876,7 @@ function _renderWhaleDirectionChart(dist) {
             labels: ['Bullish', 'Bearish'],
             datasets: [{
                 data: [bull, bear],
-                backgroundColor: ['#00e68a', '#ff4d6a'],
+                backgroundColor: ['#22c55e', '#ef4444'],
                 borderColor: ['rgba(0,230,138,0.3)', 'rgba(255,77,106,0.3)'],
                 borderWidth: 2,
             }],
@@ -3875,7 +3886,7 @@ function _renderWhaleDirectionChart(dist) {
             maintainAspectRatio: false,
             cutout: '65%',
             plugins: {
-                legend: { position: 'bottom', labels: { color: '#9499b3', padding: 8, font: { size: 11 } } },
+                legend: { position: 'bottom', labels: { color: '#64748b', padding: 8, font: { size: 11 } } },
                 tooltip: {
                     callbacks: {
                         label: ctx => {
@@ -3900,7 +3911,7 @@ function _renderWhaleMarketsChart(topMarkets) {
     _whaleMarketsData = top5; // Store for click lookup
     const labels = top5.map(m => (m.title || '').substring(0, 25) || 'Unknown');
     const values = top5.map(m => m.total_usd || 0);
-    const colors = top5.map(m => m.direction === 'BULLISH' ? '#00e68a' : '#ff4d6a');
+    const colors = top5.map(m => m.direction === 'BULLISH' ? '#22c55e' : '#ef4444');
     _whaleMarketsChart = new Chart(canvas, {
         type: 'bar',
         data: {
@@ -3933,11 +3944,11 @@ function _renderWhaleMarketsChart(topMarkets) {
             },
             scales: {
                 x: {
-                    ticks: { color: '#9499b3', font: { size: 10 }, callback: v => `$${(v/1000).toFixed(0)}k` },
-                    grid: { color: 'rgba(255,255,255,0.03)' },
+                    ticks: { color: '#64748b', font: { size: 10 }, callback: v => `$${(v/1000).toFixed(0)}k` },
+                    grid: { color: '#1e293b' },
                 },
                 y: {
-                    ticks: { color: '#9499b3', font: { size: 10 }, cursor: 'pointer' },
+                    ticks: { color: '#64748b', font: { size: 10 }, cursor: 'pointer' },
                     grid: { display: false },
                 },
             },
@@ -3954,9 +3965,9 @@ function _renderWhaleCategoryChart(categories) {
     if (!canvas) return;
     if (_whaleCategoryChart) _whaleCategoryChart.destroy();
     if (!categories.length) return;
-    const labels = categories.map(c => `${(CATEGORY_META[c.category] || {}).icon || '📦'} ${c.category}`);
+    const labels = categories.map(c => `${(CATEGORY_META[c.category] || {}).icon || 'OTH'} ${c.category}`);
     const values = categories.map(c => c.total_usd || 0);
-    const colors = categories.map(c => (CATEGORY_META[c.category] || {}).color || '#9499b3');
+    const colors = categories.map(c => (CATEGORY_META[c.category] || {}).color || '#64748b');
     _whaleCategoryChart = new Chart(canvas, {
         type: 'doughnut',
         data: {
@@ -3973,7 +3984,7 @@ function _renderWhaleCategoryChart(categories) {
             maintainAspectRatio: false,
             cutout: '60%',
             plugins: {
-                legend: { position: 'bottom', labels: { color: '#9499b3', padding: 6, font: { size: 10 }, boxWidth: 12 } },
+                legend: { position: 'bottom', labels: { color: '#64748b', padding: 6, font: { size: 10 }, boxWidth: 12 } },
                 tooltip: { callbacks: { label: ctx => `$${ctx.raw.toLocaleString(undefined, {maximumFractionDigits:0})} (${categories[ctx.dataIndex]?.count || 0} signals)` } },
             },
         },
@@ -4011,7 +4022,7 @@ function _renderHighConsensus(signals) {
     }
     const html = signals.map(s => {
         const dirCls = s.direction === 'BULLISH' ? 'whale-consensus-bull' : 'whale-consensus-bear';
-        const dirIcon = s.direction === 'BULLISH' ? '🟢' : '🔴';
+        const dirIcon = s.direction === 'BULLISH' ? '+' : '−';
         const names = (s.whale_names || []).slice(0, 4).join(', ');
         return `<div class="whale-consensus-card ${dirCls}">
             <div class="whale-consensus-top">
@@ -4020,8 +4031,8 @@ function _renderHighConsensus(signals) {
             </div>
             <div class="whale-consensus-title">${(s.title || '—').substring(0, 60)}</div>
             <div class="whale-consensus-meta">
-                <span>🐋 ${s.whale_count} whales</span>
-                <span>💰 $${(s.total_usd || 0).toLocaleString(undefined, {maximumFractionDigits:0})}</span>
+                <span>${s.whale_count} whales</span>
+                <span>$ $${(s.total_usd || 0).toLocaleString(undefined, {maximumFractionDigits:0})}</span>
             </div>
             <div class="whale-consensus-names">${names}</div>
         </div>`;
@@ -4040,13 +4051,13 @@ function _renderConvictionTable(signals) {
     const rows = signals.map(sig => {
         const strengthClass = sig.signal_strength === 'STRONG' ? 'whale-str-strong'
             : sig.signal_strength === 'MODERATE' ? 'whale-str-moderate' : 'whale-str-weak';
-        const dirIcon = sig.direction === 'BULLISH' ? '🟢' : '🔴';
+        const dirIcon = sig.direction === 'BULLISH' ? '+' : '−';
         const convPct = Math.min(100, sig.conviction_score || 0);
-        const convColor = convPct >= 70 ? '#00e68a' : convPct >= 45 ? '#ff9f43' : '#5a5f78';
+        const convColor = convPct >= 70 ? '#22c55e' : convPct >= 45 ? '#f97316' : '#475569';
 
         // Category pill
         const cat = sig.category || 'Other';
-        const catMeta = CATEGORY_META[cat] || { icon: '📦', color: '#9499b3' };
+        const catMeta = CATEGORY_META[cat] || { icon: 'OTH', color: '#64748b' };
         const catHtml = `<span class="whale-cat-pill" style="border-color:${catMeta.color}40;color:${catMeta.color}">${catMeta.icon} ${cat}</span>`;
 
         // Edge
@@ -4064,8 +4075,8 @@ function _renderConvictionTable(signals) {
 
         // Trend indicator (NEW)
         const trend = sig.trend || 'UNKNOWN';
-        const trendIconMap = { RISING: '📈', FALLING: '📉', STABLE: '➡️', NEW: '🆕' };
-        const trendIcon = trendIconMap[trend] || '❓';
+        const trendIconMap = { RISING: 'UP', FALLING: 'DN', STABLE: '--', NEW: 'NEW' };
+        const trendIcon = trendIconMap[trend] || '?';
         const trendCls = { RISING: 'whale-trend-rising', FALLING: 'whale-trend-falling', STABLE: 'whale-trend-stable', NEW: 'whale-trend-new' }[trend] || 'whale-trend-unknown';
         let trendTooltip = trend;
         if (sig.conviction_delta != null) {
@@ -4139,13 +4150,13 @@ function _renderActivityFeed(deltas) {
         return;
     }
     const actionMeta = {
-        'NEW_ENTRY':      { icon: '🟢', label: 'entered', cls: 'whale-feed-entry' },
-        'EXIT':           { icon: '🔴', label: 'exited', cls: 'whale-feed-exit' },
-        'SIZE_INCREASE':  { icon: '📈', label: 'increased position in', cls: 'whale-feed-increase' },
-        'SIZE_DECREASE':  { icon: '📉', label: 'decreased position in', cls: 'whale-feed-decrease' },
+        'NEW_ENTRY':      { icon: '+', label: 'entered', cls: 'whale-feed-entry' },
+        'EXIT':           { icon: 'x', label: 'exited', cls: 'whale-feed-exit' },
+        'SIZE_INCREASE':  { icon: 'UP', label: 'increased position in', cls: 'whale-feed-increase' },
+        'SIZE_DECREASE':  { icon: 'DN', label: 'decreased position in', cls: 'whale-feed-decrease' },
     };
     const html = deltas.slice(0, 50).map(d => {
-        const meta = actionMeta[d.action] || { icon: '⚪', label: d.action, cls: '' };
+        const meta = actionMeta[d.action] || { icon: 'o', label: d.action, cls: '' };
         const valStr = Math.abs(d.value_change_usd || 0) >= 1
             ? `$${Math.abs(d.value_change_usd).toLocaleString(undefined, {maximumFractionDigits:0})}` : '';
         const sizeStr = Math.abs(d.size_change || 0) >= 1
@@ -4182,15 +4193,15 @@ function _renderWhaleLeaderboard(wallets) {
         safeHTML(container, '<div class="empty-state">No wallets tracked yet</div>');
         return;
     }
-    const tierColors = { LEGENDARY: '#ffd700', ELITE: '#a855f7', PRO: '#4c8dff', RISING: '#9499b3' };
-    const tierIcons = { LEGENDARY: '👑', ELITE: '💎', PRO: '⭐', RISING: '🌱' };
-    const followColors = { STRONG_FOLLOW: '#00e68a', FOLLOW: '#4c8dff', CAUTION: '#ff9f43', AVOID: '#ff4d6a', NO_DATA: '#5a5f78' };
-    const followIcons = { STRONG_FOLLOW: '🚀', FOLLOW: '✅', CAUTION: '⚠️', AVOID: '🚫', NO_DATA: '—' };
-    const holdIcons = { SCALPER: '⚡', SWING: '🔄', POSITION: '📊', HODLER: '🏔️', UNKNOWN: '❓' };
+    const tierColors = { LEGENDARY: '#ffd700', ELITE: '#a855f7', PRO: '#3b82f6', RISING: '#64748b' };
+    const tierIcons = { LEGENDARY: 'LEG', ELITE: 'ELT', PRO: 'PRO', RISING: 'RSG' };
+    const followColors = { STRONG_FOLLOW: '#22c55e', FOLLOW: '#3b82f6', CAUTION: '#f97316', AVOID: '#ef4444', NO_DATA: '#475569' };
+    const followIcons = { STRONG_FOLLOW: '>>', FOLLOW: 'OK', CAUTION: '!!', AVOID: 'NO', NO_DATA: '—' };
+    const holdIcons = { SCALPER: 'SCL', SWING: 'SWG', POSITION: 'POS', HODLER: 'HDL', UNKNOWN: '?' };
     const html = wallets.map((w, i) => {
         const tier = w.tier || 'RISING';
-        const tierColor = tierColors[tier] || '#9499b3';
-        const tierIcon = tierIcons[tier] || '🌱';
+        const tierColor = tierColors[tier] || '#64748b';
+        const tierIcon = tierIcons[tier] || 'RSG';
         const pnlStr = (w.total_pnl || 0) >= 1_000_000
             ? `$${((w.total_pnl) / 1_000_000).toFixed(2)}M`
             : `$${((w.total_pnl || 0) / 1_000).toFixed(0)}K`;
@@ -4207,13 +4218,13 @@ function _renderWhaleLeaderboard(wallets) {
         const followSig = w.follow_signal || 'NO_DATA';
         const followPnl = w.follow_pnl || 0;
         const followIcon = followIcons[followSig] || '—';
-        const followColor = followColors[followSig] || '#5a5f78';
+        const followColor = followColors[followSig] || '#475569';
         const followPnlStr = followPnl !== 0 ? `${followPnl >= 0 ? '+' : ''}${followPnl.toFixed(1)}%` : '—';
         const followWr = w.follow_trades > 0 ? `${(w.follow_win_rate || 0).toFixed(0)}%` : '';
 
         // Hold duration (NEW)
         const holdStyle = w.hold_style || 'UNKNOWN';
-        const holdIcon = holdIcons[holdStyle] || '❓';
+        const holdIcon = holdIcons[holdStyle] || '?';
         let holdStr = '—';
         if (w.avg_hold_hours != null) {
             if (w.avg_hold_hours < 1) holdStr = `${Math.round(w.avg_hold_hours * 60)}m`;
@@ -4359,7 +4370,7 @@ function _renderWhaleMomentum(momentum) {
         const pct = Math.abs(m.net_flow) / maxAbs * 100;
         const isPos = m.net_flow >= 0;
         const color = isPos ? 'var(--accent-green)' : 'var(--accent-red)';
-        const dirLabel = m.direction === 'ACCUMULATING' ? '📈 Accumulating' : m.direction === 'DISTRIBUTING' ? '📉 Distributing' : '⚖️ Neutral';
+        const dirLabel = m.direction === 'ACCUMULATING' ? 'ACCUMULATING' : m.direction === 'DISTRIBUTING' ? 'DISTRIBUTING' : 'NEUTRAL';
         const flowStr = `${isPos ? '+' : '-'}$${Math.abs(m.net_flow).toLocaleString(undefined, {maximumFractionDigits:0})}`;
         return `<div class="whale-mom-item">
             <div class="whale-mom-label">${m.window}</div>
@@ -4467,9 +4478,9 @@ function _renderWhaleOverlap(overlaps) {
             </div>
             <div class="whale-overlap-count">${o.shared_markets} shared market${o.shared_markets > 1 ? 's' : ''}</div>
             <div class="whale-overlap-corr">
-                <span class="whale-corr-badge ${corrCls}" title="Jaccard similarity: ${corrPct}%">🔗 ${corrPct}%</span>
+                <span class="whale-corr-badge ${corrCls}" title="Jaccard similarity: ${corrPct}%">${corrPct}%</span>
                 <span class="whale-agree-badge" title="Direction agreement: ${agreeCount} agree, ${disagreeCount} disagree">
-                    ${agreeRate >= 80 ? '🤝' : agreeRate >= 50 ? '🔀' : '⚔️'} ${agreeRate.toFixed(0)}% agree
+                    ${agreeRate >= 80 ? 'AGR' : agreeRate >= 50 ? 'MIX' : 'DIV'} ${agreeRate.toFixed(0)}% agree
                 </span>
             </div>
             <div class="whale-overlap-markets" title="${marketsList}">${marketsList || '—'}</div>
@@ -4483,8 +4494,8 @@ function _renderTierSummary(tierData) {
     const container = $('#whale-tier-summary');
     if (!container) return;
     const tierOrder = ['LEGENDARY', 'ELITE', 'PRO', 'RISING'];
-    const tierColors = { LEGENDARY: '#ffd700', ELITE: '#a855f7', PRO: '#4c8dff', RISING: '#9499b3' };
-    const tierIcons = { LEGENDARY: '👑', ELITE: '💎', PRO: '⭐', RISING: '🌱' };
+    const tierColors = { LEGENDARY: '#ffd700', ELITE: '#a855f7', PRO: '#3b82f6', RISING: '#64748b' };
+    const tierIcons = { LEGENDARY: 'LEG', ELITE: 'ELT', PRO: 'PRO', RISING: 'RSG' };
     const tiers = tierOrder.filter(t => tierData[t]);
     if (!tiers.length) {
         container.innerHTML = '';
@@ -4518,10 +4529,10 @@ function _renderAlertHistory(alerts) {
         safeHTML(container, '<div class="empty-state">No alerts recorded yet — alerts will appear as risk conditions are detected</div>');
         return;
     }
-    const levelIcons = { HIGH: '🔴', MEDIUM: '🟡', LOW: 'ℹ️' };
+    const levelIcons = { HIGH: '!!', MEDIUM: '*', LOW: 'i' };
     const levelCls = { HIGH: 'whale-alert-high', MEDIUM: 'whale-alert-medium', LOW: 'whale-alert-low' };
     const html = alerts.slice(0, 30).map(a => {
-        const icon = levelIcons[a.level] || 'ℹ️';
+        const icon = levelIcons[a.level] || 'i';
         const cls = levelCls[a.level] || 'whale-alert-low';
         const timeStr = a.created_at ? shortDate(a.created_at) : '—';
         const typeLabel = (a.alert_type || '').replace(/_/g, ' ');
@@ -4588,15 +4599,15 @@ async function openWhaleProfile(address) {
 
     // Header
     const nameLabel = w.name || 'Unknown Whale';
-    const sourceTag = isScanner ? (w.source === 'live_lookup' ? ' 🔍' : ' 📡') : '';
+    const sourceTag = isScanner ? (w.source === 'live_lookup' ? ' [LIVE]' : ' [SCAN]') : '';
     safeText($('#wm-whale-name'), `${nameLabel}${sourceTag}`);
     const tierBadge = $('#wm-whale-tier');
     if (tierBadge) {
         const tier = w.tier || 'RISING';
-        const tierColors = { LEGENDARY: '#ffd700', ELITE: '#a855f7', PRO: '#4c8dff', RISING: '#9499b3' };
+        const tierColors = { LEGENDARY: '#ffd700', ELITE: '#a855f7', PRO: '#3b82f6', RISING: '#64748b' };
         tierBadge.textContent = tier;
-        tierBadge.style.color = tierColors[tier] || '#9499b3';
-        tierBadge.style.borderColor = tierColors[tier] || '#9499b3';
+        tierBadge.style.color = tierColors[tier] || '#64748b';
+        tierBadge.style.borderColor = tierColors[tier] || '#64748b';
     }
 
     // Star state
@@ -4649,7 +4660,7 @@ async function openWhaleProfile(address) {
             const span = liveStats.trading_span_days || 0;
             liveStatsEl.style.display = 'block';
             safeHTML(liveStatsEl, `
-                <h3>📊 Live Trading Analytics</h3>
+                <h3>Live Trading Analytics</h3>
                 <div class="wm-live-stats-grid">
                     <div class="wm-ls-item"><span class="wm-ls-label">Win / Loss</span><span class="wm-ls-val"><span class="whale-positive">${liveStats.winners || 0}W</span> / <span class="whale-negative">${liveStats.losers || 0}L</span></span></div>
                     <div class="wm-ls-item"><span class="wm-ls-label">Realized PnL</span><span class="wm-ls-val ${rpnl>=0?'whale-positive':'whale-negative'}">${rpnl>=0?'+':''}$${Math.abs(rpnl).toLocaleString(undefined,{maximumFractionDigits:0})}</span></div>
@@ -4685,8 +4696,8 @@ async function openWhaleProfile(address) {
         const bullPct = (bull / total) * 100;
         safeHTML(dirBar, `
             <div class="wm-dir-bar-wrap">
-                <div class="wm-dir-bull" style="width:${bullPct}%"><span>🟢 ${bull}</span></div>
-                <div class="wm-dir-bear" style="width:${100-bullPct}%"><span>🔴 ${bear}</span></div>
+                <div class="wm-dir-bull" style="width:${bullPct}%"><span>+ ${bull}</span></div>
+                <div class="wm-dir-bear" style="width:${100-bullPct}%"><span>- ${bear}</span></div>
             </div>
         `);
     }
@@ -4696,7 +4707,7 @@ async function openWhaleProfile(address) {
     if (catContainer) {
         const cats = data.category_distribution || {};
         const catHtml = Object.entries(cats).sort((a,b) => b[1]-a[1]).map(([cat, count]) => {
-            const meta = CATEGORY_META[cat] || { icon: '📦', color: '#9499b3' };
+            const meta = CATEGORY_META[cat] || { icon: 'OTH', color: '#64748b' };
             return `<div class="wm-cat-item"><span style="color:${meta.color}">${meta.icon} ${cat}</span><strong>${count}</strong></div>`;
         }).join('');
         safeHTML(catContainer, catHtml || '<div class="empty-state">No data</div>');
@@ -4710,7 +4721,7 @@ async function openWhaleProfile(address) {
         const mktsHtml = mkts.map(m => {
             const val = m.total_usd || m.current_value || 0;
             const pct = (val / maxUsd) * 100;
-            const dirIcon = m.direction === 'BULLISH' ? '🟢' : '🔴';
+            const dirIcon = m.direction === 'BULLISH' ? '+' : '-';
             const pnlVal = m.cash_pnl || 0;
             const pnlStr = pnlVal !== 0 ? ` · PnL ${pnlVal>=0?'+':''}$${Math.abs(pnlVal).toLocaleString(undefined,{maximumFractionDigits:0})}` : '';
             return `<div class="wm-mkt-item">
@@ -4733,7 +4744,7 @@ async function openWhaleProfile(address) {
                 return `<tr>
                     <td><a class="wm-clickable-market" href="#" onclick="event.preventDefault();openMarketDetail('${(p.market_slug||'').replace(/'/g,"\\'")}')">${(p.title||p.market_slug||'—').substring(0,40)}</a></td>
                     <td>${p.outcome||'—'}</td>
-                    <td>${p.outcome?.toLowerCase()==='yes'?'🟢':'🔴'} ${p.outcome?.toLowerCase()==='yes'?'BULL':'BEAR'}</td>
+                    <td>${p.outcome?.toLowerCase()==='yes'?'+':'-'} ${p.outcome?.toLowerCase()==='yes'?'BULL':'BEAR'}</td>
                     <td class="whale-mono">$${(p.current_value||0).toLocaleString(undefined,{maximumFractionDigits:0})}</td>
                     <td class="whale-mono ${pnlClass}">${pnlStr} (${retPct}%)</td>
                     <td class="whale-mono">${(p.cur_price||0).toFixed(3)}</td>
@@ -4745,7 +4756,7 @@ async function openWhaleProfile(address) {
             const sigHtml = sigs.map(s => `<tr>
                 <td><a class="wm-clickable-market" href="#" onclick="event.preventDefault();openMarketDetail('${(s.market_slug||'').replace(/'/g,"\\'")}')">${(s.title||s.market_slug||'—').substring(0,45)}</a></td>
                 <td>${s.outcome||'—'}</td>
-                <td>${s.direction==='BULLISH'?'🟢':'🔴'} ${s.direction||'—'}</td>
+                <td>${s.direction==='BULLISH'?'+':'-'} ${s.direction||'—'}</td>
                 <td class="whale-mono">$${(s.total_whale_usd||0).toLocaleString(undefined,{maximumFractionDigits:0})}</td>
                 <td>${Math.round(s.conviction_score||0)}</td>
                 <td class="whale-mono">${(s.current_price||0).toFixed(3)}</td>
@@ -4759,8 +4770,8 @@ async function openWhaleProfile(address) {
     if (actFeed) {
         if (isScanner && data.live_activity && data.live_activity.length) {
             const actHtml = data.live_activity.slice(0, 80).map(a => {
-                const actionIcons = {Buy:'🟢',Sell:'🔴',Redeem:'💰',Mint:'🟢'};
-                const icon = actionIcons[a.action] || '⚪';
+                const actionIcons = {Buy:'+',Sell:'-',Redeem:'$',Mint:'+'};
+                const icon = actionIcons[a.action] || 'o';
                 const val = Math.abs(a.value_usd || 0);
                 const ts = a.timestamp ? new Date(a.timestamp * 1000 || a.timestamp).toLocaleDateString() : '—';
                 return `<div class="wm-feed-item">
@@ -4773,8 +4784,8 @@ async function openWhaleProfile(address) {
         } else {
             const deltas = data.deltas || [];
             const actHtml = deltas.slice(0, 50).map(d => {
-                const icons = {NEW_ENTRY:'🟢',EXIT:'🔴',SIZE_INCREASE:'📈',SIZE_DECREASE:'📉'};
-                const icon = icons[d.action] || '⚪';
+                const icons = {NEW_ENTRY:'+',EXIT:'x',SIZE_INCREASE:'UP',SIZE_DECREASE:'DN'};
+                const icon = icons[d.action] || 'o';
                 const val = Math.abs(d.value_change_usd || 0);
                 return `<div class="wm-feed-item">
                     <span class="wm-feed-icon">${icon}</span>
@@ -4878,7 +4889,7 @@ async function openMarketDetail(slug) {
     const links = $('#wm-market-links');
     if (links) {
         safeHTML(links, `
-            <a href="${data.polymarket_url || '#'}" target="_blank" rel="noopener" class="wm-ext-link">🔗 View on Polymarket</a>
+            <a href="${data.polymarket_url || '#'}" target="_blank" rel="noopener" class="wm-ext-link">View on Polymarket</a>
             ${data.condition_id ? `<span class="wm-condition-id" title="${data.condition_id}">ID: ${data.condition_id.substring(0,12)}…</span>` : ''}
         `);
     }
@@ -4900,10 +4911,10 @@ async function openMarketDetail(slug) {
             const names = (s.whale_names||[]).slice(0,4).join(', ');
             return `<tr>
                 <td>${s.outcome||'—'}</td>
-                <td title="${names}">${s.whale_count||0} 🐋</td>
+                <td title="${names}">${s.whale_count||0}</td>
                 <td class="whale-mono">$${(s.total_whale_usd||0).toLocaleString(undefined,{maximumFractionDigits:0})}</td>
                 <td>${Math.round(s.conviction_score||0)}</td>
-                <td>${s.direction==='BULLISH'?'🟢':'🔴'} ${s.direction||'—'}</td>
+                <td>${s.direction==='BULLISH'?'+':'-'} ${s.direction||'—'}</td>
                 <td class="whale-mono">${(s.current_price||0).toFixed(3)}</td>
             </tr>`;
         }).join('');
@@ -4915,10 +4926,10 @@ async function openMarketDetail(slug) {
     if (actFeed) {
         const deltas = data.deltas || [];
         const html = deltas.slice(0, 30).map(d => {
-            const icons = {NEW_ENTRY:'🟢',EXIT:'🔴',SIZE_INCREASE:'📈',SIZE_DECREASE:'📉'};
+            const icons = {NEW_ENTRY:'+',EXIT:'x',SIZE_INCREASE:'UP',SIZE_DECREASE:'DN'};
             const val = Math.abs(d.value_change_usd || 0);
             return `<div class="wm-feed-item">
-                <span class="wm-feed-icon">${icons[d.action]||'⚪'}</span>
+                <span class="wm-feed-icon">${icons[d.action]||'o'}</span>
                 <span class="wm-feed-text"><a class="wm-clickable-name" href="#" onclick="event.preventDefault();openWhaleProfile('${d.wallet_address||''}')">${d.wallet_name||'—'}</a> — ${d.action} (${d.outcome||'—'})${val>=1?` $${val.toLocaleString(undefined,{maximumFractionDigits:0})}`:''}</span>
                 <span class="wm-feed-time">${shortDate(d.detected_at)}</span>
             </div>`;
@@ -4932,7 +4943,7 @@ function openActivityDetail(delta) {
     _showModal('wm-activity-detail');
     const content = $('#wm-activity-content');
     if (!content) return;
-    const icons = {NEW_ENTRY:'🟢 New Entry',EXIT:'🔴 Exit',SIZE_INCREASE:'📈 Size Increase',SIZE_DECREASE:'📉 Size Decrease'};
+    const icons = {NEW_ENTRY:'+ New Entry',EXIT:'x Exit',SIZE_INCREASE:'UP Size Increase',SIZE_DECREASE:'DN Size Decrease'};
     const val = Math.abs(delta.value_change_usd || 0);
     const size = Math.abs(delta.size_change || 0);
     safeHTML(content, `
@@ -5009,7 +5020,7 @@ async function _loadMentorHistory(address) {
         if (msg.role === 'user') {
             html += `<div class="wm-msg wm-msg-user"><div class="wm-msg-bubble wm-msg-user-bubble">${escapeHTML(msg.content)}</div></div>`;
         } else {
-            html += `<div class="wm-msg wm-msg-assistant"><div class="wm-msg-avatar">🤖</div><div class="wm-msg-bubble wm-msg-asst-bubble">${_renderMarkdown(msg.content)}</div></div>`;
+            html += `<div class="wm-msg wm-msg-assistant"><div class="wm-msg-avatar">AI</div><div class="wm-msg-bubble wm-msg-asst-bubble">${_renderMarkdown(msg.content)}</div></div>`;
         }
     }
     safeHTML(messages, html);
@@ -5045,7 +5056,7 @@ async function sendMentorMessage() {
     // Add loading indicator
     const loadDiv = document.createElement('div');
     loadDiv.className = 'wm-msg wm-msg-assistant wm-msg-loading';
-    loadDiv.innerHTML = '<div class="wm-msg-avatar">🤖</div><div class="wm-msg-bubble wm-msg-asst-bubble"><span class="wm-typing">Analyzing<span>.</span><span>.</span><span>.</span></span></div>';
+    loadDiv.innerHTML = '<div class="wm-msg-avatar">AI</div><div class="wm-msg-bubble wm-msg-asst-bubble"><span class="wm-typing">Analyzing<span>.</span><span>.</span><span>.</span></span></div>';
     messages.appendChild(loadDiv);
     messages.scrollTop = messages.scrollHeight;
 
@@ -5060,14 +5071,14 @@ async function sendMentorMessage() {
         const reply = res?.reply || 'Failed to get response.';
         const asstDiv = document.createElement('div');
         asstDiv.className = 'wm-msg wm-msg-assistant';
-        asstDiv.innerHTML = `<div class="wm-msg-avatar">🤖</div><div class="wm-msg-bubble wm-msg-asst-bubble">${_renderMarkdown(reply)}</div>`;
+        asstDiv.innerHTML = `<div class="wm-msg-avatar">AI</div><div class="wm-msg-bubble wm-msg-asst-bubble">${_renderMarkdown(reply)}</div>`;
         messages.appendChild(asstDiv);
         messages.scrollTop = messages.scrollHeight;
     } catch (e) {
         loadDiv.remove();
         const errDiv = document.createElement('div');
         errDiv.className = 'wm-msg wm-msg-assistant';
-        errDiv.innerHTML = '<div class="wm-msg-avatar">🤖</div><div class="wm-msg-bubble wm-msg-asst-bubble wm-msg-error">⚠️ Failed to reach mentor. Check your API key.</div>';
+        errDiv.innerHTML = '<div class="wm-msg-avatar">AI</div><div class="wm-msg-bubble wm-msg-asst-bubble wm-msg-error">ERR: Failed to reach mentor. Check your API key.</div>';
         messages.appendChild(errDiv);
     }
     _mentorLoading = false;
@@ -5083,7 +5094,7 @@ async function clearMentorChat() {
     if (messages) {
         safeHTML(messages, `
             <div class="wm-mentor-welcome">
-                <div class="wm-mentor-avatar">🤖</div>
+                <div class="wm-mentor-avatar">AI</div>
                 <p>I'm your <strong>Strategy Mentor</strong>. I can analyze this whale's trading patterns, identify strategies, and provide actionable insights.</p>
                 <p class="wm-mentor-suggestions">Try asking:</p>
                 <div class="wm-mentor-chips">
@@ -5154,7 +5165,7 @@ async function loadScannerStatus() {
         }
     }
     if (btn) {
-        btn.innerHTML = _scannerRunning ? '⏹ Stop Scanner' : '▶ Start Scanner';
+        btn.innerHTML = _scannerRunning ? 'Stop Scanner' : 'Start Scanner';
         btn.className = _scannerRunning ? 'scanner-btn scanner-btn-danger' : 'scanner-btn scanner-btn-primary';
     }
 
@@ -5189,8 +5200,8 @@ async function loadScannerStatus() {
             const mktTrades = ss.market_trades_scanned || 0;
             const dedupSize = ss.dedup_cache_size || 0;
             let liveExtra = `${_fmtNum(totalTrades)} trades, ${_fmtNum(totalAddrs)} addresses`;
-            if (lbSeeded > 0) liveExtra += ` · 🏆 ${lbSeeded} leaderboard`;
-            if (mktTrades > 0) liveExtra += ` · 📊 ${_fmtNum(mktTrades)} market trades`;
+            if (lbSeeded > 0) liveExtra += ` · LB ${lbSeeded} leaderboard`;
+            if (mktTrades > 0) liveExtra += ` · MKT ${_fmtNum(mktTrades)} market trades`;
             liveStatus.innerHTML = `<span class="scanner-live-dot"></span> Iteration #${iter} — ${phase} — ${liveExtra}`;
             liveStatus.style.display = 'flex';
         } else {
@@ -5259,9 +5270,9 @@ function _renderApiPoolPanel(pool) {
         const errClass = errRate > 10 ? 'pool-err-high' : errRate > 3 ? 'pool-err-med' : 'pool-err-low';
         summary.innerHTML = `
             <span class="pool-badge pool-strat">${strat}</span>
-            <span class="pool-badge pool-rpm">⚡ ${pool.effective_rpm} RPM</span>
+            <span class="pool-badge pool-rpm">RPM ${pool.effective_rpm}</span>
             <span class="pool-badge pool-healthy">${pool.healthy_count}/${pool.endpoint_count} healthy</span>
-            <span class="pool-badge pool-reqs">📊 ${_fmtNum(pool.total_requests)} reqs</span>
+            <span class="pool-badge pool-reqs">REQ ${_fmtNum(pool.total_requests)}</span>
             <span class="pool-badge ${errClass}">${errRate}% err</span>
         `;
     }
@@ -5271,7 +5282,7 @@ function _renderApiPoolPanel(pool) {
     if (wrap && pool.endpoints) {
         let html = '';
         pool.endpoints.forEach(ep => {
-            const healthDot = ep.healthy ? '🟢' : '🔴';
+            const healthDot = ep.healthy ? '+' : 'x';
             const lim = ep.limiter || {};
             const usedPct = lim.rpm > 0 ? Math.round((1 - (lim.available / lim.rpm)) * 100) : 0;
             const barColor = usedPct > 80 ? '#ef5350' : usedPct > 50 ? '#ffa726' : '#00e676';
@@ -5286,12 +5297,12 @@ function _renderApiPoolPanel(pool) {
                         <div class="pool-ep-bar-fill" style="width:${Math.min(usedPct,100)}%;background:${barColor};"></div>
                     </div>
                     <div class="pool-ep-stats">
-                        <span>✅ ${_fmtNum(ep.total_successes)}</span>
-                        <span>❌ ${ep.total_failures}</span>
-                        <span>🎯 ${lim.available}/${lim.rpm}</span>
-                        ${ep.consecutive_failures > 0 ? `<span class="pool-ep-fails">🔥 ${ep.consecutive_failures} fails</span>` : ''}
+                        <span>OK ${_fmtNum(ep.total_successes)}</span>
+                        <span>ERR ${ep.total_failures}</span>
+                        <span>HIT ${lim.available}/${lim.rpm}</span>
+                        ${ep.consecutive_failures > 0 ? `<span class="pool-ep-fails">!! ${ep.consecutive_failures} fails</span>` : ''}
                     </div>
-                    ${ep.last_error ? `<div class="pool-ep-error" title="${ep.last_error}">⚠️ ${ep.last_error.slice(0,50)}</div>` : ''}
+                    ${ep.last_error ? `<div class="pool-ep-error" title="${ep.last_error}">ERR: ${ep.last_error.slice(0,50)}</div>` : ''}
                 </div>
             `;
         });
@@ -5362,8 +5373,8 @@ function _renderScannerGradeBar(gradeDist) {
     if (!bar) return;
 
     const gradeColors = {
-        'S': '#ffd700', 'A': '#00e676', 'B': '#4fc3f7',
-        'C': '#ffa726', 'D': '#ef5350', 'F': '#616161'
+        'S': '#fbbf24', 'A': '#22c55e', 'B': '#3b82f6',
+        'C': '#f97316', 'D': '#ef4444', 'F': '#475569'
     };
     const gradeOrder = ['S', 'A', 'B', 'C', 'D', 'F'];
     const total = Object.values(gradeDist).reduce((s, v) => s + v, 0);
@@ -5426,12 +5437,12 @@ function _renderScannerCandidates(candidates) {
         const tradeVolStr = tradeVol >= 1000000 ? `$${(tradeVol/1000000).toFixed(1)}M` :
                             tradeVol >= 1000 ? `$${(tradeVol/1000).toFixed(1)}K` : tradeVol > 0 ? `$${tradeVol.toFixed(0)}` : '—';
         const mktsCount = (sd.markets_seen || []).length || c.liquid_market_count || 0;
-        const srcTag = c.source === 'trade_discovery' ? '🔍 CLOB' :
-                       c.source === 'known_wallet' ? '📋 Known' :
-                       c.source === 'leaderboard_profit' ? '🏆 Profit' :
-                       c.source === 'leaderboard_volume' ? '📈 Volume' :
-                       c.source === 'leaderboard_both' ? '🏆📈 Top' :
-                       c.source === 'market_scan' ? '📊 Market' :
+        const srcTag = c.source === 'trade_discovery' ? 'CLOB' :
+                       c.source === 'known_wallet' ? 'KNOWN' :
+                       c.source === 'leaderboard_profit' ? 'PROFIT' :
+                       c.source === 'leaderboard_volume' ? 'VOLUME' :
+                       c.source === 'leaderboard_both' ? 'TOP' :
+                       c.source === 'market_scan' ? 'MARKET' :
                        c.source || '—';
 
         html += `
@@ -5449,8 +5460,8 @@ function _renderScannerCandidates(candidates) {
                 <td>${mktsCount}</td>
                 <td><span class="scanner-source-tag">${srcTag}</span></td>
                 <td class="scanner-actions">
-                    <button class="scanner-action-btn scanner-promote-btn" onclick="promoteCandidate('${c.address}')" title="Promote to tracked">⬆️ Track</button>
-                    <button class="scanner-action-btn scanner-view-btn" onclick="openWhaleProfile('${c.address}')" title="View profile">👁️</button>
+                    <button class="scanner-action-btn scanner-promote-btn" onclick="promoteCandidate('${c.address}')" title="Promote to tracked">Track</button>
+                    <button class="scanner-action-btn scanner-view-btn" onclick="openWhaleProfile('${c.address}')" title="View profile">View</button>
                     <button class="scanner-action-btn scanner-dismiss-btn" onclick="dismissCandidate('${c.address}')" title="Dismiss">✕</button>
                 </td>
             </tr>
@@ -5538,7 +5549,7 @@ async function toggleWhaleScanner() {
 
 async function runSingleScan() {
     const btn = document.querySelector('.scanner-btn-secondary');
-    if (btn) { btn.disabled = true; btn.innerHTML = '⏳ Scanning...'; }
+    if (btn) { btn.disabled = true; btn.innerHTML = 'Scanning...'; }
     const badge = $('#scanner-status-badge');
     if (badge) { badge.textContent = '● SCANNING'; badge.className = 'scanner-status-badge scanner-status-active'; }
 
@@ -5551,15 +5562,15 @@ async function runSingleScan() {
         if (res && res.status === 'complete') {
             const trades = res.trades_analyzed || 0;
             const addrs = res.unique_addresses || 0;
-            showToast?.(`🔍 Scan complete: ${res.candidates_found} candidates from ${trades} trades, ${addrs} addresses in ${res.duration_s}s`, 'success');
+            showToast?.(`Scan complete: ${res.candidates_found} candidates from ${trades} trades, ${addrs} addresses in ${res.duration_s}s`, 'success');
         } else if (res && res.errors?.length) {
-            showToast?.(`⚠️ Scan had errors: ${res.errors[0]}`, 'warning');
+            showToast?.(`Scan had errors: ${res.errors[0]}`, 'warning');
         }
     } catch (e) {
-        showToast?.('❌ Scan failed: ' + e.message, 'error');
+        showToast?.('Scan failed: ' + e.message, 'error');
     }
 
-    if (btn) { btn.disabled = false; btn.innerHTML = '⚡ Quick Scan'; }
+    if (btn) { btn.disabled = false; btn.innerHTML = 'QUICK SCAN'; }
     await loadScannerStatus();
 }
 
@@ -5570,7 +5581,7 @@ async function promoteCandidate(address) {
         body: JSON.stringify({address}),
     });
     if (res && res.promoted) {
-        showToast?.(res.message || '🐋 Whale promoted!', 'success');
+        showToast?.(res.message || 'Whale promoted!', 'success');
         await loadScannerStatus();
     }
 }
@@ -5603,7 +5614,7 @@ async function saveScannerConfig() {
         headers: {'Content-Type': 'application/json'},
         body: JSON.stringify(cfg),
     });
-    showToast?.('✅ Scanner config saved', 'success');
+    showToast?.('Scanner config saved', 'success');
     toggleScannerConfig();
 }
 
@@ -5652,10 +5663,10 @@ async function updateAdminPanel() {
     const issuesList = $('#admin-issues-list');
     if (issues.length > 0) {
         issuesSection.style.display = 'block';
-        const icons = { critical: '🔴', error: '🟠', warning: '🟡', info: 'ℹ️' };
+        const icons = { critical: '!!', error: '!', warning: '*', info: 'i' };
         const issuesHTML = issues.map(i => `
             <div class="admin-issue-item admin-issue-${i.severity}">
-                <span class="admin-issue-icon">${icons[i.severity] || 'ℹ️'}</span>
+                <span class="admin-issue-icon">${icons[i.severity] || 'i'}</span>
                 <span class="admin-issue-text">${escapeHTML(i.message)}</span>
             </div>
         `).join('');
@@ -5717,9 +5728,9 @@ async function updateAdminPanel() {
         engBadge.textContent = '● STOPPED';
         engBadge.className = 'badge badge-danger';
     }
-    safeHTML($('#admin-eh-status'), eh.running ? '✅ Running' : '❌ Stopped');
-    safeHTML($('#admin-eh-thread'), eh.thread_alive ? '✅ Alive' : '❌ Dead');
-    const modeStr = eh.live_trading ? '🔴 LIVE' : (eh.paper_mode ? '📝 Paper' : '⚠️ Dry Run');
+    safeHTML($('#admin-eh-status'), eh.running ? 'RUNNING' : 'STOPPED');
+    safeHTML($('#admin-eh-thread'), eh.thread_alive ? 'ALIVE' : 'DEAD');
+    const modeStr = eh.live_trading ? 'LIVE' : (eh.paper_mode ? 'PAPER' : 'DRY RUN');
     safeHTML($('#admin-eh-mode'), modeStr);
     safeHTML($('#admin-eh-cycles'), String(eh.cycle_count || 0));
     safeHTML($('#admin-eh-interval'), `${eh.cycle_interval_secs || 0}s`);
@@ -5740,7 +5751,7 @@ async function updateAdminPanel() {
             const keysHTML = Object.entries(keys).map(([name, val]) => {
                 const isSet = val === true;
                 const isBoolVal = typeof val === 'string' && (val.toLowerCase() === 'true' || val.toLowerCase() === 'false');
-                let statusIcon = isSet ? '✅' : (isBoolVal ? '⚙️' : '❌');
+                let statusIcon = isSet ? 'ON' : (isBoolVal ? 'SET' : 'OFF');
                 let statusText = isSet ? 'SET' : (isBoolVal ? val : 'MISSING');
                 let statusClass = isSet ? 'admin-key-ok' : (isBoolVal ? 'admin-key-value' : 'admin-key-missing');
                 return `<div class="admin-key-item admin-key-editable">
@@ -5763,19 +5774,19 @@ async function updateAdminPanel() {
     const flags = d.feature_flags || {};
     const flagsGrid = $('#admin-flags-grid');
     const flagNames = {
-        ensemble_enabled: '🤖 Ensemble',
-        drawdown_enabled: '📉 Drawdown Guard',
-        wallet_scanner_enabled: '🐋 Whale Scanner',
-        alerts_enabled: '🔔 Alerts',
-        cache_enabled: '💾 Cache',
-        twap_enabled: '📊 TWAP',
-        adaptive_pricing: '🎯 Adaptive Pricing',
-        dry_run: '🧪 Dry Run',
-        kill_switch: '🛑 Kill Switch',
-        paper_mode: '📝 Paper Mode',
-        live_trading: '🔴 Live Trading',
-        daily_summary: '📧 Daily Summary',
-        metrics_enabled: '📈 Metrics',
+        ensemble_enabled: 'Ensemble',
+        drawdown_enabled: 'Drawdown Guard',
+        wallet_scanner_enabled: 'Whale Scanner',
+        alerts_enabled: 'Alerts',
+        cache_enabled: 'Cache',
+        twap_enabled: 'TWAP',
+        adaptive_pricing: 'Adaptive Pricing',
+        dry_run: 'Dry Run',
+        kill_switch: 'Kill Switch',
+        paper_mode: 'Paper Mode',
+        live_trading: 'Live Trading',
+        daily_summary: 'Daily Summary',
+        metrics_enabled: 'Metrics',
     };
     if (flagsGrid) {
         const flagsHTML = Object.entries(flags).map(([key, val]) => {
@@ -5813,7 +5824,7 @@ async function updateAdminPanel() {
             </div>`
         ).join('');
         safeHTML(costBreakdownDiv, `
-            <div class="admin-cost-title">📊 Per-API Call Breakdown</div>
+            <div class="admin-cost-title">PER-API Call Breakdown</div>
             <div class="admin-cost-items">${itemsHTML}</div>
         `);
     } else {
@@ -5825,17 +5836,17 @@ async function updateAdminPanel() {
     if (cost.ensemble_enabled && cost.ensemble_models && cost.ensemble_models.length > 1) {
         const modelsHTML = cost.ensemble_models.map(m => {
             const isPrimary = m === cost.primary_model;
-            return `<span class="admin-model-chip ${isPrimary ? 'primary' : ''}">${isPrimary ? '⭐ ' : ''}${m}</span>`;
+            return `<span class="admin-model-chip ${isPrimary ? 'primary' : ''}">${isPrimary ? '* ' : ''}${m}</span>`;
         }).join('');
         safeHTML(ensembleDiv, `
-            <div class="admin-ensemble-title">🤖 Ensemble Models</div>
+            <div class="admin-ensemble-title">Ensemble Models</div>
             <div class="admin-ensemble-models">${modelsHTML}</div>
         `);
     } else {
         safeHTML(ensembleDiv, `
-            <div class="admin-ensemble-title">🤖 Model</div>
+            <div class="admin-ensemble-title">Model</div>
             <div class="admin-ensemble-models">
-                <span class="admin-model-chip primary">⭐ ${cost.primary_model || '—'}</span>
+                <span class="admin-model-chip primary">* ${cost.primary_model || '—'}</span>
                 <span style="font-size:0.75rem;color:var(--text-muted);align-self:center;">Ensemble: disabled</span>
             </div>
         `);
@@ -5901,7 +5912,7 @@ async function updateAdminPanel() {
         }
         const barPct = count > 0 ? Math.max(2, (count / maxRows) * 100) : 0;
         const exportBtn = exportable.has(table) && count > 0
-            ? `<button class="btn-export-sm" onclick="adminExportTable('${table}')">⬇ CSV</button>`
+            ? `<button class="btn-export-sm" onclick="adminExportTable('${table}')">CSV</button>`
             : '<span style="color:var(--text-muted);font-size:0.65rem;">—</span>';
         return `<tr>
             <td><code>${table}</code></td>
@@ -5929,10 +5940,10 @@ async function updateAdminPanel() {
     // ── Storage Breakdown ────────────────────────────────────
     const dirBreak = d.dir_breakdown || {};
     const storageGrid = $('#admin-storage-grid');
-    const storageIcons = { data: '🗄️', logs: '📜', reports: '📊' };
+    const storageIcons = { data: 'DB', logs: 'LOG', reports: 'RPT' };
     const storageHTML = Object.entries(dirBreak).map(([dir, info]) => `
         <div class="admin-storage-card">
-            <div class="admin-storage-icon">${storageIcons[dir] || '📁'}</div>
+            <div class="admin-storage-icon">${storageIcons[dir] || 'DIR'}</div>
             <div class="admin-storage-name">${dir}/</div>
             <div class="admin-storage-size">${info.size_mb} MB</div>
             <div class="admin-storage-files">${info.file_count} files</div>
@@ -6484,15 +6495,15 @@ async function updateJournal() {
                     <span class="${pnlClass}">${pnlStr}</span>
                 </div>
                 <div class="journal-meta">
-                    <span>📌 ${entry.direction || '—'}</span>
+                    <span>DIR: ${entry.direction || '—'}</span>
                     <span>Entry: ${(entry.entry_price || 0).toFixed(3)}</span>
                     <span>Exit: ${(entry.exit_price || 0).toFixed(3)}</span>
                     <span>Stake: $${(entry.stake_usd || 0).toFixed(2)}</span>
-                    <span>📅 ${entry.created_at ? new Date(entry.created_at).toLocaleDateString() : '—'}</span>
+                    <span>${entry.created_at ? new Date(entry.created_at).toLocaleDateString() : '—'}</span>
                 </div>
-                ${entry.reasoning ? `<div class="journal-annotation">🤖 <strong>AI Reasoning:</strong> ${entry.reasoning}</div>` : ''}
-                ${entry.annotation ? `<div class="journal-annotation" style="border-left-color:var(--accent-teal);">📝 ${entry.annotation}</div>` : ''}
-                ${entry.lessons_learned ? `<div class="journal-annotation" style="border-left-color:var(--accent-yellow);">💡 <strong>Lesson:</strong> ${entry.lessons_learned}</div>` : ''}
+                ${entry.reasoning ? `<div class="journal-annotation"><strong>AI REASONING:</strong> ${entry.reasoning}</div>` : ''}
+                ${entry.annotation ? `<div class="journal-annotation" style="border-left-color:var(--accent-teal);">${entry.annotation}</div>` : ''}
+                ${entry.lessons_learned ? `<div class="journal-annotation" style="border-left-color:var(--accent-yellow);"><strong>LESSON:</strong> ${entry.lessons_learned}</div>` : ''}
             </div>`;
         }
         safeHTML(container, html);
@@ -6527,7 +6538,7 @@ async function updateEquitySnapshots() {
                     {
                         label: 'Equity ($)',
                         data: equityData,
-                        borderColor: '#4c8dff',
+                        borderColor: '#3b82f6',
                         backgroundColor: 'rgba(76,141,255,0.1)',
                         borderWidth: 2,
                         fill: true,
@@ -6537,7 +6548,7 @@ async function updateEquitySnapshots() {
                     {
                         label: 'Drawdown (%)',
                         data: drawdownData,
-                        borderColor: '#ff4d6a',
+                        borderColor: '#ef4444',
                         backgroundColor: 'rgba(255,77,106,0.05)',
                         borderWidth: 1.5,
                         fill: true,
@@ -6551,12 +6562,12 @@ async function updateEquitySnapshots() {
                 maintainAspectRatio: false,
                 interaction: { intersect: false, mode: 'index' },
                 plugins: {
-                    legend: { labels: { color: '#9499b3', font: { size: 11 } } },
+                    legend: { labels: { color: '#64748b', font: { size: 11 } } },
                 },
                 scales: {
-                    x: { ticks: { color: '#5a5f78', maxTicksLimit: 12 }, grid: { color: 'rgba(255,255,255,0.04)' } },
-                    y: { position: 'left', ticks: { color: '#4c8dff' }, grid: { color: 'rgba(255,255,255,0.04)' } },
-                    y1: { position: 'right', ticks: { color: '#ff4d6a', callback: v => v + '%' }, grid: { display: false } },
+                    x: { ticks: { color: '#475569', maxTicksLimit: 12 }, grid: { color: 'rgba(255,255,255,0.04)' } },
+                    y: { position: 'left', ticks: { color: '#3b82f6' }, grid: { color: 'rgba(255,255,255,0.04)' } },
+                    y1: { position: 'right', ticks: { color: '#ef4444', callback: v => v + '%' }, grid: { display: false } },
                 },
             },
         });
@@ -6934,3 +6945,44 @@ async function compareBacktestRuns() {
         }
     });
 })();
+
+// ─── Status Bar ──────────────────────────────────────────────────
+(function initStatusBar() {
+    function updateClock() {
+        const el = document.getElementById('status-bar-time');
+        if (el) {
+            const now = new Date();
+            el.textContent = now.toLocaleTimeString('en-US', { hour12: false });
+        }
+    }
+    setInterval(updateClock, 1000);
+    updateClock();
+})();
+
+function updateStatusBar(data) {
+    const dot = document.getElementById('status-dot');
+    const engineEl = document.getElementById('status-bar-engine');
+    const modeEl = document.getElementById('status-bar-mode');
+    const bankrollEl = document.getElementById('status-bar-bankroll');
+    const pnlEl = document.getElementById('status-bar-pnl');
+    const posEl = document.getElementById('status-bar-positions');
+
+    if (data && data.engine_running !== undefined) {
+        if (dot) dot.className = data.engine_running ? 'status-bar-dot active' : 'status-bar-dot';
+        if (engineEl) engineEl.textContent = data.engine_running ? 'ENGINE: ON' : 'ENGINE: OFF';
+    }
+    if (data && data.paper_mode !== undefined && modeEl) {
+        modeEl.textContent = data.paper_mode ? 'MODE: PAPER' : 'MODE: LIVE';
+    }
+    if (data && data.bankroll !== undefined && bankrollEl) {
+        bankrollEl.textContent = `BANKROLL: $${Number(data.bankroll).toLocaleString('en-US', {minimumFractionDigits:2, maximumFractionDigits:2})}`;
+    }
+    if (data && data.daily_pnl !== undefined && pnlEl) {
+        const pnl = Number(data.daily_pnl);
+        pnlEl.textContent = `P&L: ${pnl >= 0 ? '+' : ''}$${pnl.toFixed(2)}`;
+        pnlEl.style.color = pnl > 0 ? '#22c55e' : pnl < 0 ? '#ef4444' : '#94a3b8';
+    }
+    if (data && data.open_positions !== undefined && posEl) {
+        posEl.textContent = `POSITIONS: ${data.open_positions}`;
+    }
+}
