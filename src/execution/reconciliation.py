@@ -2,9 +2,10 @@
 
 Checks submitted/pending orders against the CLOB, handling:
   - Full fills: creates trade + position
-  - Partial fills: updates order, creates/updates position
+  - Partial fills: updates order, creates/updates position, records incremental trade
   - Cancelled/expired by exchange: marks order status
   - Stale unfilled orders: optional auto-cancellation
+  - Terminal order pruning: archives filled/cancelled/expired/failed orders
 
 All behavior is config-gated and disabled by default.
 """
@@ -15,6 +16,7 @@ import asyncio
 import time
 import uuid
 from dataclasses import dataclass, field
+from typing import Any, Callable
 
 from src.config import ExecutionConfig, is_live_trading_enabled
 from src.observability.logger import get_logger
@@ -30,6 +32,7 @@ class ReconciliationResult:
     partial: int = 0
     cancelled: int = 0
     stale_cancelled: int = 0
+    pruned: int = 0
     errors: int = 0
 
 
@@ -42,11 +45,13 @@ class OrderReconciler:
         clob: object,
         config: ExecutionConfig,
         fill_tracker: object | None = None,
+        on_buy_fill: Callable[[str], None] | None = None,
     ):
         self._db = db
         self._clob = clob
         self._config = config
         self._fill_tracker = fill_tracker
+        self._on_buy_fill = on_buy_fill  # callback(token_id) for WS subscription
 
     def reconcile_once(self) -> ReconciliationResult:
         """Run a single reconciliation pass over all open orders.
@@ -89,6 +94,10 @@ class OrderReconciler:
                 log.warning("reconciler.stale_error", error=str(e))
                 result.errors += 1
 
+        # Prune terminal orders
+        pruned = self._prune_terminal_orders()
+        result.pruned = pruned
+
         log.info(
             "reconciler.pass_complete",
             checked=result.checked,
@@ -96,6 +105,7 @@ class OrderReconciler:
             partial=result.partial,
             cancelled=result.cancelled,
             stale_cancelled=result.stale_cancelled,
+            pruned=result.pruned,
             errors=result.errors,
         )
         return result
@@ -128,14 +138,12 @@ class OrderReconciler:
         elif clob_status in ("cancelled", "canceled"):
             self._db.update_order_status(order.order_id, "cancelled")
             result.cancelled += 1
-            if self._fill_tracker and hasattr(self._fill_tracker, "record_unfilled"):
-                self._fill_tracker.record_unfilled(order.order_id)
+            self._notify_unfilled(order.order_id)
             log.info("reconciler.order_cancelled_by_exchange", order_id=order.order_id[:8])
         elif clob_status == "expired":
             self._db.update_order_status(order.order_id, "expired")
             result.cancelled += 1
-            if self._fill_tracker and hasattr(self._fill_tracker, "record_unfilled"):
-                self._fill_tracker.record_unfilled(order.order_id)
+            self._notify_unfilled(order.order_id)
             log.info("reconciler.order_expired", order_id=order.order_id[:8])
 
     def _handle_fill(self, order: object, clob_data: dict, result: ReconciliationResult) -> None:
@@ -178,24 +186,7 @@ class OrderReconciler:
 
         # Create or update position
         if order.side == "SELL":
-            # SELL fill — archive position
-            try:
-                self._db.archive_position(
-                    pos=type("P", (), {
-                        "market_id": order.market_id,
-                        "token_id": order.token_id,
-                        "direction": order.side,
-                        "entry_price": order.price,
-                        "size": fill_size,
-                        "stake_usd": order.stake_usd,
-                    })(),
-                    exit_price=fill_price,
-                    pnl=0.0,
-                    close_reason="SELL_FILLED",
-                )
-                self._db.remove_position(order.market_id)
-            except Exception:
-                pass  # position may already be archived
+            self._handle_sell_fill(order, fill_price, fill_size)
         else:
             # BUY fill — create position
             self._db.upsert_position(PositionRecord(
@@ -208,11 +199,14 @@ class OrderReconciler:
                 current_price=fill_price,
                 pnl=0.0,
             ))
+            # Subscribe to WS feed for price monitoring
+            if self._on_buy_fill and order.token_id:
+                try:
+                    self._on_buy_fill(order.token_id)
+                except Exception:
+                    pass
 
-        if self._fill_tracker and hasattr(self._fill_tracker, "record_fill"):
-            self._fill_tracker.record_fill(
-                order.order_id, fill_price, fill_size, order.price,
-            )
+        self._notify_fill(order, fill_price, fill_size)
 
         result.filled += 1
         log.info(
@@ -222,11 +216,49 @@ class OrderReconciler:
             fill_size=fill_size,
         )
 
+    def _handle_sell_fill(self, order: object, fill_price: float, fill_size: float) -> None:
+        """Handle a SELL fill using the actual open position for accurate PnL."""
+        try:
+            real_pos = self._db.get_position(order.market_id)
+            if real_pos:
+                # Compute realized PnL from actual entry vs fill exit
+                pnl = (fill_price - real_pos.entry_price) * fill_size
+                self._db.archive_position(
+                    pos=real_pos,
+                    exit_price=fill_price,
+                    pnl=round(pnl, 4),
+                    close_reason="SELL_FILLED",
+                )
+                self._db.remove_position(order.market_id)
+            else:
+                # Position already gone — archive with what we have
+                self._db.archive_position(
+                    pos=type("P", (), {
+                        "market_id": order.market_id,
+                        "token_id": order.token_id,
+                        "direction": order.side,
+                        "entry_price": order.price,
+                        "size": fill_size,
+                        "stake_usd": order.stake_usd,
+                        "opened_at": order.created_at,
+                    })(),
+                    exit_price=fill_price,
+                    pnl=0.0,
+                    close_reason="SELL_FILLED",
+                )
+                self._db.remove_position(order.market_id)
+        except Exception as e:
+            log.warning(
+                "reconciler.sell_fill_archive_error",
+                order_id=order.order_id[:8],
+                error=str(e),
+            )
+
     def _handle_partial_fill(
         self, order: object, new_fill_size: float, result: ReconciliationResult,
     ) -> None:
         """Handle a partial fill — update order and create/update position."""
-        from src.storage.models import PositionRecord
+        from src.storage.models import PositionRecord, TradeRecord
 
         old_filled = order.filled_size
         old_avg = order.avg_fill_price if order.avg_fill_price > 0 else order.price
@@ -243,6 +275,21 @@ class OrderReconciler:
             filled_size=new_fill_size, avg_fill_price=round(new_avg, 6),
         )
 
+        # Record an incremental trade for this partial fill event
+        incremental_stake = order.stake_usd * (incremental / order.size) if order.size > 0 else 0
+        self._db.insert_trade(TradeRecord(
+            id=str(uuid.uuid4()),
+            order_id=order.order_id,
+            market_id=order.market_id,
+            token_id=order.token_id,
+            side=order.side,
+            price=order.price,
+            size=incremental,
+            stake_usd=round(incremental_stake, 2),
+            status="PARTIAL_FILL",
+            dry_run=False,
+        ))
+
         # Create/update position with partial fill
         if order.side != "SELL":
             partial_stake = order.stake_usd * (new_fill_size / order.size) if order.size > 0 else 0
@@ -256,6 +303,12 @@ class OrderReconciler:
                 current_price=round(new_avg, 6),
                 pnl=0.0,
             ))
+            # Subscribe to WS feed on first partial fill
+            if old_filled == 0 and self._on_buy_fill and order.token_id:
+                try:
+                    self._on_buy_fill(order.token_id)
+                except Exception:
+                    pass
 
         result.partial += 1
         log.info(
@@ -263,6 +316,7 @@ class OrderReconciler:
             order_id=order.order_id[:8],
             old_filled=old_filled,
             new_filled=new_fill_size,
+            incremental=incremental,
             avg_price=round(new_avg, 6),
         )
 
@@ -272,8 +326,7 @@ class OrderReconciler:
             self._clob.cancel_order(order.clob_order_id)
             self._db.update_order_status(order.order_id, "cancelled")
             result.stale_cancelled += 1
-            if self._fill_tracker and hasattr(self._fill_tracker, "record_unfilled"):
-                self._fill_tracker.record_unfilled(order.order_id)
+            self._notify_unfilled(order.order_id)
             log.info(
                 "reconciler.stale_cancelled",
                 order_id=order.order_id[:8],
@@ -287,6 +340,42 @@ class OrderReconciler:
             )
             result.errors += 1
 
+    def _notify_fill(self, order: object, fill_price: float, fill_size: float) -> None:
+        """Notify FillTracker of a fill, registering the order first if needed."""
+        if not self._fill_tracker or not hasattr(self._fill_tracker, "record_fill"):
+            return
+        # FillTracker.record_fill() requires the order to be registered first
+        pending = getattr(self._fill_tracker, "_pending_orders", {})
+        if order.order_id not in pending:
+            self._fill_tracker.register_order(
+                order.order_id, order.market_id, order.price,
+                order.size, "reconciled",
+            )
+        self._fill_tracker.record_fill(order.order_id, fill_price, fill_size)
+
+    def _notify_unfilled(self, order_id: str) -> None:
+        """Notify FillTracker of an unfilled/cancelled order."""
+        if self._fill_tracker and hasattr(self._fill_tracker, "record_unfilled"):
+            self._fill_tracker.record_unfilled(order_id)
+
+    def _prune_terminal_orders(self) -> int:
+        """Remove terminal orders (filled/cancelled/expired/failed) from open_orders.
+
+        Returns the number of orders pruned.
+        """
+        try:
+            result = self._db._conn.execute(
+                "DELETE FROM open_orders WHERE status IN ('filled', 'cancelled', 'expired', 'failed')"
+            )
+            count = result.rowcount
+            if count > 0:
+                self._db._conn.commit()
+                log.info("reconciler.pruned_terminal_orders", count=count)
+            return count
+        except Exception as e:
+            log.warning("reconciler.prune_error", error=str(e))
+            return 0
+
 
 async def run_reconciliation_loop(
     db: object,
@@ -294,13 +383,14 @@ async def run_reconciliation_loop(
     config: ExecutionConfig,
     stop_event: asyncio.Event,
     fill_tracker: object | None = None,
+    on_buy_fill: Callable[[str], None] | None = None,
 ) -> None:
     """Background loop that periodically reconciles open orders.
 
     Runs until stop_event is set. Only active in live mode with
     reconciliation_enabled=True.
     """
-    reconciler = OrderReconciler(db, clob, config, fill_tracker)
+    reconciler = OrderReconciler(db, clob, config, fill_tracker, on_buy_fill)
     interval = config.reconciliation_interval_secs
 
     log.info("reconciler.loop_started", interval_secs=interval)

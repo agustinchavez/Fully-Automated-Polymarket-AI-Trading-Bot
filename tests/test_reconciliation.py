@@ -101,21 +101,19 @@ class TestReconcileOnce:
         assert result.checked == 1
         assert result.filled == 1
 
-        # Order should be marked filled
-        order = db.get_order("ord-001")
-        assert order.status == "filled"
-        assert order.filled_size == 100.0  # 50 / 0.50
-        assert order.avg_fill_price == 0.50
-
-        # Trade should be created
+        # Terminal order pruned — verify via trade + position instead
         trades = db._conn.execute("SELECT * FROM trades").fetchall()
         assert len(trades) == 1
         assert trades[0]["status"] == "FILLED"
+        assert trades[0]["size"] == 100.0  # 50 / 0.50
 
         # Position should be created (BUY order)
         positions = db._conn.execute("SELECT * FROM positions").fetchall()
         assert len(positions) == 1
         assert positions[0]["entry_price"] == 0.50
+
+        # Filled order should be pruned from open_orders
+        assert result.pruned >= 1
 
     def test_filled_order_no_taking_amount_uses_full_size(self):
         db = _make_db()
@@ -131,8 +129,10 @@ class TestReconcileOnce:
         result = reconciler.reconcile_once()
 
         assert result.filled == 1
-        order = db.get_order("ord-001")
-        assert order.filled_size == 200.0  # full size fallback
+        # Verify full size via trade record (order is pruned)
+        trades = db._conn.execute("SELECT * FROM trades").fetchall()
+        assert len(trades) == 1
+        assert trades[0]["size"] == 200.0
 
     def test_live_order_no_fill_unchanged(self):
         db = _make_db()
@@ -151,6 +151,7 @@ class TestReconcileOnce:
         assert result.filled == 0
         assert result.partial == 0
 
+        # Live order is NOT terminal — should still be in open_orders
         order = db.get_order("ord-001")
         assert order.status == "submitted"  # unchanged
 
@@ -169,6 +170,7 @@ class TestReconcileOnce:
 
         assert result.partial == 1
 
+        # Partial order is NOT terminal — should still be in open_orders
         order = db.get_order("ord-001")
         assert order.status == "partial"
         assert order.filled_size == 50.0  # 25 / 0.50
@@ -177,6 +179,12 @@ class TestReconcileOnce:
         positions = db._conn.execute("SELECT * FROM positions").fetchall()
         assert len(positions) == 1
         assert positions[0]["size"] == 50.0
+
+        # Incremental trade record should be created
+        trades = db._conn.execute("SELECT * FROM trades").fetchall()
+        assert len(trades) == 1
+        assert trades[0]["status"] == "PARTIAL_FILL"
+        assert trades[0]["size"] == 50.0
 
     def test_partial_fill_average_price(self):
         """Partial fill should compute weighted average price correctly."""
@@ -212,8 +220,11 @@ class TestReconcileOnce:
         result = reconciler.reconcile_once()
 
         assert result.cancelled == 1
-        order = db.get_order("ord-001")
-        assert order.status == "cancelled"
+        # Cancelled is terminal — order pruned
+        assert result.pruned >= 1
+        # No trades or positions created
+        trades = db._conn.execute("SELECT * FROM trades").fetchall()
+        assert len(trades) == 0
 
     def test_expired_by_exchange(self):
         db = _make_db()
@@ -226,8 +237,7 @@ class TestReconcileOnce:
         result = reconciler.reconcile_once()
 
         assert result.cancelled == 1
-        order = db.get_order("ord-001")
-        assert order.status == "expired"
+        assert result.pruned >= 1
 
     def test_clob_api_error_counted(self):
         db = _make_db()
@@ -243,7 +253,7 @@ class TestReconcileOnce:
         assert result.errors == 1
         assert result.checked == 1
 
-        # Order should remain unchanged
+        # Order should remain unchanged (not terminal, not pruned)
         order = db.get_order("ord-001")
         assert order.status == "submitted"
 
@@ -265,7 +275,12 @@ class TestFillTrackerNotification:
         _insert_order(db)
         reconciler.reconcile_once()
 
+        # Should register then record fill (3 args, not 4)
+        tracker.register_order.assert_called_once()
         tracker.record_fill.assert_called_once()
+        # Verify record_fill has exactly 3 positional args (order_id, fill_price, fill_size)
+        args = tracker.record_fill.call_args[0]
+        assert len(args) == 3
 
     def test_fill_tracker_notified_on_cancel(self):
         db = _make_db()
@@ -299,9 +314,8 @@ class TestStaleCancellation:
 
         assert result.stale_cancelled == 1
         clob.cancel_order.assert_called_once_with("clob-001")
-
-        order = db.get_order("ord-001")
-        assert order.status == "cancelled"
+        # Cancelled is terminal — pruned
+        assert result.pruned >= 1
 
     def test_stale_cancellation_disabled_leaves_orders(self):
         db = _make_db()
@@ -338,7 +352,8 @@ class TestStaleCancellation:
 
 
 class TestSellOrderFill:
-    def test_sell_fill_archives_position(self):
+    def test_sell_fill_archives_position_with_real_pnl(self):
+        """SELL fill should use actual position's entry price for PnL."""
         db = _make_db()
         clob = _make_clob(get_order_status={
             "status": "matched",
@@ -347,7 +362,7 @@ class TestSellOrderFill:
         config = _make_config()
         reconciler = OrderReconciler(db, clob, config)
 
-        # First insert a position so archive has something to archive
+        # Insert a real position with entry_price=0.50
         from src.storage.models import PositionRecord
         db.upsert_position(PositionRecord(
             market_id="market-abc",
@@ -367,6 +382,83 @@ class TestSellOrderFill:
         # Position should be removed (archived)
         positions = db._conn.execute("SELECT * FROM positions").fetchall()
         assert len(positions) == 0
+
+        # Closed position should have real PnL: (0.60 - 0.50) * 50 = 5.0
+        closed = db._conn.execute("SELECT * FROM closed_positions").fetchall()
+        assert len(closed) == 1
+        assert closed[0]["pnl"] == 5.0
+        assert closed[0]["entry_price"] == 0.50  # from real position
+        assert closed[0]["exit_price"] == 0.60
+        assert closed[0]["close_reason"] == "SELL_FILLED"
+
+    def test_sell_fill_no_existing_position_uses_order_data(self):
+        """If position is already gone, archive with order data and pnl=0."""
+        db = _make_db()
+        clob = _make_clob(get_order_status={
+            "status": "matched",
+            "takingAmount": "25",
+        })
+        config = _make_config()
+        reconciler = OrderReconciler(db, clob, config)
+
+        # No position in DB
+        _insert_order(db, side="SELL", price=0.50, size=50.0)
+
+        result = reconciler.reconcile_once()
+        assert result.filled == 1
+
+
+# ── WS Subscription on BUY Fill Tests ──────────────────────────
+
+
+class TestWSSubscription:
+    def test_buy_fill_triggers_ws_callback(self):
+        db = _make_db()
+        clob = _make_clob(get_order_status={
+            "status": "matched",
+            "takingAmount": "50",
+        })
+        config = _make_config()
+        ws_callback = MagicMock()
+        reconciler = OrderReconciler(db, clob, config, on_buy_fill=ws_callback)
+
+        _insert_order(db, token_id="token-ws-test")
+
+        reconciler.reconcile_once()
+
+        ws_callback.assert_called_once_with("token-ws-test")
+
+    def test_sell_fill_no_ws_callback(self):
+        db = _make_db()
+        clob = _make_clob(get_order_status={
+            "status": "matched",
+            "takingAmount": "30",
+        })
+        config = _make_config()
+        ws_callback = MagicMock()
+        reconciler = OrderReconciler(db, clob, config, on_buy_fill=ws_callback)
+
+        _insert_order(db, side="SELL", price=0.60, size=50.0)
+
+        reconciler.reconcile_once()
+
+        ws_callback.assert_not_called()
+
+    def test_partial_fill_first_triggers_ws_callback(self):
+        db = _make_db()
+        clob = _make_clob(get_order_status={
+            "status": "live",
+            "takingAmount": "25",
+        })
+        config = _make_config()
+        ws_callback = MagicMock()
+        reconciler = OrderReconciler(db, clob, config, on_buy_fill=ws_callback)
+
+        _insert_order(db, filled_size=0.0, token_id="token-partial")
+
+        reconciler.reconcile_once()
+
+        ws_callback.assert_called_once_with("token-partial")
 
 
 # ── Batch Mixed Status Tests ───────────────────────────────────
@@ -405,12 +497,44 @@ class TestBatchMixedStatus:
         assert result.cancelled == 1  # ord-3
         assert result.partial == 1  # ord-5 (partial fill)
 
-        # Verify individual statuses
-        assert db.get_order("ord-1").status == "filled"
+        # Terminal orders (filled, cancelled) are pruned
+        # Non-terminal (submitted, partial) remain
         assert db.get_order("ord-2").status == "submitted"  # live, no fill
-        assert db.get_order("ord-3").status == "cancelled"
-        assert db.get_order("ord-4").status == "filled"
         assert db.get_order("ord-5").status == "partial"
+
+        # Filled/cancelled are pruned
+        assert db.get_order("ord-1") is None
+        assert db.get_order("ord-3") is None
+        assert db.get_order("ord-4") is None
+
+
+# ── Terminal Order Pruning Tests ───────────────────────────────
+
+
+class TestTerminalPruning:
+    def test_pruning_removes_terminal_orders(self):
+        db = _make_db()
+        clob = _make_clob(get_order_status={"status": "matched", "takingAmount": "50"})
+        config = _make_config()
+        reconciler = OrderReconciler(db, clob, config)
+
+        _insert_order(db)
+        result = reconciler.reconcile_once()
+
+        assert result.pruned == 1
+        assert db.get_order("ord-001") is None
+
+    def test_nonterminal_orders_not_pruned(self):
+        db = _make_db()
+        clob = _make_clob(get_order_status={"status": "live", "takingAmount": "0"})
+        config = _make_config()
+        reconciler = OrderReconciler(db, clob, config)
+
+        _insert_order(db)
+        result = reconciler.reconcile_once()
+
+        assert result.pruned == 0
+        assert db.get_order("ord-001") is not None
 
 
 # ── Reconciliation Loop Tests ──────────────────────────────────

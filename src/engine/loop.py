@@ -335,6 +335,7 @@ class TradingEngine:
                         config=self.config.execution,
                         stop_event=self._reconciliation_stop,
                         fill_tracker=self._fill_tracker,
+                        on_buy_fill=lambda token_id: self._ws_feed.subscribe(token_id),
                     )
                 )
                 log.info("engine.reconciliation_loop_started")
@@ -744,7 +745,7 @@ class TradingEngine:
         ctx = PipelineContext(market=market, cycle_id=cycle_id,
                               market_id=market.id, question=market.question)
 
-        # ── Early exit: skip if we already hold a position ───────────
+        # ── Early exit: skip if we already hold a position or have a pending order
         if self._db:
             existing = [p for p in (self._db.get_open_positions())
                         if p.market_id == market.id]
@@ -753,6 +754,21 @@ class TradingEngine:
                          msg="Already have open position — skipping")
                 ctx.result["skipped"] = "duplicate_position"
                 return ctx.result
+
+            # Also skip if there's already a submitted/pending order for this market
+            try:
+                pending_orders = [
+                    o for o in self._db.get_open_orders()
+                    if o.market_id == market.id
+                    and o.status in ("submitted", "pending", "partial")
+                ]
+                if pending_orders:
+                    log.info("engine.duplicate_order_skip", market_id=market.id[:8],
+                             msg="Already have pending order — skipping")
+                    ctx.result["skipped"] = "duplicate_order"
+                    return ctx.result
+            except Exception:
+                pass  # If open_orders query fails, proceed anyway
 
         # ── Stage 0: Classification ──────────────────────────────────
         self._stage_classify(ctx)
@@ -2471,7 +2487,7 @@ class TradingEngine:
 
                     stake = min(
                         self.config.arbitrage.max_arb_position_usd,
-                        self.config.risk.max_stake,
+                        self.config.risk.max_stake_per_market,
                     )
                     result = await self._cross_platform_scanner.execute_arb(
                         opp, stake,
