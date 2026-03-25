@@ -281,3 +281,55 @@ def _build_iceberg_orders(
         dry_run=config.dry_run,
     )
     return [visible_order, hidden_order]
+
+
+def build_exit_order(
+    market_id: str,
+    token_id: str,
+    size: float,
+    current_price: float,
+    config: ExecutionConfig,
+    exit_reason: str = "",
+) -> OrderSpec:
+    """Build a SELL order to close an existing position.
+
+    Args:
+        market_id: Market to exit.
+        token_id: Token to sell.
+        size: Number of tokens to sell.
+        current_price: Current market price for the token.
+        config: Execution config for order parameters.
+        exit_reason: Why we are exiting (metadata only).
+    """
+    if config.default_order_type == "limit":
+        # Sell slightly below current price to ensure fill
+        price = round(current_price * (1 - config.slippage_tolerance), 4)
+    else:
+        price = 0.0
+
+    order = OrderSpec(
+        order_id=str(uuid.uuid4()),
+        market_id=market_id,
+        token_id=token_id,
+        side="SELL",
+        order_type=config.default_order_type,
+        price=price,
+        size=size,
+        stake_usd=round(size * current_price, 2),
+        ttl_secs=config.limit_order_ttl_secs,
+        dry_run=config.dry_run,
+        execution_strategy="simple",
+        metadata={"exit_reason": exit_reason},
+    )
+
+    log.info(
+        "order_builder.exit_order",
+        order_id=order.order_id[:8],
+        market_id=market_id,
+        side="SELL",
+        price=order.price,
+        size=order.size,
+        exit_reason=exit_reason[:50] if exit_reason else "",
+        dry_run=order.dry_run,
+    )
+    return order

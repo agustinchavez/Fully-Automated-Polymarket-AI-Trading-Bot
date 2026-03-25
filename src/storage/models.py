@@ -49,6 +49,36 @@ class ForecastRecord(BaseModel):
     )
 
 
+class OrderRecord(BaseModel):
+    """Tracked order lifecycle (Phase 10).
+
+    Separates order state from confirmed fills. The ``trades`` table
+    continues to represent confirmed executions while this model tracks
+    the full order lifecycle: pending → submitted → partial → filled | cancelled | expired | failed.
+    """
+    order_id: str
+    clob_order_id: str = ""
+    market_id: str
+    token_id: str = ""
+    side: str = ""
+    order_type: str = ""
+    price: float = 0.0
+    size: float = 0.0
+    filled_size: float = 0.0
+    avg_fill_price: float = 0.0
+    stake_usd: float = 0.0
+    status: str = "pending"
+    dry_run: bool = True
+    ttl_secs: int = 0
+    error: str = ""
+    created_at: str = Field(
+        default_factory=lambda: dt.datetime.now(dt.timezone.utc).isoformat()
+    )
+    updated_at: str = Field(
+        default_factory=lambda: dt.datetime.now(dt.timezone.utc).isoformat()
+    )
+
+
 class TradeRecord(BaseModel):
     """Stored trade."""
     id: str = ""

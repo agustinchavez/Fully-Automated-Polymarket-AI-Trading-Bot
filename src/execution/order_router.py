@@ -7,6 +7,7 @@ Enhancements:
   - Retry with exponential backoff on transient failures
   - Slippage protection: rejects orders whose fill price exceeds tolerance
   - Differentiated limit vs market order paths
+  - CLOB response parsing for actual fill data (Phase 10)
 """
 
 from __future__ import annotations
@@ -34,6 +35,7 @@ class OrderResult:
     fill_size: float = 0.0
     error: str = ""
     timestamp: str = ""
+    clob_order_id: str = ""  # CLOB-assigned order ID (Phase 10)
     raw_response: dict[str, Any] = field(default_factory=dict)
 
     def to_dict(self) -> dict[str, Any]:
@@ -44,6 +46,7 @@ class OrderResult:
             "fill_size": self.fill_size,
             "error": self.error,
             "timestamp": self.timestamp,
+            "clob_order_id": self.clob_order_id,
         }
 
 
@@ -118,14 +121,7 @@ class OrderRouter:
                 )
                 metrics.incr("orders.submitted")
 
-                return OrderResult(
-                    order_id=order.order_id,
-                    status="submitted",
-                    fill_price=order.price,
-                    fill_size=order.size,
-                    timestamp=ts,
-                    raw_response=resp if isinstance(resp, dict) else {"raw": str(resp)},
-                )
+                return _parse_clob_response(resp, order, ts)
 
             except Exception as e:
                 last_error = str(e)
@@ -152,3 +148,91 @@ class OrderRouter:
             error=f"Failed after {max_retries} attempts: {last_error}",
             timestamp=ts,
         )
+
+
+# ── CLOB Response Parsing ─────────────────────────────────────────────
+
+
+def _parse_clob_response(
+    resp: Any,
+    order: OrderSpec,
+    timestamp: str,
+) -> OrderResult:
+    """Parse the py-clob-client response into a structured OrderResult.
+
+    The CLOB response typically contains:
+      - orderID (str): exchange-assigned order ID
+      - success (bool): whether the order was accepted
+      - status (str): "matched" (filled), "live" (on book), "delayed", etc.
+      - takingAmount (str): amount filled immediately (for marketable limits)
+      - makingAmount (str): amount placed on the book
+    """
+    raw = resp if isinstance(resp, dict) else {"raw": str(resp)}
+
+    # Extract CLOB order ID
+    clob_order_id = ""
+    if isinstance(resp, dict):
+        clob_order_id = str(resp.get("orderID", resp.get("order_id", "")))
+
+    # Determine status from CLOB response
+    clob_status = ""
+    if isinstance(resp, dict):
+        clob_status = str(resp.get("status", "")).lower()
+
+    # Parse fill data
+    fill_price = 0.0
+    fill_size = 0.0
+
+    if isinstance(resp, dict):
+        taking_amount = resp.get("takingAmount", resp.get("taking_amount", "0"))
+        try:
+            taking_value = float(taking_amount)
+        except (TypeError, ValueError):
+            taking_value = 0.0
+
+        if taking_value > 0 and order.price > 0:
+            fill_size = taking_value / order.price
+            fill_price = order.price
+
+    # Map CLOB status to our status
+    if clob_status == "matched":
+        status = "filled"
+        # If matched but no takingAmount parsed, assume full fill at order price
+        if fill_size == 0:
+            fill_price = order.price
+            fill_size = order.size
+    elif clob_status == "live":
+        status = "submitted"
+        # Order is on the book, no fill yet
+        fill_price = 0.0
+        fill_size = 0.0
+    elif clob_status in ("delayed", ""):
+        status = "pending"
+    else:
+        # Unknown status — treat as pending for reconciliation
+        status = "pending"
+
+    # Check success flag
+    if isinstance(resp, dict):
+        success = resp.get("success", True)
+        if success is False:
+            status = "failed"
+            error_msg = str(resp.get("errorMsg", resp.get("error", "CLOB rejected order")))
+            return OrderResult(
+                order_id=order.order_id,
+                status="failed",
+                error=error_msg,
+                timestamp=timestamp,
+                clob_order_id=clob_order_id,
+                raw_response=raw,
+            )
+
+    return OrderResult(
+        order_id=order.order_id,
+        status=status,
+        fill_price=round(fill_price, 6),
+        fill_size=round(fill_size, 6),
+        timestamp=timestamp,
+        clob_order_id=clob_order_id,
+        raw_response=raw,
+    )

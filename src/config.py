@@ -317,6 +317,11 @@ class ExecutionConfig(BaseModel):
     patience_check_interval_secs: int = 5
     edge_immediate_multiplier: float = 2.0
     edge_deterioration_cancel: bool = True
+    # Phase 10: Live execution hardening
+    live_exit_routing: bool = False
+    reconciliation_enabled: bool = False
+    reconciliation_interval_secs: int = 30
+    stale_order_cancel_enabled: bool = False
     # Phase 6: Auto strategy selection
     auto_strategy_selection_enabled: bool = False
     auto_strategy_thin_depth_usd: float = 5000.0

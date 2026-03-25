@@ -8,7 +8,7 @@ from src.observability.logger import get_logger
 
 log = get_logger(__name__)
 
-SCHEMA_VERSION = 15
+SCHEMA_VERSION = 16
 
 _MIGRATIONS: dict[int, list[str]] = {
     1: [
@@ -1090,6 +1090,43 @@ _MIGRATIONS: dict[int, list[str]] = {
         """
         CREATE INDEX IF NOT EXISTS idx_chaos_run
             ON chaos_test_results(run_id);
+        """,
+    ],
+    # ── Migration 16: Order lifecycle tracking (Phase 10) ────────
+    16: [
+        # Open orders table — tracks full order lifecycle separately from trades
+        """
+        CREATE TABLE IF NOT EXISTS open_orders (
+            order_id TEXT PRIMARY KEY,
+            clob_order_id TEXT DEFAULT '',
+            market_id TEXT NOT NULL,
+            token_id TEXT DEFAULT '',
+            side TEXT DEFAULT '',
+            order_type TEXT DEFAULT '',
+            price REAL DEFAULT 0,
+            size REAL DEFAULT 0,
+            filled_size REAL DEFAULT 0,
+            avg_fill_price REAL DEFAULT 0,
+            stake_usd REAL DEFAULT 0,
+            status TEXT DEFAULT 'pending',
+            dry_run INTEGER DEFAULT 1,
+            ttl_secs INTEGER DEFAULT 0,
+            error TEXT DEFAULT '',
+            created_at TEXT,
+            updated_at TEXT
+        );
+        """,
+        """
+        CREATE INDEX IF NOT EXISTS idx_open_orders_status
+            ON open_orders(status);
+        """,
+        """
+        CREATE INDEX IF NOT EXISTS idx_open_orders_market
+            ON open_orders(market_id);
+        """,
+        """
+        CREATE INDEX IF NOT EXISTS idx_open_orders_clob
+            ON open_orders(clob_order_id);
         """,
     ],
 }

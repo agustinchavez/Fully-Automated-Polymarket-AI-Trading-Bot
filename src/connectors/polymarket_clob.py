@@ -187,6 +187,24 @@ class CLOBClient:
         """Return the py-clob-client instance for order operations."""
         return self._ensure_signing_client()
 
+    def get_order_status(self, clob_order_id: str) -> dict[str, Any]:
+        """Get the current status of an order from the CLOB.
+
+        Returns raw dict with keys like: id, status, takingAmount, makingAmount, etc.
+        Wraps the py-clob-client ``get_order()`` method.
+        """
+        signing = self._ensure_signing_client()
+        return signing.get_order(clob_order_id)
+
+    def cancel_order(self, clob_order_id: str) -> dict[str, Any]:
+        """Cancel an open order on the CLOB.
+
+        Returns raw dict with cancellation result.
+        Wraps the py-clob-client ``cancel()`` method.
+        """
+        signing = self._ensure_signing_client()
+        return signing.cancel(order_id=clob_order_id)
+
 
 # ── Parsing helpers ──────────────────────────────────────────────────
 

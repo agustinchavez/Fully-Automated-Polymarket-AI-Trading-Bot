@@ -161,6 +161,10 @@ class TradingEngine:
         self._telegram_bot: Any = None
         self._telegram_task: asyncio.Task[None] | None = None
 
+        # Phase 10: Reconciliation loop
+        self._reconciliation_task: asyncio.Task[None] | None = None
+        self._reconciliation_stop: asyncio.Event | None = None
+
         # Phase 6: Execution fill tracker (optional)
         self._fill_tracker: Any = None
         if self.config.execution.auto_strategy_selection_enabled:
@@ -237,6 +241,16 @@ class TradingEngine:
         self._init_db()
         self._restore_kill_switch_state()
 
+        # Phase 10: Wire FillTracker to DB for persistence + load history
+        if self._fill_tracker and self._db:
+            self._fill_tracker._db = self._db
+            try:
+                loaded = self._fill_tracker.load_from_db(lookback_hours=24)
+                if loaded > 0:
+                    log.info("engine.fill_tracker_loaded", count=loaded)
+            except Exception as e:
+                log.warning("engine.fill_tracker_load_error", error=str(e))
+
         # Init alert manager
         try:
             from src.observability.alerts import AlertManager
@@ -301,6 +315,32 @@ class TradingEngine:
             except Exception as e:
                 log.warning("engine.telegram_bot_start_error", error=str(e))
 
+        # Phase 10: Start reconciliation loop in background
+        if (
+            self.config.execution.reconciliation_enabled
+            and is_live_trading_enabled()
+            and not self.config.execution.dry_run
+            and self._db
+        ):
+            try:
+                from src.execution.reconciliation import run_reconciliation_loop
+                from src.connectors.polymarket_clob import CLOBClient
+
+                recon_clob = CLOBClient()
+                self._reconciliation_stop = asyncio.Event()
+                self._reconciliation_task = asyncio.create_task(
+                    run_reconciliation_loop(
+                        db=self._db,
+                        clob=recon_clob,
+                        config=self.config.execution,
+                        stop_event=self._reconciliation_stop,
+                        fill_tracker=self._fill_tracker,
+                    )
+                )
+                log.info("engine.reconciliation_loop_started")
+            except Exception as e:
+                log.warning("engine.reconciliation_start_error", error=str(e))
+
         while self._running:
             try:
                 await self._run_cycle()
@@ -330,6 +370,11 @@ class TradingEngine:
             self._telegram_bot.stop()
         if self._telegram_task and not self._telegram_task.done():
             self._telegram_task.cancel()
+        # Stop reconciliation loop
+        if self._reconciliation_stop:
+            self._reconciliation_stop.set()
+        if self._reconciliation_task and not self._reconciliation_task.done():
+            self._reconciliation_task.cancel()
 
     def _handle_signal(self, sig: signal.Signals) -> None:
         """Handle SIGTERM/SIGINT for graceful shutdown."""
@@ -596,6 +641,7 @@ class TradingEngine:
                     traceback.print_exc()
 
             await self._check_positions()
+            await self._confirm_pending_orders()
             await self._maybe_rebalance()
             await self._maybe_scan_wallets()
             await self._maybe_scan_arbitrage(markets)
@@ -1648,35 +1694,107 @@ class TradingEngine:
                     status=order_result.status,
                     fill_price=order_result.fill_price,
                     fill_size=order_result.fill_size,
+                    clob_order_id=order_result.clob_order_id[:8] if order_result.clob_order_id else "",
                 )
                 if self._db:
-                    from src.storage.models import TradeRecord, PositionRecord
-                    self._db.insert_trade(TradeRecord(
-                        id=str(uuid.uuid4()),
-                        order_id=order_result.order_id,
-                        market_id=ctx.market_id, token_id=token_id,
-                        side=edge_result.direction,
-                        price=order_result.fill_price,
-                        size=order_result.fill_size,
-                        stake_usd=position.stake_usd,
-                        status=order_result.status.upper(),
-                        dry_run=order_result.status == "simulated",
-                    ))
-                    self._db.upsert_position(PositionRecord(
-                        market_id=ctx.market_id, token_id=token_id,
-                        direction=edge_result.direction,
-                        entry_price=order_result.fill_price,
-                        size=order_result.fill_size,
-                        stake_usd=position.stake_usd,
-                        current_price=order_result.fill_price, pnl=0.0,
-                        question=ctx.question[:200] if ctx.question else "",
-                        market_type=getattr(ctx.market, "market_type", ""),
-                    ))
-                ctx.result["trade_executed"] = True
-                # Subscribe token to WebSocket feed for live pricing
-                self._ws_feed.subscribe(token_id)
+                    from src.storage.models import TradeRecord, PositionRecord, OrderRecord
+                    self._record_order_result(
+                        ctx, order, order_result, edge_result, position, token_id,
+                    )
+                if order_result.status in ("simulated", "filled"):
+                    ctx.result["trade_executed"] = True
+                    self._ws_feed.subscribe(token_id)
+                elif order_result.status in ("submitted", "pending"):
+                    # Order is on the book — position will be created on fill confirmation
+                    ctx.result["trade_attempted"] = True
         finally:
             await clob.close()
+
+    def _record_order_result(
+        self,
+        ctx: PipelineContext,
+        order: Any,
+        order_result: Any,
+        edge_result: Any,
+        position: Any,
+        token_id: str,
+    ) -> None:
+        """Record order result to DB based on fill status.
+
+        - simulated: instant fill (paper mode) → insert trade + upsert position
+        - filled: confirmed fill (live) → insert trade + upsert position
+        - submitted/pending: on the book → insert order only, no position yet
+        - failed: log for audit → insert order with error
+        """
+        from src.storage.models import TradeRecord, PositionRecord, OrderRecord
+
+        if order_result.status in ("simulated", "filled"):
+            # Confirmed fill — create trade record + position
+            self._db.insert_trade(TradeRecord(
+                id=str(uuid.uuid4()),
+                order_id=order_result.order_id,
+                market_id=ctx.market_id, token_id=token_id,
+                side=edge_result.direction,
+                price=order_result.fill_price,
+                size=order_result.fill_size,
+                stake_usd=position.stake_usd,
+                status=order_result.status.upper(),
+                dry_run=order_result.status == "simulated",
+            ))
+            self._db.upsert_position(PositionRecord(
+                market_id=ctx.market_id, token_id=token_id,
+                direction=edge_result.direction,
+                entry_price=order_result.fill_price,
+                size=order_result.fill_size,
+                stake_usd=position.stake_usd,
+                current_price=order_result.fill_price, pnl=0.0,
+                question=ctx.question[:200] if ctx.question else "",
+                market_type=getattr(ctx.market, "market_type", ""),
+            ))
+        elif order_result.status in ("submitted", "pending"):
+            # Order on the book — track in open_orders, no position yet
+            self._db.insert_order(OrderRecord(
+                order_id=order_result.order_id,
+                clob_order_id=order_result.clob_order_id,
+                market_id=ctx.market_id,
+                token_id=token_id,
+                side=edge_result.direction,
+                order_type=getattr(order, "order_type", "limit"),
+                price=getattr(order, "price", 0.0),
+                size=getattr(order, "size", 0.0),
+                stake_usd=position.stake_usd,
+                status=order_result.status,
+                dry_run=False,
+                ttl_secs=getattr(order, "ttl_secs", 0),
+            ))
+            log.info(
+                "engine.order_awaiting_fill",
+                market_id=ctx.market_id,
+                order_id=order_result.order_id[:8],
+                clob_order_id=order_result.clob_order_id[:8] if order_result.clob_order_id else "",
+            )
+        elif order_result.status == "failed":
+            # Failed order — record for audit trail
+            self._db.insert_order(OrderRecord(
+                order_id=order_result.order_id,
+                clob_order_id=order_result.clob_order_id,
+                market_id=ctx.market_id,
+                token_id=token_id,
+                side=edge_result.direction,
+                order_type=getattr(order, "order_type", "limit"),
+                price=getattr(order, "price", 0.0),
+                size=getattr(order, "size", 0.0),
+                stake_usd=position.stake_usd,
+                status="failed",
+                dry_run=False,
+                error=order_result.error,
+            ))
+            log.error(
+                "engine.order_failed",
+                market_id=ctx.market_id,
+                order_id=order_result.order_id[:8],
+                error=order_result.error,
+            )
 
     def _stage_audit_and_log(self, ctx: PipelineContext) -> None:
         """Stage 8: Audit trail + logging + adaptive weight recording."""
@@ -1969,48 +2087,13 @@ class TradingEngine:
                             pnl_pct=f"{pnl_pct:.1%}",
                         )
 
-                        # ── Record the exit trade ────────────────────
-                        from src.storage.models import TradeRecord
-                        self._db.insert_trade(TradeRecord(
-                            id=f"exit-{pos.market_id[:8]}-{int(time.time())}",
-                            order_id=f"auto-exit-{pos.market_id[:8]}",
-                            market_id=pos.market_id,
-                            token_id=pos.token_id,
-                            side="SELL",
-                            price=current_price,
-                            size=pos.size,
-                            stake_usd=pos.stake_usd,
-                            status=f"SIMULATED|{exit_reason}",
-                            dry_run=True,
-                        ))
-
-                        # ── Archive position before deletion ─────────
-                        self._db.archive_position(
-                            pos=pos,
-                            exit_price=current_price,
-                            pnl=round(pnl, 4),
-                            close_reason=exit_reason.split(":")[0],
+                        # ── Route exit order (live or simulated) ───────
+                        exit_confirmed = await self._route_exit_order(
+                            pos, current_price, pnl, exit_reason, mkt_record,
                         )
-
-                        # ── Write to performance_log for analytics ───
-                        self._record_performance_log(
-                            pos=pos,
-                            exit_price=current_price,
-                            pnl=round(pnl, 4),
-                            mkt_record=mkt_record,
-                        )
-
-                        # ── Phase 8: Post-mortem analysis ─────────────
-                        self._maybe_run_post_mortem(pos.market_id)
-
-                        self._db.remove_position(pos.market_id)
-                        self._db.insert_alert(
-                            "warning",
-                            f"Auto-exit {pos.market_id[:8]}: {exit_reason} "
-                            f"(PNL ${pnl:.2f})",
-                            "engine",
-                        )
-                        continue  # skip snapshot — position closed
+                        if exit_confirmed:
+                            continue  # skip snapshot — position closed
+                        # If not confirmed (live SELL pending), keep position open
 
                     # Build snapshot for portfolio risk
                     snapshots.append(PositionSnapshot(
@@ -2064,6 +2147,198 @@ class TradingEngine:
             ws_hits=ws_hits,
             rest_hits=rest_hits,
         )
+
+    async def _route_exit_order(
+        self,
+        pos: Any,
+        current_price: float,
+        pnl: float,
+        exit_reason: str,
+        mkt_record: Any,
+    ) -> bool:
+        """Route an exit order — live SELL or simulated close.
+
+        Returns True if the position was closed (simulated or live fill confirmed).
+        Returns False if the exit order is pending (live SELL submitted but not yet filled).
+        """
+        use_live_exit = (
+            is_live_trading_enabled()
+            and self.config.execution.live_exit_routing
+            and not self.config.execution.dry_run
+        )
+
+        if use_live_exit:
+            # Route a real SELL order through the OrderRouter
+            try:
+                from src.execution.order_builder import build_exit_order
+                from src.execution.order_router import OrderRouter
+                from src.connectors.polymarket_clob import CLOBClient
+
+                exit_order = build_exit_order(
+                    market_id=pos.market_id,
+                    token_id=pos.token_id,
+                    size=pos.size,
+                    current_price=current_price,
+                    config=self.config.execution,
+                    exit_reason=exit_reason.split(":")[0],
+                )
+                clob = CLOBClient()
+                try:
+                    router = OrderRouter(clob, self.config.execution)
+                    result = await router.submit_order(exit_order)
+
+                    if result.status == "filled":
+                        # SELL confirmed — close position
+                        self._finalize_exit(
+                            pos, result.fill_price or current_price,
+                            pnl, exit_reason, mkt_record,
+                        )
+                        return True
+                    elif result.status in ("submitted", "pending"):
+                        # SELL order on the book — reconciliation will handle
+                        from src.storage.models import OrderRecord
+                        self._db.insert_order(OrderRecord(
+                            order_id=result.order_id,
+                            clob_order_id=result.clob_order_id,
+                            market_id=pos.market_id,
+                            token_id=pos.token_id,
+                            side="SELL",
+                            order_type=exit_order.order_type,
+                            price=exit_order.price,
+                            size=pos.size,
+                            stake_usd=pos.stake_usd,
+                            status=result.status,
+                            dry_run=False,
+                        ))
+                        log.info(
+                            "engine.exit_order_pending",
+                            market_id=pos.market_id[:8],
+                            order_id=result.order_id[:8],
+                        )
+                        return False
+                    else:
+                        # SELL failed — will retry next cycle
+                        log.warning(
+                            "engine.exit_order_failed",
+                            market_id=pos.market_id[:8],
+                            error=result.error,
+                        )
+                        return False
+                finally:
+                    await clob.close()
+            except Exception as e:
+                log.error("engine.live_exit_error", market_id=pos.market_id[:8], error=str(e))
+                return False
+        else:
+            # Paper mode / live_exit_routing disabled — simulated exit
+            from src.storage.models import TradeRecord
+            self._db.insert_trade(TradeRecord(
+                id=f"exit-{pos.market_id[:8]}-{int(time.time())}",
+                order_id=f"auto-exit-{pos.market_id[:8]}",
+                market_id=pos.market_id,
+                token_id=pos.token_id,
+                side="SELL",
+                price=current_price,
+                size=pos.size,
+                stake_usd=pos.stake_usd,
+                status=f"SIMULATED|{exit_reason}",
+                dry_run=True,
+            ))
+            self._finalize_exit(pos, current_price, pnl, exit_reason, mkt_record)
+            return True
+
+    def _finalize_exit(
+        self,
+        pos: Any,
+        exit_price: float,
+        pnl: float,
+        exit_reason: str,
+        mkt_record: Any,
+    ) -> None:
+        """Archive position, record performance, clean up."""
+        self._db.archive_position(
+            pos=pos,
+            exit_price=exit_price,
+            pnl=round(pnl, 4),
+            close_reason=exit_reason.split(":")[0],
+        )
+        self._record_performance_log(
+            pos=pos,
+            exit_price=exit_price,
+            pnl=round(pnl, 4),
+            mkt_record=mkt_record,
+        )
+        self._maybe_run_post_mortem(pos.market_id)
+        self._db.remove_position(pos.market_id)
+        self._db.insert_alert(
+            "warning",
+            f"Auto-exit {pos.market_id[:8]}: {exit_reason} "
+            f"(PNL ${pnl:.2f})",
+            "engine",
+        )
+
+    async def _confirm_pending_orders(self) -> None:
+        """Confirm pending orders from the open_orders table.
+
+        Paper mode: auto-fill pending orders immediately.
+        Live mode: defer to reconciliation loop (Batch C).
+        """
+        if not self._db:
+            return
+
+        try:
+            pending = self._db.get_open_orders(status="submitted")
+            pending += self._db.get_open_orders(status="pending")
+        except Exception:
+            return
+
+        if not pending:
+            return
+
+        is_live = is_live_trading_enabled() and not self.config.execution.dry_run
+
+        for order in pending:
+            if is_live:
+                # Live mode — reconciliation loop will handle this
+                continue
+
+            # Paper mode — auto-confirm as filled
+            from src.storage.models import TradeRecord, PositionRecord
+            fill_price = order.price
+            fill_size = order.size
+
+            self._db.update_order_status(
+                order.order_id, "filled",
+                filled_size=fill_size, avg_fill_price=fill_price,
+            )
+            self._db.insert_trade(TradeRecord(
+                id=str(uuid.uuid4()),
+                order_id=order.order_id,
+                market_id=order.market_id,
+                token_id=order.token_id,
+                side=order.side,
+                price=fill_price,
+                size=fill_size,
+                stake_usd=order.stake_usd,
+                status="SIMULATED",
+                dry_run=True,
+            ))
+            self._db.upsert_position(PositionRecord(
+                market_id=order.market_id,
+                token_id=order.token_id,
+                direction=order.side,
+                entry_price=fill_price,
+                size=fill_size,
+                stake_usd=order.stake_usd,
+                current_price=fill_price,
+                pnl=0.0,
+            ))
+            self._ws_feed.subscribe(order.token_id)
+            log.info(
+                "engine.paper_auto_fill",
+                order_id=order.order_id[:8],
+                market_id=order.market_id[:8],
+            )
 
     async def _maybe_rebalance(self) -> None:
         """Check for portfolio drift and log rebalance signals."""

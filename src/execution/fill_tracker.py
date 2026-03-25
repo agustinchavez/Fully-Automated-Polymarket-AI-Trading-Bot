@@ -80,9 +80,10 @@ class ExecutionQuality:
 class FillTracker:
     """Track and analyse order fills for execution quality."""
 
-    def __init__(self):
+    def __init__(self, db: Any = None):
         self._fills: list[FillRecord] = []
         self._pending_orders: dict[str, dict[str, Any]] = {}  # order_id -> order info
+        self._db = db
 
     def register_order(
         self,
@@ -133,6 +134,7 @@ class FillTracker:
         )
 
         self._fills.append(record)
+        self._persist_fill(record)
 
         # Remove from pending if fully filled
         if not record.is_partial:
@@ -166,6 +168,7 @@ class FillTracker:
                 execution_strategy=pending["strategy"],
             )
             self._fills.append(record)
+            self._persist_fill(record)
             del self._pending_orders[order_id]
 
             log.info("fill_tracker.unfilled", order_id=order_id[:8])
@@ -284,3 +287,77 @@ class FillTracker:
     def get_recent_fills(self, limit: int = 20) -> list[dict[str, Any]]:
         """Get recent fills for dashboard."""
         return [f.to_dict() for f in self._fills[-limit:]]
+
+    def _persist_fill(self, record: FillRecord) -> None:
+        """Persist a fill record to the database if available."""
+        if not self._db:
+            return
+        try:
+            import datetime as dt
+            self._db.insert_execution_fill({
+                "order_id": record.order_id,
+                "market_id": record.market_id,
+                "expected_price": record.expected_price,
+                "fill_price": record.fill_price,
+                "size_ordered": record.size_ordered,
+                "size_filled": record.size_filled,
+                "is_partial": record.is_partial,
+                "slippage_bps": record.slippage_bps,
+                "time_to_fill_secs": record.time_to_fill_secs,
+                "execution_strategy": record.execution_strategy,
+                "fill_rate": record.fill_rate,
+                "created_at": dt.datetime.fromtimestamp(
+                    record.timestamp, tz=dt.timezone.utc
+                ).isoformat(),
+            })
+        except Exception as e:
+            log.warning("fill_tracker.persist_error", error=str(e))
+
+    def load_from_db(self, lookback_hours: float = 24.0) -> int:
+        """Load recent fills from the database into memory.
+
+        Returns the number of fills loaded.
+        Skips fills already in memory (by order_id) to avoid duplicates.
+        """
+        if not self._db:
+            return 0
+
+        try:
+            import datetime as dt
+            cutoff = dt.datetime.now(dt.timezone.utc) - dt.timedelta(hours=lookback_hours)
+            cutoff_iso = cutoff.isoformat()
+            rows = self._db.get_execution_fills_since(cutoff_iso)
+        except Exception as e:
+            log.warning("fill_tracker.load_error", error=str(e))
+            return 0
+
+        existing_ids = {f.order_id for f in self._fills}
+        loaded = 0
+
+        for row in rows:
+            order_id = row.get("order_id", "")
+            if order_id in existing_ids:
+                continue
+
+            record = FillRecord(
+                order_id=order_id,
+                market_id=row.get("market_id", ""),
+                expected_price=row.get("expected_price", 0.0),
+                fill_price=row.get("fill_price", 0.0),
+                size_ordered=row.get("size_ordered", 0.0),
+                size_filled=row.get("size_filled", 0.0),
+                is_partial=bool(row.get("is_partial", 0)),
+                slippage=0.0,  # not stored in DB, recompute
+                slippage_bps=row.get("slippage_bps", 0.0),
+                time_to_fill_secs=row.get("time_to_fill_secs", 0.0),
+                execution_strategy=row.get("execution_strategy", "simple"),
+            )
+            # Recompute slippage from stored data
+            if record.expected_price > 0:
+                record.slippage = record.fill_price - record.expected_price
+            self._fills.append(record)
+            existing_ids.add(order_id)
+            loaded += 1
+
+        log.info("fill_tracker.loaded_from_db", count=loaded)
+        return loaded

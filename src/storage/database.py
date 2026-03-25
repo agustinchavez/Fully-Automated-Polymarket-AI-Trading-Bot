@@ -20,6 +20,7 @@ from src.storage.models import (
     ComplementaryArbRecord,
     ForecastRecord,
     MarketRecord,
+    OrderRecord,
     PerformanceLogRecord,
     PositionRecord,
     TradeRecord,
@@ -717,6 +718,176 @@ class Database:
             ).fetchall()
             return [dict(r) for r in rows]
         except sqlite3.OperationalError:
+            return []
+
+    # ── Order Lifecycle (Phase 10) ───────────────────────────────────
+
+    def insert_order(self, order: OrderRecord) -> None:
+        """Insert a new order into the open_orders table."""
+        try:
+            self.conn.execute(
+                """INSERT OR REPLACE INTO open_orders
+                    (order_id, clob_order_id, market_id, token_id, side,
+                     order_type, price, size, filled_size, avg_fill_price,
+                     stake_usd, status, dry_run, ttl_secs, error,
+                     created_at, updated_at)
+                VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+                (
+                    order.order_id, order.clob_order_id, order.market_id,
+                    order.token_id, order.side, order.order_type,
+                    order.price, order.size, order.filled_size,
+                    order.avg_fill_price, order.stake_usd, order.status,
+                    int(order.dry_run), order.ttl_secs, order.error,
+                    order.created_at, order.updated_at,
+                ),
+            )
+            self.conn.commit()
+        except Exception as e:
+            log.warning("database.insert_order_error", error=str(e))
+
+    def update_order_status(
+        self,
+        order_id: str,
+        status: str,
+        filled_size: float = 0.0,
+        avg_fill_price: float = 0.0,
+        error: str = "",
+    ) -> None:
+        """Update an order's status and fill data."""
+        import datetime as _dt
+        try:
+            self.conn.execute(
+                """UPDATE open_orders
+                SET status = ?, filled_size = ?, avg_fill_price = ?,
+                    error = ?, updated_at = ?
+                WHERE order_id = ?""",
+                (
+                    status, filled_size, avg_fill_price, error,
+                    _dt.datetime.now(_dt.timezone.utc).isoformat(),
+                    order_id,
+                ),
+            )
+            self.conn.commit()
+        except Exception as e:
+            log.warning("database.update_order_status_error", error=str(e))
+
+    def get_open_orders(self, status: str | None = None) -> list[OrderRecord]:
+        """Return orders from open_orders, optionally filtered by status."""
+        try:
+            if status:
+                rows = self.conn.execute(
+                    "SELECT * FROM open_orders WHERE status = ? ORDER BY created_at DESC",
+                    (status,),
+                ).fetchall()
+            else:
+                rows = self.conn.execute(
+                    "SELECT * FROM open_orders ORDER BY created_at DESC"
+                ).fetchall()
+            result = []
+            for r in rows:
+                d = dict(r)
+                d["dry_run"] = bool(d.get("dry_run", 1))
+                result.append(OrderRecord(**d))
+            return result
+        except Exception as e:
+            log.warning("database.get_open_orders_error", error=str(e))
+            return []
+
+    def get_order(self, order_id: str) -> OrderRecord | None:
+        """Return a single order by order_id, or None."""
+        try:
+            row = self.conn.execute(
+                "SELECT * FROM open_orders WHERE order_id = ?", (order_id,)
+            ).fetchone()
+            if row:
+                d = dict(row)
+                d["dry_run"] = bool(d.get("dry_run", 1))
+                return OrderRecord(**d)
+        except Exception as e:
+            log.warning("database.get_order_error", error=str(e))
+        return None
+
+    def get_submitted_orders(self) -> list[OrderRecord]:
+        """Shortcut: return orders with status 'submitted'."""
+        return self.get_open_orders(status="submitted")
+
+    def get_stale_orders(self, max_age_secs: int) -> list[OrderRecord]:
+        """Return submitted/pending orders older than max_age_secs."""
+        import datetime as _dt
+        try:
+            cutoff = (
+                _dt.datetime.now(_dt.timezone.utc)
+                - _dt.timedelta(seconds=max_age_secs)
+            ).isoformat()
+            rows = self.conn.execute(
+                """SELECT * FROM open_orders
+                WHERE status IN ('submitted', 'pending')
+                AND created_at < ?
+                ORDER BY created_at ASC""",
+                (cutoff,),
+            ).fetchall()
+            result = []
+            for r in rows:
+                d = dict(r)
+                d["dry_run"] = bool(d.get("dry_run", 1))
+                result.append(OrderRecord(**d))
+            return result
+        except Exception as e:
+            log.warning("database.get_stale_orders_error", error=str(e))
+            return []
+
+    # ── Execution Fills (Phase 10) ───────────────────────────────────
+
+    def insert_execution_fill(self, record: dict) -> None:
+        """Persist a fill record to the execution_fills table."""
+        try:
+            self.conn.execute(
+                """INSERT INTO execution_fills
+                   (order_id, market_id, expected_price, fill_price,
+                    size_ordered, size_filled, is_partial, slippage_bps,
+                    time_to_fill_secs, execution_strategy, fill_rate, created_at)
+                   VALUES (?,?,?,?,?,?,?,?,?,?,?,?)""",
+                (
+                    record.get("order_id", ""),
+                    record.get("market_id", ""),
+                    record.get("expected_price", 0.0),
+                    record.get("fill_price", 0.0),
+                    record.get("size_ordered", 0.0),
+                    record.get("size_filled", 0.0),
+                    1 if record.get("is_partial", False) else 0,
+                    record.get("slippage_bps", 0.0),
+                    record.get("time_to_fill_secs", 0.0),
+                    record.get("execution_strategy", "simple"),
+                    record.get("fill_rate", 1.0),
+                    record.get("created_at", ""),
+                ),
+            )
+            self.conn.commit()
+        except Exception as e:
+            log.warning("database.insert_execution_fill_error", error=str(e))
+
+    def get_execution_fills(self, limit: int = 100) -> list[dict]:
+        """Get recent execution fills."""
+        try:
+            rows = self.conn.execute(
+                "SELECT * FROM execution_fills ORDER BY id DESC LIMIT ?",
+                (limit,),
+            ).fetchall()
+            return [dict(r) for r in rows]
+        except Exception as e:
+            log.warning("database.get_execution_fills_error", error=str(e))
+            return []
+
+    def get_execution_fills_since(self, cutoff_iso: str) -> list[dict]:
+        """Get execution fills since a given ISO timestamp."""
+        try:
+            rows = self.conn.execute(
+                "SELECT * FROM execution_fills WHERE created_at >= ? ORDER BY id",
+                (cutoff_iso,),
+            ).fetchall()
+            return [dict(r) for r in rows]
+        except Exception as e:
+            log.warning("database.get_execution_fills_since_error", error=str(e))
             return []
 
     # ── Maintenance ──────────────────────────────────────────────────
