@@ -121,7 +121,9 @@ def _build_simple_order(
     if config.default_order_type == "limit":
         price = round(implied_price * (1 + config.slippage_tolerance), 4)
     else:
-        price = 0.0
+        # Market orders carry the reference price for fill-size derivation
+        # and aggressive-pricing in the router.  Never send 0.0.
+        price = round(implied_price, 4) if implied_price > 0 else 0.01
 
     _, outcome = parse_direction(position.direction)
 
@@ -333,7 +335,8 @@ def build_exit_order(
         # Sell slightly below current price to ensure fill
         price = round(current_price * (1 - config.slippage_tolerance), 4)
     else:
-        price = 0.0
+        # Market orders carry the reference price for fill-size derivation
+        price = round(current_price, 4) if current_price > 0 else 0.01
 
     order = OrderSpec(
         order_id=str(uuid.uuid4()),

@@ -11,6 +11,8 @@ Checks:
   8. Filled trades missing canonical fields
   9. Filled BUY trade with no position or closed position
   10. Position with empty outcome_side
+  11. Active orders missing canonical fields
+  12. Reconciled SELL fills that hit orphan fallback
 """
 
 from __future__ import annotations
@@ -90,6 +92,16 @@ def check_invariants(db: object) -> list[InvariantViolation]:
         violations.extend(_check_empty_outcome_position(db))
     except Exception as e:
         log.warning("invariant_checker.empty_outcome_error", error=str(e))
+
+    try:
+        violations.extend(_check_active_order_missing_canonical(db))
+    except Exception as e:
+        log.warning("invariant_checker.active_order_canonical_error", error=str(e))
+
+    try:
+        violations.extend(_check_orphan_sell_fallback(db))
+    except Exception as e:
+        log.warning("invariant_checker.orphan_sell_fallback_error", error=str(e))
 
     return violations
 
@@ -294,6 +306,47 @@ def _check_empty_outcome_position(db: object) -> list[InvariantViolation]:
             severity="warning",
             market_id=r["market_id"],
             message=f"Position {r['market_id'][:8]} has empty outcome_side",
+        )
+        for r in rows
+    ]
+
+
+def _check_active_order_missing_canonical(db: object) -> list[InvariantViolation]:
+    """Detect active orders missing action_side or outcome_side."""
+    rows = db._conn.execute(
+        """SELECT order_id, market_id FROM open_orders
+        WHERE status IN ('submitted', 'pending')
+        AND (action_side = '' OR outcome_side = '')"""
+    ).fetchall()
+
+    return [
+        InvariantViolation(
+            check="active_order_missing_canonical",
+            severity="warning",
+            market_id=r["market_id"],
+            message=f"Active order {r['order_id'][:8]} missing canonical direction fields",
+        )
+        for r in rows
+    ]
+
+
+def _check_orphan_sell_fallback(db: object) -> list[InvariantViolation]:
+    """Detect closed positions with SELL_FILLED_ORPHAN close reason.
+
+    These indicate reconciled SELL fills that had no matching position,
+    suggesting a state inconsistency at the time of the fill.
+    """
+    rows = db._conn.execute(
+        """SELECT market_id FROM closed_positions
+        WHERE close_reason = 'SELL_FILLED_ORPHAN'"""
+    ).fetchall()
+
+    return [
+        InvariantViolation(
+            check="orphan_sell_fallback",
+            severity="warning",
+            market_id=r["market_id"],
+            message=f"Market {r['market_id'][:8]} had a SELL fill with no matching position",
         )
         for r in rows
     ]

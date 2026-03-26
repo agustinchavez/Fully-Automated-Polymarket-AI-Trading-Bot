@@ -130,10 +130,10 @@ class TestBuildExitOrder:
         expected = round(0.80 * (1 - 0.01), 4)
         assert order.price == expected
 
-    def test_market_order_price_zero(self):
+    def test_market_order_carries_reference_price(self):
         config = _make_config(default_order_type="market", slippage_tolerance=0.01)
         order = build_exit_order("mkt-1", "tok-1", 50.0, 0.80, config)
-        assert order.price == 0.0
+        assert order.price == round(0.80, 4)
 
     def test_exit_reason_in_metadata(self):
         config = _make_config()

@@ -37,6 +37,8 @@ class OrderResult:
     timestamp: str = ""
     clob_order_id: str = ""  # CLOB-assigned order ID (Phase 10)
     raw_response: dict[str, Any] = field(default_factory=dict)
+    action_side: str = ""    # "BUY" or "SELL" — propagated from OrderSpec
+    outcome_side: str = ""   # "YES" or "NO" — propagated from OrderSpec
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -47,6 +49,8 @@ class OrderResult:
             "error": self.error,
             "timestamp": self.timestamp,
             "clob_order_id": self.clob_order_id,
+            "action_side": self.action_side,
+            "outcome_side": self.outcome_side,
         }
 
 
@@ -79,6 +83,8 @@ class OrderRouter:
                 fill_price=order.price,
                 fill_size=order.size,
                 timestamp=ts,
+                action_side=order.action_side,
+                outcome_side=order.outcome_side,
             )
 
         # Live order submission with retry
@@ -147,6 +153,8 @@ class OrderRouter:
             status="failed",
             error=f"Failed after {max_retries} attempts: {last_error}",
             timestamp=ts,
+            action_side=order.action_side,
+            outcome_side=order.outcome_side,
         )
 
 
@@ -193,6 +201,22 @@ def _parse_clob_response(
         if taking_value > 0 and order.price > 0:
             fill_size = taking_value / order.price
             fill_price = order.price
+            # Guard: fill_size should never exceed order size by more than 1%
+            if fill_size > order.size * 1.01:
+                log.warning(
+                    "order_router.fill_size_exceeds_order",
+                    order_id=order.order_id[:8],
+                    fill_size=fill_size,
+                    order_size=order.size,
+                )
+                fill_size = order.size
+        elif taking_value > 0 and order.price <= 0:
+            # Cannot derive fill_size without a reference price
+            log.warning(
+                "order_router.missing_reference_price",
+                order_id=order.order_id[:8],
+                taking_value=taking_value,
+            )
 
     # Map CLOB status to our status
     if clob_status == "matched":
@@ -201,6 +225,11 @@ def _parse_clob_response(
         if fill_size == 0:
             fill_price = order.price
             fill_size = order.size
+            log.info(
+                "order_router.assumed_full_fill",
+                order_id=order.order_id[:8],
+                reason="matched_without_taking_amount",
+            )
     elif clob_status == "live":
         status = "submitted"
         # Order is on the book, no fill yet
@@ -225,6 +254,8 @@ def _parse_clob_response(
                 timestamp=timestamp,
                 clob_order_id=clob_order_id,
                 raw_response=raw,
+                action_side=order.action_side,
+                outcome_side=order.outcome_side,
             )
 
     return OrderResult(
@@ -235,4 +266,6 @@ def _parse_clob_response(
         timestamp=timestamp,
         clob_order_id=clob_order_id,
         raw_response=raw,
+        action_side=order.action_side,
+        outcome_side=order.outcome_side,
     )
