@@ -15,6 +15,7 @@ from dataclasses import dataclass, field
 from typing import Any
 
 from src.config import ExecutionConfig
+from src.execution.direction import parse_direction
 from src.policy.position_sizer import PositionSize
 from src.observability.logger import get_logger
 
@@ -36,6 +37,10 @@ class OrderSpec:
     dry_run: bool       # if True, order is simulated only
     metadata: dict[str, Any] = field(default_factory=dict)
 
+    # Canonical direction fields
+    action_side: str = ""   # "BUY" or "SELL"
+    outcome_side: str = ""  # "YES" or "NO"
+
     # Smart execution fields
     execution_strategy: str = "simple"  # "simple" | "twap" | "iceberg" | "adaptive"
     parent_order_id: str = ""  # for child orders in TWAP/iceberg
@@ -55,6 +60,8 @@ class OrderSpec:
             "ttl_secs": self.ttl_secs,
             "dry_run": self.dry_run,
             "execution_strategy": self.execution_strategy,
+            "action_side": self.action_side,
+            "outcome_side": self.outcome_side,
         }
 
 
@@ -116,6 +123,8 @@ def _build_simple_order(
     else:
         price = 0.0
 
+    _, outcome = parse_direction(position.direction)
+
     order = OrderSpec(
         order_id=str(uuid.uuid4()),
         market_id=market_id,
@@ -127,6 +136,8 @@ def _build_simple_order(
         stake_usd=position.stake_usd,
         ttl_secs=config.limit_order_ttl_secs,
         dry_run=config.dry_run,
+        action_side="BUY",
+        outcome_side=outcome,
         execution_strategy="simple",
         metadata={
             "direction": position.direction,
@@ -165,6 +176,7 @@ def _build_twap_orders(
     orders: list[OrderSpec] = []
     slice_size = position.token_quantity / num_slices
     slice_stake = position.stake_usd / num_slices
+    _, outcome = parse_direction(position.direction)
 
     for i in range(num_slices):
         # Each slice gets slightly tighter pricing
@@ -184,6 +196,8 @@ def _build_twap_orders(
             stake_usd=round(slice_stake, 2),
             ttl_secs=config.limit_order_ttl_secs,
             dry_run=config.dry_run,
+            action_side="BUY",
+            outcome_side=outcome,
             execution_strategy="twap",
             parent_order_id=parent_id,
             child_index=i,
@@ -223,6 +237,7 @@ def _build_iceberg_orders(
     parent_id = str(uuid.uuid4())
     visible_size = position.token_quantity * visible_pct
     hidden_size = position.token_quantity * (1 - visible_pct)
+    _, outcome = parse_direction(position.direction)
 
     price = round(implied_price * (1 + config.slippage_tolerance), 4)
 
@@ -238,6 +253,8 @@ def _build_iceberg_orders(
         stake_usd=round(position.stake_usd * visible_pct, 2),
         ttl_secs=config.limit_order_ttl_secs,
         dry_run=config.dry_run,
+        action_side="BUY",
+        outcome_side=outcome,
         execution_strategy="iceberg",
         parent_order_id=parent_id,
         child_index=0,
@@ -261,6 +278,8 @@ def _build_iceberg_orders(
         stake_usd=round(position.stake_usd * (1 - visible_pct), 2),
         ttl_secs=config.limit_order_ttl_secs,
         dry_run=config.dry_run,
+        action_side="BUY",
+        outcome_side=outcome,
         execution_strategy="iceberg",
         parent_order_id=parent_id,
         child_index=1,
@@ -290,6 +309,7 @@ def build_exit_order(
     current_price: float,
     config: ExecutionConfig,
     exit_reason: str = "",
+    outcome_side: str = "",
 ) -> OrderSpec:
     """Build a SELL order to close an existing position.
 
@@ -300,7 +320,15 @@ def build_exit_order(
         current_price: Current market price for the token.
         config: Execution config for order parameters.
         exit_reason: Why we are exiting (metadata only).
+        outcome_side: "YES" or "NO" — which token is being sold.
     """
+    if not outcome_side:
+        log.warning(
+            "order_builder.exit_missing_outcome",
+            market_id=market_id,
+            msg="SELL order created without outcome_side — PnL direction may be wrong",
+        )
+
     if config.default_order_type == "limit":
         # Sell slightly below current price to ensure fill
         price = round(current_price * (1 - config.slippage_tolerance), 4)
@@ -318,6 +346,8 @@ def build_exit_order(
         stake_usd=round(size * current_price, 2),
         ttl_secs=config.limit_order_ttl_secs,
         dry_run=config.dry_run,
+        action_side="SELL",
+        outcome_side=outcome_side,
         execution_strategy="simple",
         metadata={"exit_reason": exit_reason},
     )

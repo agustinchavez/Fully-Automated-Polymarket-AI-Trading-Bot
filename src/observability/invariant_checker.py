@@ -6,6 +6,11 @@ Checks:
   3. Conflicting SELL orders (multiple active SELL for same market)
   4. Direction field mismatches (action_side/outcome_side vs direction)
   5. Stale positions (open > 7 days)
+  6. SELL order without position (dangling exit)
+  7. Multiple entry orders for same market
+  8. Filled trades missing canonical fields
+  9. Filled BUY trade with no position or closed position
+  10. Position with empty outcome_side
 """
 
 from __future__ import annotations
@@ -60,6 +65,31 @@ def check_invariants(db: object) -> list[InvariantViolation]:
         violations.extend(_check_stale_positions(db))
     except Exception as e:
         log.warning("invariant_checker.stale_positions_error", error=str(e))
+
+    try:
+        violations.extend(_check_sell_without_position(db))
+    except Exception as e:
+        log.warning("invariant_checker.sell_without_position_error", error=str(e))
+
+    try:
+        violations.extend(_check_multiple_entry_orders(db))
+    except Exception as e:
+        log.warning("invariant_checker.multiple_entry_orders_error", error=str(e))
+
+    try:
+        violations.extend(_check_missing_canonical_fields(db))
+    except Exception as e:
+        log.warning("invariant_checker.missing_canonical_error", error=str(e))
+
+    try:
+        violations.extend(_check_filled_trade_no_position(db))
+    except Exception as e:
+        log.warning("invariant_checker.filled_no_position_error", error=str(e))
+
+    try:
+        violations.extend(_check_empty_outcome_position(db))
+    except Exception as e:
+        log.warning("invariant_checker.empty_outcome_error", error=str(e))
 
     return violations
 
@@ -167,6 +197,103 @@ def _check_stale_positions(db: object) -> list[InvariantViolation]:
             severity="warning",
             market_id=r["market_id"],
             message=f"Position {r['market_id'][:8]} open since {r['opened_at'][:10]}",
+        )
+        for r in rows
+    ]
+
+
+def _check_sell_without_position(db: object) -> list[InvariantViolation]:
+    """Detect active SELL orders for markets with no open position."""
+    rows = db._conn.execute(
+        """SELECT o.market_id, o.order_id FROM open_orders o
+        WHERE o.side = 'SELL'
+        AND o.status IN ('submitted', 'pending')
+        AND o.market_id NOT IN (SELECT market_id FROM positions)"""
+    ).fetchall()
+
+    return [
+        InvariantViolation(
+            check="sell_without_position",
+            severity="critical",
+            market_id=r["market_id"],
+            message=f"Active SELL order {r['order_id'][:8]} for market {r['market_id'][:8]} with no position",
+        )
+        for r in rows
+    ]
+
+
+def _check_multiple_entry_orders(db: object) -> list[InvariantViolation]:
+    """Detect multiple active BUY orders for the same market."""
+    rows = db._conn.execute(
+        """SELECT market_id, COUNT(*) as cnt FROM open_orders
+        WHERE side != 'SELL'
+        AND status IN ('submitted', 'pending')
+        GROUP BY market_id HAVING cnt > 1"""
+    ).fetchall()
+
+    return [
+        InvariantViolation(
+            check="multiple_entry_orders",
+            severity="warning",
+            market_id=r["market_id"],
+            message=f"Market {r['market_id'][:8]} has {r['cnt']} active entry orders",
+        )
+        for r in rows
+    ]
+
+
+def _check_missing_canonical_fields(db: object) -> list[InvariantViolation]:
+    """Detect filled trades missing action_side or outcome_side."""
+    rows = db._conn.execute(
+        """SELECT id, market_id FROM trades
+        WHERE status = 'FILLED'
+        AND (action_side = '' OR outcome_side = '')"""
+    ).fetchall()
+
+    return [
+        InvariantViolation(
+            check="missing_canonical_fields",
+            severity="warning",
+            market_id=r["market_id"],
+            message=f"Filled trade {r['id'][:8]} missing canonical direction fields",
+        )
+        for r in rows
+    ]
+
+
+def _check_filled_trade_no_position(db: object) -> list[InvariantViolation]:
+    """Detect filled BUY trades with no matching position or closed position."""
+    rows = db._conn.execute(
+        """SELECT t.id, t.market_id FROM trades t
+        WHERE t.status = 'FILLED'
+        AND t.side != 'SELL'
+        AND t.market_id NOT IN (SELECT market_id FROM positions)
+        AND t.market_id NOT IN (SELECT market_id FROM closed_positions)"""
+    ).fetchall()
+
+    return [
+        InvariantViolation(
+            check="filled_trade_no_position",
+            severity="warning",
+            market_id=r["market_id"],
+            message=f"Filled trade {r['id'][:8]} for market {r['market_id'][:8]} has no position",
+        )
+        for r in rows
+    ]
+
+
+def _check_empty_outcome_position(db: object) -> list[InvariantViolation]:
+    """Detect positions with empty outcome_side."""
+    rows = db._conn.execute(
+        """SELECT market_id FROM positions WHERE outcome_side = ''"""
+    ).fetchall()
+
+    return [
+        InvariantViolation(
+            check="empty_outcome_position",
+            severity="warning",
+            market_id=r["market_id"],
+            message=f"Position {r['market_id'][:8]} has empty outcome_side",
         )
         for r in rows
     ]

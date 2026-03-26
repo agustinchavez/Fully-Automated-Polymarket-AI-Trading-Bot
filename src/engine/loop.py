@@ -1779,7 +1779,11 @@ class TradingEngine:
         from src.storage.models import TradeRecord, PositionRecord, OrderRecord
         from src.execution.direction import parse_direction
 
-        action_side, outcome_side = parse_direction(edge_result.direction)
+        # Prefer canonical fields from OrderSpec if available, fallback to parse
+        action_side = getattr(order, "action_side", "") or ""
+        outcome_side = getattr(order, "outcome_side", "") or ""
+        if not action_side or not outcome_side:
+            action_side, outcome_side = parse_direction(edge_result.direction)
 
         if order_result.status in ("simulated", "filled"):
             # Confirmed fill — create trade record + position
@@ -2239,6 +2243,8 @@ class TradingEngine:
                 from src.execution.order_router import OrderRouter
                 from src.connectors.polymarket_clob import CLOBClient
 
+                from src.execution.direction import parse_direction as _pd_exit
+                _exit_os = getattr(pos, "outcome_side", "") or _pd_exit(pos.direction)[1]
                 exit_order = build_exit_order(
                     market_id=pos.market_id,
                     token_id=pos.token_id,
@@ -2246,6 +2252,7 @@ class TradingEngine:
                     current_price=current_price,
                     config=self.config.execution,
                     exit_reason=exit_reason.split(":")[0],
+                    outcome_side=_exit_os,
                 )
                 clob = CLOBClient()
                 try:
@@ -2262,8 +2269,6 @@ class TradingEngine:
                     elif result.status in ("submitted", "pending"):
                         # SELL order on the book — reconciliation will handle
                         from src.storage.models import OrderRecord
-                        from src.execution.direction import parse_direction as _pd
-                        _exit_outcome = getattr(pos, "outcome_side", "") or _pd(pos.direction)[1]
                         self._db.insert_order(OrderRecord(
                             order_id=result.order_id,
                             clob_order_id=result.clob_order_id,
@@ -2276,8 +2281,8 @@ class TradingEngine:
                             stake_usd=pos.stake_usd,
                             status=result.status,
                             dry_run=False,
-                            action_side="SELL",
-                            outcome_side=_exit_outcome or "YES",
+                            action_side=exit_order.action_side,
+                            outcome_side=exit_order.outcome_side or "YES",
                         ))
                         log.info(
                             "engine.exit_order_pending",

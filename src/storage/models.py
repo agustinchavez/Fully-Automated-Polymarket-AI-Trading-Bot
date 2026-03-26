@@ -60,7 +60,7 @@ class OrderRecord(BaseModel):
     clob_order_id: str = ""
     market_id: str
     token_id: str = ""
-    side: str = ""
+    side: str = ""              # COMPAT: legacy field, prefer action_side + outcome_side
     order_type: str = ""
     price: float = 0.0
     size: float = 0.0
@@ -87,7 +87,7 @@ class TradeRecord(BaseModel):
     order_id: str
     market_id: str
     token_id: str = ""
-    side: str = ""
+    side: str = ""              # COMPAT: legacy field, prefer action_side + outcome_side
     price: float = 0.0
     size: float = 0.0
     stake_usd: float = 0.0
@@ -104,7 +104,7 @@ class PositionRecord(BaseModel):
     """Tracked open position."""
     market_id: str
     token_id: str = ""
-    direction: str = ""
+    direction: str = ""         # COMPAT: legacy field, prefer action_side + outcome_side
     entry_price: float = 0.0
     size: float = 0.0
     stake_usd: float = 0.0
@@ -124,7 +124,7 @@ class ClosedPositionRecord(BaseModel):
     id: str = ""
     market_id: str
     token_id: str = ""
-    direction: str = ""
+    direction: str = ""         # COMPAT: legacy field, prefer action_side + outcome_side
     entry_price: float = 0.0
     exit_price: float = 0.0
     size: float = 0.0

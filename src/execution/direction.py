@@ -8,6 +8,11 @@ The legacy codebase uses multiple direction formats:
 This module provides a canonical two-field representation:
   - action_side: "BUY" or "SELL" (what you do at the exchange)
   - outcome_side: "YES" or "NO" (which token you operate on)
+
+NOTE: The ``side`` / ``direction`` columns in the database are retained for
+backward compatibility.  New code should read ``action_side`` + ``outcome_side``
+and only fall back to ``parse_direction()`` for legacy rows that lack canonical
+fields.
 """
 
 from __future__ import annotations
