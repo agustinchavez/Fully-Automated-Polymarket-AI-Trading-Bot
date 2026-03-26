@@ -502,6 +502,26 @@ async def run_reconciliation_loop(
                 reconciler, db, clob, config, on_buy_fill,
             )
 
+        # Phase 10E: Recover stuck plans (active, no child, remaining children)
+        if plan_controller:
+            try:
+                recovered = plan_controller.recover_stuck_plans()
+                for plan_id, spec in recovered:
+                    # recover_stuck_plans already advanced next_child_index,
+                    # so the child_index is (next_child_index - 1) which is
+                    # stored in the spec's child_index from deserialization.
+                    plan = db.get_execution_plan(plan_id)
+                    child_idx = (plan.next_child_index - 1) if plan else spec.child_index
+                    reconciler._pending_plan_submissions.append(
+                        (spec, plan_id, child_idx)
+                    )
+                if recovered and reconciler._pending_plan_submissions:
+                    await _submit_plan_children(
+                        reconciler, db, clob, config, on_buy_fill,
+                    )
+            except Exception as e:
+                log.warning("reconciler.stuck_plan_recovery_error", error=str(e))
+
         try:
             await asyncio.wait_for(stop_event.wait(), timeout=interval)
             break  # stop_event was set
@@ -578,3 +598,14 @@ async def _submit_plan_children(
                 child_index=child_idx,
                 error=str(e),
             )
+            # Mark plan as failed so it doesn't remain stuck with no
+            # active child and remaining children (invariant #13).
+            try:
+                db.update_execution_plan(
+                    plan_id,
+                    status="failed",
+                    active_child_order_id="",
+                    error=f"Child {child_idx} submission failed: {e}",
+                )
+            except Exception:
+                pass  # best-effort

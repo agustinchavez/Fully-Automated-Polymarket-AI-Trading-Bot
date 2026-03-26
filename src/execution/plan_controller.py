@@ -312,8 +312,8 @@ class PlanController:
                 active_child_order_id="",
                 error=str(e),
             )
-            self._alert("warning", f"Plan {plan.plan_id[:8]} failed: {e}")
-            log.warning("plan_controller.unsupported_spec_version", plan_id=plan.plan_id[:8], error=str(e))
+            self._alert("critical", f"Plan {plan.plan_id[:8]} failed: {e}")
+            log.error("plan_controller.unsupported_spec_version", plan_id=plan.plan_id[:8], error=str(e))
             return None
         serialized = meta.get("children", [])
 
@@ -365,7 +365,13 @@ class PlanController:
     def _handle_child_partial(
         self, plan: ExecutionPlanRecord, order: OrderRecord
     ) -> None:
-        """Handle a child order with partial fill — update parent aggregates."""
+        """Handle a child order with partial fill — update parent aggregates.
+
+        Note: This method does not read metadata_json, so no spec-version
+        validation is needed here.  If this method ever evolves to fetch
+        next-child specs or depends on serialized metadata, add
+        _validate_spec_version() at the read site.
+        """
         children = self._db.get_plan_children(plan.plan_id)
         total_filled = 0.0
         total_cost = 0.0
@@ -456,8 +462,8 @@ class PlanController:
                 active_child_order_id="",
                 error=str(e),
             )
-            self._alert("warning", f"Plan {plan.plan_id[:8]} failed: {e}")
-            log.warning("plan_controller.unsupported_spec_version", plan_id=plan.plan_id[:8], error=str(e))
+            self._alert("critical", f"Plan {plan.plan_id[:8]} failed: {e}")
+            log.error("plan_controller.unsupported_spec_version", plan_id=plan.plan_id[:8], error=str(e))
             return None
         serialized = meta.get("children", [])
 
@@ -509,25 +515,42 @@ class PlanController:
         active_child = plan.active_child_order_id or ""
 
         children = self._db.get_plan_children(plan_id)
-        total_filled = sum(
-            (c.filled_size if c.filled_size > 0 else 0.0)
-            for c in children
-            if c.status in ("filled", "partial")
-        )
+        total_filled = 0.0
+        total_cost = 0.0
+        for c in children:
+            if c.status in ("filled", "partial"):
+                fill = c.filled_size if c.filled_size > 0 else 0.0
+                price = c.avg_fill_price if c.avg_fill_price > 0 else c.price
+                total_filled += fill
+                total_cost += fill * price
 
+        avg_price = total_cost / total_filled if total_filled > 0 else 0.0
         final_status = "partial" if total_filled > 0 else "cancelled"
         self._db.update_execution_plan(
             plan_id,
             status=final_status,
+            filled_size=round(total_filled, 6),
+            avg_fill_price=round(avg_price, 6),
             active_child_order_id="",
             error=reason or "cancelled",
         )
+        # Cancel remaining non-terminal children in open_orders
+        cancelled_children = 0
+        for c in children:
+            if c.status in ("submitted", "pending"):
+                try:
+                    self._db.update_order_status(c.order_id, "cancelled")
+                    cancelled_children += 1
+                except Exception:
+                    pass  # best-effort
+
         log.info(
             "plan_controller.cancelled",
             plan_id=plan_id[:8],
             status=final_status,
             filled_size=round(total_filled, 4),
             active_child=active_child[:8] if active_child else "",
+            cancelled_children=cancelled_children,
         )
         self._alert(
             "warning",
@@ -535,6 +558,84 @@ class PlanController:
             f"(reason={reason or 'cancelled'} filled={round(total_filled, 2)})",
         )
         return active_child
+
+    def recover_stuck_plans(self) -> list[tuple[str, "OrderSpec"]]:
+        """Detect and recover stuck plans — active with no active child and remaining children.
+
+        For each stuck plan, attempts to reconstruct and return the next child
+        OrderSpec.  If reconstruction fails (e.g. bad spec version), marks the
+        plan as failed.
+
+        Returns a list of (plan_id, next_spec) tuples for the caller to submit.
+        """
+        recovered: list[tuple[str, OrderSpec]] = []
+
+        try:
+            active_plans = self._db.get_active_execution_plans()
+        except Exception:
+            return recovered
+
+        for plan in active_plans:
+            if plan.status != "active":
+                continue
+            if plan.active_child_order_id:
+                continue  # has an active child — not stuck
+            if plan.next_child_index >= plan.total_children:
+                continue  # all children submitted — awaiting last fill
+
+            # This plan is stuck — attempt recovery
+            try:
+                meta = json.loads(plan.metadata_json)
+                _validate_spec_version(meta, plan.plan_id)
+                serialized = meta.get("children", [])
+
+                next_idx = plan.next_child_index
+                if next_idx >= len(serialized):
+                    self._db.update_execution_plan(
+                        plan.plan_id,
+                        status="failed",
+                        active_child_order_id="",
+                        error="Recovery failed: next_child_index exceeds serialized children",
+                    )
+                    self._alert("warning", f"Plan {plan.plan_id[:8]} recovery failed: no more serialized children")
+                    continue
+
+                next_spec = _deserialize_order_spec(serialized[next_idx])
+                next_spec.order_id = str(uuid.uuid4())
+
+                self._db.update_execution_plan(
+                    plan.plan_id,
+                    next_child_index=next_idx + 1,
+                )
+
+                recovered.append((plan.plan_id, next_spec))
+                log.info(
+                    "plan_controller.stuck_plan_recovered",
+                    plan_id=plan.plan_id[:8],
+                    child_index=next_idx,
+                )
+                self._alert(
+                    "warning",
+                    f"Plan {plan.plan_id[:8]} was stuck — recovering child {next_idx + 1}/{plan.total_children}",
+                )
+
+            except UnsupportedSpecVersion as e:
+                self._db.update_execution_plan(
+                    plan.plan_id,
+                    status="failed",
+                    active_child_order_id="",
+                    error=str(e),
+                )
+                self._alert("critical", f"Plan {plan.plan_id[:8]} recovery failed: {e}")
+
+            except Exception as e:
+                log.warning(
+                    "plan_controller.recovery_error",
+                    plan_id=plan.plan_id[:8],
+                    error=str(e),
+                )
+
+        return recovered
 
     def get_plan_summary(self, plan_id: str) -> dict[str, Any]:
         """Return a dashboard-friendly summary of a plan and its children."""

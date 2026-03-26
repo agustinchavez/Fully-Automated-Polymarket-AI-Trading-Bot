@@ -1172,3 +1172,1017 @@ class TestPartialChildAlert:
         last = dict(alerts[0])
         assert "%" in last["message"]  # contains percentage
         assert last["channel"] == "plan_controller"
+
+
+# ═══════════════════════════════════════════════════════════════
+# HARDENING ROUND 3: Edge-case and messy real-world scenarios
+# ═══════════════════════════════════════════════════════════════
+
+
+class TestPlanEdgeCases:
+    """Tests for messy real-world execution behavior."""
+
+    def test_duplicate_fill_on_same_child_idempotent(self):
+        """If a child fill arrives twice, plan should not double-count."""
+        db = _make_db()
+        ctrl = PlanController(db)
+        orders = _make_twap_orders(2)
+        plan = ctrl.create_plan(orders, "twap")
+
+        child_id = str(uuid.uuid4())
+        db.insert_order(OrderRecord(
+            order_id=child_id, market_id="mkt-1",
+            price=0.60, size=50.0,
+            status="filled", filled_size=50.0, avg_fill_price=0.60,
+            parent_plan_id=plan.plan_id, child_index=0,
+        ))
+        ctrl.activate_plan(plan.plan_id, child_id)
+
+        # First fill notification — should return next spec
+        child = db.get_order(child_id)
+        next_spec = ctrl.update_plan_from_child(child)
+        assert next_spec is not None
+
+        # Simulate: second child submitted and filled
+        db.insert_order(OrderRecord(
+            order_id=next_spec.order_id, market_id="mkt-1",
+            price=0.60, size=50.0,
+            status="filled", filled_size=50.0, avg_fill_price=0.60,
+            parent_plan_id=plan.plan_id, child_index=1,
+        ))
+        db.update_execution_plan(plan.plan_id, active_child_order_id=next_spec.order_id)
+
+        second_child = db.get_order(next_spec.order_id)
+        result = ctrl.update_plan_from_child(second_child)
+        assert result is None  # no more children
+
+        # Duplicate fill on first child again — plan already terminal
+        dup_result = ctrl.update_plan_from_child(child)
+        assert dup_result is None
+
+        final = db.get_execution_plan(plan.plan_id)
+        assert final.status == "filled"
+        # filled_size should not be double-counted
+        assert final.filled_size == pytest.approx(100.0, abs=1.0)
+
+    def test_fill_on_already_terminal_plan_noop(self):
+        """Fill arriving for a plan that's already cancelled/failed/filled."""
+        db = _make_db()
+        ctrl = PlanController(db)
+        orders = _make_twap_orders(2)
+        plan = ctrl.create_plan(orders, "twap")
+
+        child_id = str(uuid.uuid4())
+        db.insert_order(OrderRecord(
+            order_id=child_id, market_id="mkt-1",
+            price=0.60, size=50.0,
+            status="filled", filled_size=50.0, avg_fill_price=0.60,
+            parent_plan_id=plan.plan_id, child_index=0,
+        ))
+        ctrl.activate_plan(plan.plan_id, child_id)
+
+        # Force plan to terminal state
+        db.update_execution_plan(plan.plan_id, status="cancelled")
+
+        child = db.get_order(child_id)
+        result = ctrl.update_plan_from_child(child)
+        assert result is None  # no-op for terminal plans
+
+    def test_all_children_cancelled_plan_status(self):
+        """When every child is cancelled with no fills, plan ends as 'cancelled'."""
+        db = _make_db()
+        ctrl = PlanController(db)
+        orders = _make_twap_orders(2)
+        plan = ctrl.create_plan(orders, "twap")
+
+        # Insert ONLY the first child (cancelled) — realistic flow
+        c1 = str(uuid.uuid4())
+        db.insert_order(OrderRecord(
+            order_id=c1, market_id="mkt-1",
+            price=0.60, size=50.0, status="cancelled",
+            parent_plan_id=plan.plan_id, child_index=0,
+        ))
+        ctrl.activate_plan(plan.plan_id, c1)
+
+        # First cancel → next child returned (child 1 not yet in DB)
+        child0 = db.get_order(c1)
+        next_spec = ctrl.update_plan_from_child(child0)
+        assert next_spec is not None  # still has child 1 to submit
+
+        # Simulate: second child submitted and also cancelled
+        db.insert_order(OrderRecord(
+            order_id=next_spec.order_id, market_id="mkt-1",
+            price=0.60, size=50.0, status="cancelled",
+            parent_plan_id=plan.plan_id, child_index=1,
+        ))
+        db.update_execution_plan(plan.plan_id, active_child_order_id=next_spec.order_id)
+
+        child1 = db.get_order(next_spec.order_id)
+        result = ctrl.update_plan_from_child(child1)
+        assert result is None
+
+        final = db.get_execution_plan(plan.plan_id)
+        assert final.status == "cancelled"
+        assert final.filled_size == 0.0
+
+    def test_mixed_filled_and_cancelled_children(self):
+        """First child filled, second cancelled → plan is 'partial'."""
+        db = _make_db()
+        ctrl = PlanController(db)
+        orders = _make_twap_orders(2)
+        plan = ctrl.create_plan(orders, "twap")
+
+        # First child: filled
+        c1 = str(uuid.uuid4())
+        db.insert_order(OrderRecord(
+            order_id=c1, market_id="mkt-1",
+            price=0.60, size=50.0,
+            status="filled", filled_size=50.0, avg_fill_price=0.60,
+            parent_plan_id=plan.plan_id, child_index=0,
+        ))
+        ctrl.activate_plan(plan.plan_id, c1)
+        next_spec = ctrl.update_plan_from_child(db.get_order(c1))
+        assert next_spec is not None
+
+        # Second child: cancelled
+        db.insert_order(OrderRecord(
+            order_id=next_spec.order_id, market_id="mkt-1",
+            price=0.60, size=50.0, status="cancelled",
+            parent_plan_id=plan.plan_id, child_index=1,
+        ))
+        db.update_execution_plan(plan.plan_id, active_child_order_id=next_spec.order_id)
+        ctrl.update_plan_from_child(db.get_order(next_spec.order_id))
+
+        final = db.get_execution_plan(plan.plan_id)
+        assert final.status == "partial"
+        assert final.filled_size == pytest.approx(50.0, abs=0.1)
+
+    def test_plan_with_expired_children_status(self):
+        """All children expired with no fills → plan status is 'expired'."""
+        db = _make_db()
+        ctrl = PlanController(db)
+        orders = _make_twap_orders(1)  # single child for simplicity
+        plan = ctrl.create_plan(orders, "twap")
+
+        c1 = str(uuid.uuid4())
+        db.insert_order(OrderRecord(
+            order_id=c1, market_id="mkt-1",
+            price=0.60, size=100.0, status="expired",
+            parent_plan_id=plan.plan_id, child_index=0,
+        ))
+        ctrl.activate_plan(plan.plan_id, c1)
+        ctrl.update_plan_from_child(db.get_order(c1))
+
+        final = db.get_execution_plan(plan.plan_id)
+        assert final.status == "expired"
+
+    def test_plan_with_failed_child_and_prior_fills(self):
+        """First child filled, second failed → partial status."""
+        db = _make_db()
+        ctrl = PlanController(db)
+        orders = _make_twap_orders(2)
+        plan = ctrl.create_plan(orders, "twap")
+
+        c1 = str(uuid.uuid4())
+        db.insert_order(OrderRecord(
+            order_id=c1, market_id="mkt-1",
+            price=0.60, size=50.0,
+            status="filled", filled_size=50.0, avg_fill_price=0.60,
+            parent_plan_id=plan.plan_id, child_index=0,
+        ))
+        ctrl.activate_plan(plan.plan_id, c1)
+        next_spec = ctrl.update_plan_from_child(db.get_order(c1))
+
+        db.insert_order(OrderRecord(
+            order_id=next_spec.order_id, market_id="mkt-1",
+            price=0.60, size=50.0, status="failed",
+            parent_plan_id=plan.plan_id, child_index=1,
+        ))
+        db.update_execution_plan(plan.plan_id, active_child_order_id=next_spec.order_id)
+        ctrl.update_plan_from_child(db.get_order(next_spec.order_id))
+
+        final = db.get_execution_plan(plan.plan_id)
+        assert final.status == "partial"
+        assert final.filled_size == pytest.approx(50.0, abs=0.1)
+
+
+class TestActiveChildTimingEdgeCases:
+    """Tests for the window between controller clearing active_child_order_id
+    and the submission path setting it to the new child."""
+
+    def test_invariant_does_not_fire_when_all_children_submitted(self):
+        """Plan with next_child_index == total_children and no active child
+        should NOT trigger the stale plan invariant."""
+        db = _make_db()
+        db.insert_execution_plan(ExecutionPlanRecord(
+            plan_id="awaiting-last", market_id="m1",
+            status="active",
+            total_children=3,
+            next_child_index=3,  # all submitted
+            active_child_order_id="",
+        ))
+        violations = check_invariants(db)
+        stale = [v for v in violations if v.check == "stale_execution_plan"]
+        assert len(stale) == 0
+
+    def test_invariant_fires_when_children_remain(self):
+        """Plan with next_child_index < total_children and no active child
+        should trigger the stale plan invariant."""
+        db = _make_db()
+        db.insert_execution_plan(ExecutionPlanRecord(
+            plan_id="stuck-mid", market_id="m1",
+            status="active",
+            total_children=3,
+            next_child_index=1,  # 2 remaining
+            active_child_order_id="",
+        ))
+        violations = check_invariants(db)
+        stale = [v for v in violations if v.check == "stale_execution_plan"]
+        assert len(stale) == 1
+
+    def test_controller_clears_active_child_before_returning_next(self):
+        """When _handle_child_filled returns next spec, active_child_order_id
+        should be empty at that moment."""
+        db = _make_db()
+        ctrl = PlanController(db)
+        orders = _make_twap_orders(3)
+        plan = ctrl.create_plan(orders, "twap")
+
+        c1 = str(uuid.uuid4())
+        db.insert_order(OrderRecord(
+            order_id=c1, market_id="mkt-1",
+            price=0.60, size=33.33,
+            status="filled", filled_size=33.33, avg_fill_price=0.60,
+            parent_plan_id=plan.plan_id, child_index=0,
+        ))
+        ctrl.activate_plan(plan.plan_id, c1)
+
+        next_spec = ctrl.update_plan_from_child(db.get_order(c1))
+        assert next_spec is not None
+
+        # Between controller returning and submission setting it, field is empty
+        mid_plan = db.get_execution_plan(plan.plan_id)
+        assert mid_plan.active_child_order_id == ""
+        assert mid_plan.next_child_index == 2  # advanced
+
+        # Submission path sets the new child
+        db.update_execution_plan(plan.plan_id, active_child_order_id=next_spec.order_id)
+        after = db.get_execution_plan(plan.plan_id)
+        assert after.active_child_order_id == next_spec.order_id
+
+    def test_stale_invariant_clears_after_submission(self):
+        """The stale invariant should not fire once active_child_order_id is set."""
+        db = _make_db()
+        db.insert_execution_plan(ExecutionPlanRecord(
+            plan_id="briefly-stale", market_id="m1",
+            status="active",
+            total_children=3,
+            next_child_index=2,
+            active_child_order_id="",
+        ))
+        # Before submission: invariant fires
+        violations = check_invariants(db)
+        stale = [v for v in violations if v.check == "stale_execution_plan"]
+        assert len(stale) == 1
+
+        # After submission: invariant clears
+        db.update_execution_plan("briefly-stale", active_child_order_id="new-child-id")
+        violations2 = check_invariants(db)
+        stale2 = [v for v in violations2 if v.check == "stale_execution_plan"]
+        assert len(stale2) == 0
+
+
+class TestReconciliationPlanEdgeCases:
+    """Tests for plan-aware reconciliation edge cases."""
+
+    def test_notify_controller_with_override_status(self):
+        """Override status should be used by the controller, not the DB status."""
+        from src.execution.reconciliation import OrderReconciler
+
+        class FakeClob:
+            pass
+
+        db = _make_db()
+        ctrl = PlanController(db)
+        reconciler = OrderReconciler(
+            db=db, clob=FakeClob(), config=ExecutionConfig(),
+            plan_controller=ctrl,
+        )
+
+        orders = _make_twap_orders(1)
+        plan = ctrl.create_plan(orders, "twap")
+
+        c1 = str(uuid.uuid4())
+        db.insert_order(OrderRecord(
+            order_id=c1, market_id="mkt-1",
+            price=0.60, size=100.0,
+            status="submitted",  # DB says submitted
+            parent_plan_id=plan.plan_id, child_index=0,
+        ))
+        ctrl.activate_plan(plan.plan_id, c1)
+
+        # Override to "cancelled" — simulates exchange cancellation
+        order = db.get_order(c1)
+        reconciler._notify_plan_controller(order, override_status="cancelled")
+
+        # Plan should be terminal (cancelled) not still active
+        final = db.get_execution_plan(plan.plan_id)
+        assert final.status == "cancelled"
+
+    def test_notify_controller_no_plan_controller_noop(self):
+        """Without plan controller, notify does nothing even with parent_plan_id."""
+        from src.execution.reconciliation import OrderReconciler
+
+        class FakeClob:
+            pass
+
+        db = _make_db()
+        reconciler = OrderReconciler(
+            db=db, clob=FakeClob(), config=ExecutionConfig(),
+            plan_controller=None,
+        )
+
+        c1 = str(uuid.uuid4())
+        db.insert_order(OrderRecord(
+            order_id=c1, market_id="mkt-1", status="filled",
+            parent_plan_id="some-plan", child_index=0,
+        ))
+        order = db.get_order(c1)
+        # Should not raise
+        reconciler._notify_plan_controller(order)
+        assert len(reconciler._pending_plan_submissions) == 0
+
+    def test_pending_submissions_cleared_after_processing(self):
+        """_pending_plan_submissions should be empty after reconciler processes them."""
+        from src.execution.reconciliation import OrderReconciler
+
+        class FakeClob:
+            pass
+
+        db = _make_db()
+        ctrl = PlanController(db)
+        reconciler = OrderReconciler(
+            db=db, clob=FakeClob(), config=ExecutionConfig(),
+            plan_controller=ctrl,
+        )
+
+        orders = _make_twap_orders(2)
+        plan = ctrl.create_plan(orders, "twap")
+
+        c1 = str(uuid.uuid4())
+        db.insert_order(OrderRecord(
+            order_id=c1, market_id="mkt-1",
+            price=0.60, size=50.0,
+            status="filled", filled_size=50.0, avg_fill_price=0.60,
+            parent_plan_id=plan.plan_id, child_index=0,
+        ))
+        ctrl.activate_plan(plan.plan_id, c1)
+
+        order = db.get_order(c1)
+        reconciler._notify_plan_controller(order)
+        assert len(reconciler._pending_plan_submissions) == 1
+
+        # Simulate processing
+        reconciler._pending_plan_submissions.clear()
+        assert len(reconciler._pending_plan_submissions) == 0
+
+
+class TestPlanPruningEdgeCases:
+    """Tests for plan-aware order pruning."""
+
+    def test_terminal_child_of_active_plan_not_pruned(self):
+        """Filled children of active plans should NOT be pruned."""
+        db = _make_db()
+        db.insert_execution_plan(ExecutionPlanRecord(
+            plan_id="active-plan", market_id="m1",
+            status="active", total_children=2,
+        ))
+        db.insert_order(OrderRecord(
+            order_id="child-filled", market_id="m1",
+            status="filled", parent_plan_id="active-plan", child_index=0,
+        ))
+        count = db.prune_terminal_orders()
+        assert count == 0
+
+        # Verify child still exists
+        remaining = db.get_plan_children("active-plan")
+        assert len(remaining) == 1
+
+    def test_terminal_child_of_terminal_plan_pruned(self):
+        """Filled children of terminal plans SHOULD be pruned."""
+        db = _make_db()
+        db.insert_execution_plan(ExecutionPlanRecord(
+            plan_id="done-plan", market_id="m1",
+            status="filled", total_children=1,
+        ))
+        db.insert_order(OrderRecord(
+            order_id="child-done", market_id="m1",
+            status="filled", parent_plan_id="done-plan", child_index=0,
+        ))
+        count = db.prune_terminal_orders()
+        assert count == 1
+
+    def test_orphan_terminal_order_no_plan_pruned(self):
+        """Terminal orders without a parent plan should be pruned normally."""
+        db = _make_db()
+        db.insert_order(OrderRecord(
+            order_id="no-plan", market_id="m1",
+            status="filled", parent_plan_id="",
+        ))
+        count = db.prune_terminal_orders()
+        assert count == 1
+
+
+class TestSpecVersionSeverityUpgrade:
+    """Verify unsupported spec version triggers critical alert, not warning."""
+
+    def test_critical_alert_on_bad_version_filled(self):
+        """Unsupported spec version during child fill should trigger critical alert."""
+        db = _make_db()
+        ctrl = PlanController(db)
+        orders = _make_twap_orders(3)
+        plan = ctrl.create_plan(orders, "twap")
+
+        c1 = str(uuid.uuid4())
+        db.insert_order(OrderRecord(
+            order_id=c1, market_id="mkt-1",
+            price=0.60, size=33.33,
+            status="filled", filled_size=33.33, avg_fill_price=0.60,
+            parent_plan_id=plan.plan_id, child_index=0,
+        ))
+        ctrl.activate_plan(plan.plan_id, c1)
+
+        # Tamper version
+        meta = json.loads(plan.metadata_json)
+        meta["spec_version"] = 999
+        db.update_execution_plan(plan.plan_id, metadata_json=json.dumps(meta))
+
+        ctrl.update_plan_from_child(db.get_order(c1))
+
+        alerts = db._conn.execute(
+            "SELECT * FROM alerts_log WHERE message LIKE '%failed%' AND message LIKE '%spec_version%'"
+        ).fetchall()
+        assert len(alerts) >= 1
+        assert dict(alerts[0])["level"] == "critical"
+
+    def test_critical_alert_on_bad_version_terminal(self):
+        """Unsupported spec version during child cancel should trigger critical alert."""
+        db = _make_db()
+        ctrl = PlanController(db)
+        orders = _make_twap_orders(3)
+        plan = ctrl.create_plan(orders, "twap")
+
+        c1 = str(uuid.uuid4())
+        db.insert_order(OrderRecord(
+            order_id=c1, market_id="mkt-1",
+            price=0.60, size=33.33, status="cancelled",
+            parent_plan_id=plan.plan_id, child_index=0,
+        ))
+        ctrl.activate_plan(plan.plan_id, c1)
+
+        meta = json.loads(plan.metadata_json)
+        meta["spec_version"] = 999
+        db.update_execution_plan(plan.plan_id, metadata_json=json.dumps(meta))
+
+        ctrl.update_plan_from_child(db.get_order(c1))
+
+        alerts = db._conn.execute(
+            "SELECT * FROM alerts_log WHERE message LIKE '%failed%' AND message LIKE '%spec_version%'"
+        ).fetchall()
+        assert len(alerts) >= 1
+        assert dict(alerts[0])["level"] == "critical"
+
+
+class TestCancelPlanVenueEdgeCases:
+    """Tests for cancel_plan behavior under various conditions."""
+
+    def test_cancel_plan_with_partial_fills(self):
+        """Cancel a plan that has partial fills → status should be 'partial'."""
+        db = _make_db()
+        ctrl = PlanController(db)
+        orders = _make_twap_orders(3)
+        plan = ctrl.create_plan(orders, "twap")
+
+        # First child filled
+        c1 = str(uuid.uuid4())
+        db.insert_order(OrderRecord(
+            order_id=c1, market_id="mkt-1",
+            price=0.60, size=33.33,
+            status="filled", filled_size=33.33, avg_fill_price=0.60,
+            parent_plan_id=plan.plan_id, child_index=0,
+        ))
+        ctrl.activate_plan(plan.plan_id, c1)
+        next_spec = ctrl.update_plan_from_child(db.get_order(c1))
+        db.update_execution_plan(plan.plan_id, active_child_order_id=next_spec.order_id)
+
+        # Cancel while second child is active
+        active_id = ctrl.cancel_plan(plan.plan_id, "user requested")
+        assert active_id == next_spec.order_id
+
+        final = db.get_execution_plan(plan.plan_id)
+        assert final.status == "partial"  # has fills, so partial
+        assert final.error == "user requested"
+
+    def test_cancel_plan_twice_idempotent(self):
+        """Cancelling an already-cancelled plan should return empty string."""
+        db = _make_db()
+        ctrl = PlanController(db)
+        orders = _make_twap_orders(2)
+        plan = ctrl.create_plan(orders, "twap")
+        ctrl.cancel_plan(plan.plan_id, "first cancel")
+        result = ctrl.cancel_plan(plan.plan_id, "second cancel")
+        assert result == ""
+
+    def test_cancel_plan_preserves_fill_aggregates(self):
+        """Cancellation should not reset filled_size or avg_fill_price."""
+        db = _make_db()
+        ctrl = PlanController(db)
+        orders = _make_twap_orders(2)
+        plan = ctrl.create_plan(orders, "twap")
+
+        c1 = str(uuid.uuid4())
+        db.insert_order(OrderRecord(
+            order_id=c1, market_id="mkt-1",
+            price=0.60, size=50.0,
+            status="filled", filled_size=50.0, avg_fill_price=0.62,
+            parent_plan_id=plan.plan_id, child_index=0,
+        ))
+        ctrl.activate_plan(plan.plan_id, c1)
+        ctrl.update_plan_from_child(db.get_order(c1))
+
+        # Check fill is recorded
+        pre = db.get_execution_plan(plan.plan_id)
+        assert pre.filled_size > 0
+
+        ctrl.cancel_plan(plan.plan_id, "done")
+
+        final = db.get_execution_plan(plan.plan_id)
+        assert final.status == "partial"
+        # cancel_plan re-scans children and persists fill aggregates
+        assert final.filled_size == pytest.approx(50.0, abs=0.1)
+        assert final.avg_fill_price == pytest.approx(0.62, abs=0.01)
+
+
+# ═══════════════════════════════════════════════════════════════
+# HARDENING ROUND 4: cancel fill persistence, child cancellation,
+#   submission failure handling, stuck plan auto-recovery
+# ═══════════════════════════════════════════════════════════════
+
+
+class TestCancelPlanFillPersistence:
+    """Verify cancel_plan() persists filled_size and avg_fill_price."""
+
+    def test_cancel_no_fills_zeros(self):
+        """Cancel with no filled children → filled_size=0, avg_fill_price=0."""
+        db = _make_db()
+        ctrl = PlanController(db)
+        orders = _make_twap_orders(2)
+        plan = ctrl.create_plan(orders, "twap")
+        ctrl.cancel_plan(plan.plan_id, "no fills")
+        final = db.get_execution_plan(plan.plan_id)
+        assert final.filled_size == 0.0
+        assert final.avg_fill_price == 0.0
+        assert final.status == "cancelled"
+
+    def test_cancel_with_one_filled_child(self):
+        """Cancel with one filled child → persists that child's fill data."""
+        db = _make_db()
+        ctrl = PlanController(db)
+        orders = _make_twap_orders(3)
+        plan = ctrl.create_plan(orders, "twap")
+
+        c1 = str(uuid.uuid4())
+        db.insert_order(OrderRecord(
+            order_id=c1, market_id="mkt-1",
+            price=0.60, size=33.33,
+            status="filled", filled_size=33.33, avg_fill_price=0.58,
+            parent_plan_id=plan.plan_id, child_index=0,
+        ))
+        ctrl.activate_plan(plan.plan_id, c1)
+        ctrl.cancel_plan(plan.plan_id, "after first fill")
+
+        final = db.get_execution_plan(plan.plan_id)
+        assert final.status == "partial"
+        assert final.filled_size == pytest.approx(33.33, abs=0.01)
+        assert final.avg_fill_price == pytest.approx(0.58, abs=0.01)
+
+    def test_cancel_with_multiple_fills_weighted_avg(self):
+        """Cancel with two filled children → weighted avg fill price."""
+        db = _make_db()
+        ctrl = PlanController(db)
+        orders = _make_twap_orders(3)
+        plan = ctrl.create_plan(orders, "twap")
+
+        # First child filled at 0.55
+        c1 = str(uuid.uuid4())
+        db.insert_order(OrderRecord(
+            order_id=c1, market_id="mkt-1",
+            price=0.55, size=33.33,
+            status="filled", filled_size=33.33, avg_fill_price=0.55,
+            parent_plan_id=plan.plan_id, child_index=0,
+        ))
+        # Second child filled at 0.65
+        c2 = str(uuid.uuid4())
+        db.insert_order(OrderRecord(
+            order_id=c2, market_id="mkt-1",
+            price=0.65, size=33.33,
+            status="filled", filled_size=33.33, avg_fill_price=0.65,
+            parent_plan_id=plan.plan_id, child_index=1,
+        ))
+        ctrl.activate_plan(plan.plan_id, c2)
+        ctrl.cancel_plan(plan.plan_id, "partial cancel")
+
+        final = db.get_execution_plan(plan.plan_id)
+        assert final.status == "partial"
+        assert final.filled_size == pytest.approx(66.66, abs=0.1)
+        # Weighted avg: (33.33*0.55 + 33.33*0.65) / 66.66 = 0.60
+        assert final.avg_fill_price == pytest.approx(0.60, abs=0.01)
+
+    def test_cancel_with_partial_child_uses_filled_size(self):
+        """Cancel with a partially filled child → uses filled_size, not size."""
+        db = _make_db()
+        ctrl = PlanController(db)
+        orders = _make_twap_orders(2)
+        plan = ctrl.create_plan(orders, "twap")
+
+        c1 = str(uuid.uuid4())
+        db.insert_order(OrderRecord(
+            order_id=c1, market_id="mkt-1",
+            price=0.60, size=50.0,
+            status="partial", filled_size=20.0, avg_fill_price=0.60,
+            parent_plan_id=plan.plan_id, child_index=0,
+        ))
+        ctrl.activate_plan(plan.plan_id, c1)
+        ctrl.cancel_plan(plan.plan_id, "partial child cancel")
+
+        final = db.get_execution_plan(plan.plan_id)
+        assert final.status == "partial"
+        assert final.filled_size == pytest.approx(20.0, abs=0.1)
+
+
+class TestCancelPlanChildCancellation:
+    """Verify cancel_plan() cancels remaining submitted/pending children."""
+
+    def test_submitted_children_cancelled(self):
+        """Submitted children should be marked as cancelled on plan cancel."""
+        db = _make_db()
+        ctrl = PlanController(db)
+        orders = _make_twap_orders(3)
+        plan = ctrl.create_plan(orders, "twap")
+
+        # Insert 3 children: first filled, second submitted, third pending
+        c1 = str(uuid.uuid4())
+        c2 = str(uuid.uuid4())
+        c3 = str(uuid.uuid4())
+        db.insert_order(OrderRecord(
+            order_id=c1, market_id="mkt-1", price=0.60, size=33.33,
+            status="filled", filled_size=33.33, avg_fill_price=0.60,
+            parent_plan_id=plan.plan_id, child_index=0,
+        ))
+        db.insert_order(OrderRecord(
+            order_id=c2, market_id="mkt-1", price=0.60, size=33.33,
+            status="submitted",
+            parent_plan_id=plan.plan_id, child_index=1,
+        ))
+        db.insert_order(OrderRecord(
+            order_id=c3, market_id="mkt-1", price=0.60, size=33.33,
+            status="pending",
+            parent_plan_id=plan.plan_id, child_index=2,
+        ))
+        ctrl.activate_plan(plan.plan_id, c2)
+        ctrl.cancel_plan(plan.plan_id, "cancel all")
+
+        # Verify: submitted and pending children marked cancelled
+        child2 = db.get_order(c2)
+        child3 = db.get_order(c3)
+        assert child2.status == "cancelled"
+        assert child3.status == "cancelled"
+
+        # Filled child should remain filled
+        child1 = db.get_order(c1)
+        assert child1.status == "filled"
+
+    def test_no_children_to_cancel(self):
+        """Cancel with no submitted children should still work."""
+        db = _make_db()
+        ctrl = PlanController(db)
+        orders = _make_twap_orders(1)
+        plan = ctrl.create_plan(orders, "twap")
+
+        # Only child is already filled
+        c1 = str(uuid.uuid4())
+        db.insert_order(OrderRecord(
+            order_id=c1, market_id="mkt-1", price=0.60, size=100.0,
+            status="filled", filled_size=100.0, avg_fill_price=0.60,
+            parent_plan_id=plan.plan_id, child_index=0,
+        ))
+        ctrl.activate_plan(plan.plan_id, c1)
+        ctrl.cancel_plan(plan.plan_id, "nothing to cancel")
+
+        final = db.get_execution_plan(plan.plan_id)
+        assert final.status == "partial"  # has fills
+        child = db.get_order(c1)
+        assert child.status == "filled"  # unchanged
+
+    def test_already_cancelled_children_skipped(self):
+        """Children already in terminal state should not be double-cancelled."""
+        db = _make_db()
+        ctrl = PlanController(db)
+        orders = _make_twap_orders(2)
+        plan = ctrl.create_plan(orders, "twap")
+
+        c1 = str(uuid.uuid4())
+        c2 = str(uuid.uuid4())
+        db.insert_order(OrderRecord(
+            order_id=c1, market_id="mkt-1", price=0.60, size=50.0,
+            status="cancelled",
+            parent_plan_id=plan.plan_id, child_index=0,
+        ))
+        db.insert_order(OrderRecord(
+            order_id=c2, market_id="mkt-1", price=0.60, size=50.0,
+            status="submitted",
+            parent_plan_id=plan.plan_id, child_index=1,
+        ))
+        ctrl.activate_plan(plan.plan_id, c2)
+        ctrl.cancel_plan(plan.plan_id, "partial cancel")
+
+        # Only c2 gets cancelled, c1 stays as-is
+        assert db.get_order(c2).status == "cancelled"
+        assert db.get_order(c1).status == "cancelled"  # was already cancelled
+
+
+class TestSubmissionFailureHandling:
+    """Verify _submit_plan_children marks plan as failed on submission error."""
+
+    def test_submit_failure_marks_plan_failed(self):
+        """When child submission throws, plan should be marked failed.
+
+        We patch submit_order on the OrderRouter prototype to force failure
+        regardless of import order.
+        """
+        import asyncio
+        from unittest.mock import patch, AsyncMock
+        from src.execution.reconciliation import _submit_plan_children, OrderReconciler
+        from src.execution.order_router import OrderRouter
+
+        class FakeClob:
+            pass
+
+        db = _make_db()
+        ctrl = PlanController(db)
+        config = ExecutionConfig()
+        reconciler = OrderReconciler(
+            db=db, clob=FakeClob(), config=config,
+            plan_controller=ctrl,
+        )
+
+        orders = _make_twap_orders(2)
+        plan = ctrl.create_plan(orders, "twap")
+        ctrl.activate_plan(plan.plan_id, "first-child")
+
+        spec = _make_order_spec()
+        reconciler._pending_plan_submissions.append(
+            (spec, plan.plan_id, 1)
+        )
+
+        # Patch submit_order on the class so any new instance fails
+        with patch.object(
+            OrderRouter, "submit_order",
+            new=AsyncMock(side_effect=RuntimeError("venue connection lost")),
+        ):
+            asyncio.run(
+                _submit_plan_children(reconciler, db, FakeClob(), config, None)
+            )
+
+        final = db.get_execution_plan(plan.plan_id)
+        assert final.status == "failed"
+        assert "submission failed" in final.error
+
+    def test_submit_failure_clears_active_child(self):
+        """Failed submission should clear active_child_order_id."""
+        import asyncio
+        from unittest.mock import patch, AsyncMock
+        from src.execution.reconciliation import _submit_plan_children, OrderReconciler
+        from src.execution.order_router import OrderRouter
+
+        class FakeClob:
+            pass
+
+        db = _make_db()
+        ctrl = PlanController(db)
+        config = ExecutionConfig()
+        reconciler = OrderReconciler(
+            db=db, clob=FakeClob(), config=config,
+            plan_controller=ctrl,
+        )
+
+        orders = _make_twap_orders(2)
+        plan = ctrl.create_plan(orders, "twap")
+        ctrl.activate_plan(plan.plan_id, "prev-child")
+
+        spec = _make_order_spec()
+        reconciler._pending_plan_submissions.append(
+            (spec, plan.plan_id, 1)
+        )
+
+        with patch.object(
+            OrderRouter, "submit_order",
+            new=AsyncMock(side_effect=RuntimeError("venue error")),
+        ):
+            asyncio.run(
+                _submit_plan_children(reconciler, db, FakeClob(), config, None)
+            )
+
+        final = db.get_execution_plan(plan.plan_id)
+        assert final.active_child_order_id == ""
+
+
+class TestRecoverStuckPlans:
+    """Verify PlanController.recover_stuck_plans() detection and recovery."""
+
+    def test_stuck_plan_detected_and_recovered(self):
+        """An active plan with no child and remaining children is stuck and recoverable."""
+        db = _make_db()
+        ctrl = PlanController(db)
+        orders = _make_twap_orders(3)
+        plan = ctrl.create_plan(orders, "twap")
+
+        # Simulate: plan activated, first child filled, next_child_index advanced
+        # but active_child_order_id is empty (stuck)
+        db.update_execution_plan(
+            plan.plan_id,
+            status="active",
+            next_child_index=1,
+            active_child_order_id="",
+        )
+
+        recovered = ctrl.recover_stuck_plans()
+        assert len(recovered) == 1
+        plan_id, spec = recovered[0]
+        assert plan_id == plan.plan_id
+        assert spec.market_id == "mkt-1"
+
+        # next_child_index should be advanced
+        updated = db.get_execution_plan(plan.plan_id)
+        assert updated.next_child_index == 2
+
+    def test_non_stuck_plan_not_recovered(self):
+        """Plan with active child should NOT be recovered."""
+        db = _make_db()
+        ctrl = PlanController(db)
+        orders = _make_twap_orders(3)
+        plan = ctrl.create_plan(orders, "twap")
+
+        db.update_execution_plan(
+            plan.plan_id,
+            status="active",
+            next_child_index=1,
+            active_child_order_id="child-123",  # has active child
+        )
+
+        recovered = ctrl.recover_stuck_plans()
+        assert len(recovered) == 0
+
+    def test_all_children_submitted_not_recovered(self):
+        """Plan with all children submitted should NOT be recovered."""
+        db = _make_db()
+        ctrl = PlanController(db)
+        orders = _make_twap_orders(3)
+        plan = ctrl.create_plan(orders, "twap")
+
+        db.update_execution_plan(
+            plan.plan_id,
+            status="active",
+            next_child_index=3,  # all submitted
+            active_child_order_id="",
+        )
+
+        recovered = ctrl.recover_stuck_plans()
+        assert len(recovered) == 0
+
+    def test_terminal_plan_not_recovered(self):
+        """Terminal plans should NOT be recovered."""
+        db = _make_db()
+        ctrl = PlanController(db)
+        orders = _make_twap_orders(3)
+        plan = ctrl.create_plan(orders, "twap")
+
+        db.update_execution_plan(plan.plan_id, status="filled")
+
+        recovered = ctrl.recover_stuck_plans()
+        assert len(recovered) == 0
+
+    def test_recovery_with_bad_spec_version_fails_plan(self):
+        """Stuck plan with bad spec version should be marked failed."""
+        db = _make_db()
+        ctrl = PlanController(db)
+        orders = _make_twap_orders(3)
+        plan = ctrl.create_plan(orders, "twap")
+
+        # Tamper spec version
+        meta = json.loads(plan.metadata_json)
+        meta["spec_version"] = 999
+        db.update_execution_plan(
+            plan.plan_id,
+            status="active",
+            next_child_index=1,
+            active_child_order_id="",
+            metadata_json=json.dumps(meta),
+        )
+
+        recovered = ctrl.recover_stuck_plans()
+        assert len(recovered) == 0  # no recovery returned
+
+        # Plan should be marked failed
+        final = db.get_execution_plan(plan.plan_id)
+        assert final.status == "failed"
+        assert "spec_version" in final.error
+
+    def test_recovery_emits_warning_alert(self):
+        """Recovery should emit a warning alert about the stuck plan."""
+        db = _make_db()
+        ctrl = PlanController(db)
+        orders = _make_twap_orders(3)
+        plan = ctrl.create_plan(orders, "twap")
+
+        db.update_execution_plan(
+            plan.plan_id,
+            status="active",
+            next_child_index=1,
+            active_child_order_id="",
+        )
+
+        ctrl.recover_stuck_plans()
+
+        alerts = db._conn.execute(
+            "SELECT * FROM alerts_log WHERE message LIKE '%stuck%'"
+        ).fetchall()
+        assert len(alerts) >= 1
+        last = dict(alerts[0])
+        assert last["level"] == "warning"
+
+    def test_recovery_fresh_order_id(self):
+        """Recovered spec should have a fresh order_id."""
+        db = _make_db()
+        ctrl = PlanController(db)
+        orders = _make_twap_orders(3)
+        original_ids = {o.order_id for o in orders}
+        plan = ctrl.create_plan(orders, "twap")
+
+        db.update_execution_plan(
+            plan.plan_id,
+            status="active",
+            next_child_index=1,
+            active_child_order_id="",
+        )
+
+        recovered = ctrl.recover_stuck_plans()
+        assert len(recovered) == 1
+        _, spec = recovered[0]
+        assert spec.order_id not in original_ids
+
+    def test_recovery_serialized_children_exhausted(self):
+        """If next_child_index exceeds serialized children, mark plan failed."""
+        db = _make_db()
+        ctrl = PlanController(db)
+        orders = _make_twap_orders(2)
+        plan = ctrl.create_plan(orders, "twap")
+
+        # Manually set next_child_index beyond what's serialized
+        db.update_execution_plan(
+            plan.plan_id,
+            status="active",
+            next_child_index=5,  # beyond len(children)=2
+            total_children=6,    # looks like there are more
+            active_child_order_id="",
+        )
+
+        recovered = ctrl.recover_stuck_plans()
+        assert len(recovered) == 0
+
+        final = db.get_execution_plan(plan.plan_id)
+        assert final.status == "failed"
+        assert "exceeds serialized children" in final.error
+
+    def test_multiple_stuck_plans_all_recovered(self):
+        """Multiple stuck plans should all be recovered in one call."""
+        db = _make_db()
+        ctrl = PlanController(db)
+
+        plans = []
+        for _ in range(3):
+            orders = _make_twap_orders(3)
+            plan = ctrl.create_plan(orders, "twap")
+            db.update_execution_plan(
+                plan.plan_id,
+                status="active",
+                next_child_index=1,
+                active_child_order_id="",
+            )
+            plans.append(plan)
+
+        recovered = ctrl.recover_stuck_plans()
+        assert len(recovered) == 3
+        recovered_ids = {pid for pid, _ in recovered}
+        expected_ids = {p.plan_id for p in plans}
+        assert recovered_ids == expected_ids
