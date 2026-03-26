@@ -43,10 +43,10 @@ def _make_db() -> Database:
 
 
 class TestMigration17:
-    def test_schema_version_is_17(self):
+    def test_schema_version_is_18(self):
         db = _make_db()
         row = db._conn.execute("SELECT MAX(version) FROM schema_version").fetchone()
-        assert row[0] == 17
+        assert row[0] == 18
 
     def test_open_orders_has_canonical_columns(self):
         db = _make_db()

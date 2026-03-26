@@ -13,6 +13,7 @@ Checks:
   10. Position with empty outcome_side
   11. Active orders missing canonical fields
   12. Reconciled SELL fills that hit orphan fallback
+  13. Stale execution plan (active but no active child and remaining children)
 """
 
 from __future__ import annotations
@@ -102,6 +103,11 @@ def check_invariants(db: object) -> list[InvariantViolation]:
         violations.extend(_check_orphan_sell_fallback(db))
     except Exception as e:
         log.warning("invariant_checker.orphan_sell_fallback_error", error=str(e))
+
+    try:
+        violations.extend(_check_stale_execution_plan(db))
+    except Exception as e:
+        log.warning("invariant_checker.stale_execution_plan_error", error=str(e))
 
     return violations
 
@@ -347,6 +353,37 @@ def _check_orphan_sell_fallback(db: object) -> list[InvariantViolation]:
             severity="warning",
             market_id=r["market_id"],
             message=f"Market {r['market_id'][:8]} had a SELL fill with no matching position",
+        )
+        for r in rows
+    ]
+
+
+def _check_stale_execution_plan(db: object) -> list[InvariantViolation]:
+    """Detect active execution plans stuck with no active child order.
+
+    An active plan with no active_child_order_id and remaining children
+    indicates the next child was never submitted — the plan is stuck.
+    """
+    # Check if execution_plans table exists
+    tbl = db._conn.execute(
+        "SELECT name FROM sqlite_master WHERE type='table' AND name='execution_plans'"
+    ).fetchone()
+    if not tbl:
+        return []
+
+    rows = db._conn.execute(
+        """SELECT plan_id, market_id FROM execution_plans
+        WHERE status = 'active'
+        AND (active_child_order_id = '' OR active_child_order_id IS NULL)
+        AND next_child_index < total_children"""
+    ).fetchall()
+
+    return [
+        InvariantViolation(
+            check="stale_execution_plan",
+            severity="critical",
+            market_id=r["market_id"],
+            message=f"Plan {r['plan_id'][:8]} is active but has no active child and remaining children",
         )
         for r in rows
     ]

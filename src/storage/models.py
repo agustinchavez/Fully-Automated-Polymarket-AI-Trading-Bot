@@ -73,6 +73,36 @@ class OrderRecord(BaseModel):
     error: str = ""
     action_side: str = ""   # "BUY" or "SELL"
     outcome_side: str = ""  # "YES" or "NO"
+    parent_plan_id: str = ""  # links to execution_plans.plan_id (empty for simple orders)
+    child_index: int = 0      # 0-based index within parent plan
+    created_at: str = Field(
+        default_factory=lambda: dt.datetime.now(dt.timezone.utc).isoformat()
+    )
+    updated_at: str = Field(
+        default_factory=lambda: dt.datetime.now(dt.timezone.utc).isoformat()
+    )
+
+
+class ExecutionPlanRecord(BaseModel):
+    """Parent execution plan for multi-child strategies (TWAP, iceberg)."""
+    plan_id: str
+    market_id: str
+    token_id: str = ""
+    strategy_type: str = ""       # "twap" | "iceberg"
+    action_side: str = ""
+    outcome_side: str = ""
+    target_size: float = 0.0
+    target_stake_usd: float = 0.0
+    filled_size: float = 0.0
+    avg_fill_price: float = 0.0
+    total_children: int = 0
+    completed_children: int = 0
+    active_child_order_id: str = ""
+    next_child_index: int = 0
+    status: str = "planned"       # planned|active|partial|filled|cancelled|failed|expired
+    dry_run: bool = True
+    error: str = ""
+    metadata_json: str = "{}"
     created_at: str = Field(
         default_factory=lambda: dt.datetime.now(dt.timezone.utc).isoformat()
     )

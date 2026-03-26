@@ -747,8 +747,9 @@ class Database:
                      order_type, price, size, filled_size, avg_fill_price,
                      stake_usd, status, dry_run, ttl_secs, error,
                      action_side, outcome_side,
+                     parent_plan_id, child_index,
                      created_at, updated_at)
-                VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+                VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
                 (
                     order.order_id, order.clob_order_id, order.market_id,
                     order.token_id, order.side, order.order_type,
@@ -756,6 +757,7 @@ class Database:
                     order.avg_fill_price, order.stake_usd, order.status,
                     int(order.dry_run), order.ttl_secs, order.error,
                     order.action_side, order.outcome_side,
+                    order.parent_plan_id, order.child_index,
                     order.created_at, order.updated_at,
                 ),
             )
@@ -807,6 +809,8 @@ class Database:
                 d["dry_run"] = bool(d.get("dry_run", 1))
                 d.setdefault("action_side", "")
                 d.setdefault("outcome_side", "")
+                d.setdefault("parent_plan_id", "")
+                d.setdefault("child_index", 0)
                 result.append(OrderRecord(**d))
             return result
         except Exception as e:
@@ -824,6 +828,8 @@ class Database:
                 d["dry_run"] = bool(d.get("dry_run", 1))
                 d.setdefault("action_side", "")
                 d.setdefault("outcome_side", "")
+                d.setdefault("parent_plan_id", "")
+                d.setdefault("child_index", 0)
                 return OrderRecord(**d)
         except Exception as e:
             log.warning("database.get_order_error", error=str(e))
@@ -854,6 +860,8 @@ class Database:
                 d["dry_run"] = bool(d.get("dry_run", 1))
                 d.setdefault("action_side", "")
                 d.setdefault("outcome_side", "")
+                d.setdefault("parent_plan_id", "")
+                d.setdefault("child_index", 0)
                 result.append(OrderRecord(**d))
             return result
         except Exception as e:
@@ -863,11 +871,20 @@ class Database:
     def prune_terminal_orders(self) -> int:
         """Remove terminal orders (filled/cancelled/expired/failed) from open_orders.
 
+        Excludes children of active execution plans so the plan controller
+        can still query child status for aggregate metrics.
+
         Returns the number of orders pruned.
         """
         try:
             result = self.conn.execute(
-                "DELETE FROM open_orders WHERE status IN ('filled', 'cancelled', 'expired', 'failed')"
+                """DELETE FROM open_orders
+                WHERE status IN ('filled', 'cancelled', 'expired', 'failed')
+                AND (parent_plan_id = '' OR parent_plan_id IS NULL
+                     OR parent_plan_id NOT IN (
+                         SELECT plan_id FROM execution_plans
+                         WHERE status IN ('planned', 'active', 'partial')
+                     ))"""
             )
             count = result.rowcount
             if count > 0:
@@ -905,6 +922,8 @@ class Database:
                 d["dry_run"] = bool(d.get("dry_run", 1))
                 d.setdefault("action_side", "")
                 d.setdefault("outcome_side", "")
+                d.setdefault("parent_plan_id", "")
+                d.setdefault("child_index", 0)
                 result.append(OrderRecord(**d))
             return result
         except Exception as e:
@@ -963,6 +982,129 @@ class Database:
             return [dict(r) for r in rows]
         except Exception as e:
             log.warning("database.get_execution_fills_since_error", error=str(e))
+            return []
+
+    # ── Execution Plans (Phase 10E) ─────────────────────────────────
+
+    def insert_execution_plan(self, plan: object) -> None:
+        """Insert a new execution plan."""
+        try:
+            self.conn.execute(
+                """INSERT OR REPLACE INTO execution_plans
+                    (plan_id, market_id, token_id, strategy_type,
+                     action_side, outcome_side,
+                     target_size, target_stake_usd, filled_size, avg_fill_price,
+                     total_children, completed_children,
+                     active_child_order_id, next_child_index,
+                     status, dry_run, error, metadata_json,
+                     created_at, updated_at)
+                VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+                (
+                    plan.plan_id, plan.market_id, plan.token_id,
+                    plan.strategy_type, plan.action_side, plan.outcome_side,
+                    plan.target_size, plan.target_stake_usd,
+                    plan.filled_size, plan.avg_fill_price,
+                    plan.total_children, plan.completed_children,
+                    plan.active_child_order_id, plan.next_child_index,
+                    plan.status, int(plan.dry_run), plan.error,
+                    plan.metadata_json,
+                    plan.created_at, plan.updated_at,
+                ),
+            )
+            self.conn.commit()
+        except Exception as e:
+            log.warning("database.insert_execution_plan_error", error=str(e))
+
+    def update_execution_plan(self, plan_id: str, **fields: object) -> None:
+        """Update specific fields of an execution plan."""
+        import datetime as _dt
+        fields["updated_at"] = _dt.datetime.now(_dt.timezone.utc).isoformat()
+        if "dry_run" in fields:
+            fields["dry_run"] = int(fields["dry_run"])
+        set_clauses = ", ".join(f"{k} = ?" for k in fields)
+        values = list(fields.values()) + [plan_id]
+        try:
+            self.conn.execute(
+                f"UPDATE execution_plans SET {set_clauses} WHERE plan_id = ?",
+                values,
+            )
+            self.conn.commit()
+        except Exception as e:
+            log.warning("database.update_execution_plan_error", error=str(e))
+
+    def get_execution_plan(self, plan_id: str) -> object | None:
+        """Return a single execution plan by plan_id."""
+        try:
+            from src.storage.models import ExecutionPlanRecord
+            row = self.conn.execute(
+                "SELECT * FROM execution_plans WHERE plan_id = ?", (plan_id,)
+            ).fetchone()
+            if row:
+                d = dict(row)
+                d["dry_run"] = bool(d.get("dry_run", 1))
+                return ExecutionPlanRecord(**d)
+        except Exception as e:
+            log.warning("database.get_execution_plan_error", error=str(e))
+        return None
+
+    def get_active_execution_plans(self) -> list:
+        """Return all execution plans with non-terminal status."""
+        try:
+            from src.storage.models import ExecutionPlanRecord
+            rows = self.conn.execute(
+                """SELECT * FROM execution_plans
+                WHERE status IN ('planned', 'active', 'partial')
+                ORDER BY created_at DESC"""
+            ).fetchall()
+            result = []
+            for r in rows:
+                d = dict(r)
+                d["dry_run"] = bool(d.get("dry_run", 1))
+                result.append(ExecutionPlanRecord(**d))
+            return result
+        except Exception as e:
+            log.warning("database.get_active_plans_error", error=str(e))
+            return []
+
+    def get_plan_children(self, plan_id: str) -> list:
+        """Return all child orders belonging to a plan, ordered by child_index."""
+        try:
+            rows = self.conn.execute(
+                """SELECT * FROM open_orders
+                WHERE parent_plan_id = ?
+                ORDER BY child_index ASC""",
+                (plan_id,),
+            ).fetchall()
+            result = []
+            for r in rows:
+                d = dict(r)
+                d["dry_run"] = bool(d.get("dry_run", 1))
+                d.setdefault("action_side", "")
+                d.setdefault("outcome_side", "")
+                d.setdefault("parent_plan_id", "")
+                d.setdefault("child_index", 0)
+                result.append(OrderRecord(**d))
+            return result
+        except Exception as e:
+            log.warning("database.get_plan_children_error", error=str(e))
+            return []
+
+    def get_all_execution_plans(self, limit: int = 50) -> list:
+        """Return all execution plans, most recent first."""
+        try:
+            from src.storage.models import ExecutionPlanRecord
+            rows = self.conn.execute(
+                "SELECT * FROM execution_plans ORDER BY created_at DESC LIMIT ?",
+                (limit,),
+            ).fetchall()
+            result = []
+            for r in rows:
+                d = dict(r)
+                d["dry_run"] = bool(d.get("dry_run", 1))
+                result.append(ExecutionPlanRecord(**d))
+            return result
+        except Exception as e:
+            log.warning("database.get_all_execution_plans_error", error=str(e))
             return []
 
     # ── Maintenance ──────────────────────────────────────────────────

@@ -168,6 +168,9 @@ class TradingEngine:
         # Phase 10B: Shared exit finalizer (initialised in start())
         self._exit_finalizer: Any = None
 
+        # Phase 10E: Execution plan controller (initialised in start())
+        self._plan_controller: Any = None
+
         # Phase 6: Execution fill tracker (optional)
         self._fill_tracker: Any = None
         if self.config.execution.auto_strategy_selection_enabled:
@@ -248,6 +251,15 @@ class TradingEngine:
         if self._db:
             from src.execution.exit_finalizer import ExitFinalizer
             self._exit_finalizer = ExitFinalizer(self._db, self.config)
+
+        # Phase 10E: Create plan controller if enabled
+        if self.config.execution.plan_orchestration_enabled and self._db:
+            try:
+                from src.execution.plan_controller import PlanController
+                self._plan_controller = PlanController(self._db, self.config.execution)
+                log.info("engine.plan_controller_initialized")
+            except Exception as e:
+                log.warning("engine.plan_controller_init_error", error=str(e))
 
         # Phase 10: Wire FillTracker to DB for persistence + load history
         if self._fill_tracker and self._db:
@@ -345,6 +357,7 @@ class TradingEngine:
                         fill_tracker=self._fill_tracker,
                         on_buy_fill=lambda token_id: self._ws_feed.subscribe(token_id),
                         exit_finalizer=self._exit_finalizer,
+                        plan_controller=self._plan_controller,
                     )
                 )
                 log.info("engine.reconciliation_loop_started")
@@ -1735,30 +1748,87 @@ class TradingEngine:
         ctx._order_statuses = []  # list[str]
         ctx._token_id = token_id
         try:
-            for order in orders:
-                order_result = await router.submit_order(order)
-                ctx._order_statuses.append(order_result.status)
-                log.info(
-                    "engine.order_result", market_id=ctx.market_id,
-                    order_id=order_result.order_id[:8],
-                    status=order_result.status,
-                    fill_price=order_result.fill_price,
-                    fill_size=order_result.fill_size,
-                    clob_order_id=order_result.clob_order_id[:8] if order_result.clob_order_id else "",
+            # Phase 10E: Plan orchestration — sequential child submission
+            if self._plan_controller and len(orders) > 1:
+                await self._submit_with_plan(
+                    ctx, orders, router, edge_result, position, token_id,
+                    execution_strategy,
                 )
-                if self._db:
-                    from src.storage.models import TradeRecord, PositionRecord, OrderRecord
-                    self._record_order_result(
-                        ctx, order, order_result, edge_result, position, token_id,
+            else:
+                # Simple path: submit all orders immediately
+                for order in orders:
+                    order_result = await router.submit_order(order)
+                    ctx._order_statuses.append(order_result.status)
+                    log.info(
+                        "engine.order_result", market_id=ctx.market_id,
+                        order_id=order_result.order_id[:8],
+                        status=order_result.status,
+                        fill_price=order_result.fill_price,
+                        fill_size=order_result.fill_size,
+                        clob_order_id=order_result.clob_order_id[:8] if order_result.clob_order_id else "",
                     )
-                if order_result.status in ("simulated", "filled"):
-                    ctx.result["trade_executed"] = True
-                    self._ws_feed.subscribe(token_id)
-                elif order_result.status in ("submitted", "pending"):
-                    # Order is on the book — position will be created on fill confirmation
-                    ctx.result["trade_attempted"] = True
+                    if self._db:
+                        from src.storage.models import TradeRecord, PositionRecord, OrderRecord
+                        self._record_order_result(
+                            ctx, order, order_result, edge_result, position, token_id,
+                        )
+                    if order_result.status in ("simulated", "filled"):
+                        ctx.result["trade_executed"] = True
+                        self._ws_feed.subscribe(token_id)
+                    elif order_result.status in ("submitted", "pending"):
+                        # Order is on the book — position will be created on fill confirmation
+                        ctx.result["trade_attempted"] = True
         finally:
             await clob.close()
+
+    async def _submit_with_plan(
+        self,
+        ctx: PipelineContext,
+        orders: list,
+        router: Any,
+        edge_result: Any,
+        position: Any,
+        token_id: str,
+        execution_strategy: str,
+    ) -> None:
+        """Create an execution plan and submit only the first child order.
+
+        Remaining children are submitted sequentially by the reconciliation
+        loop as each child fills.
+        """
+        plan = self._plan_controller.create_plan(
+            orders, execution_strategy,
+        )
+
+        first_spec = self._plan_controller.get_first_child_spec(plan)
+        order_result = await router.submit_order(first_spec)
+        ctx._order_statuses.append(order_result.status)
+
+        log.info(
+            "engine.plan_first_child",
+            plan_id=plan.plan_id[:8],
+            order_id=order_result.order_id[:8],
+            status=order_result.status,
+            strategy=execution_strategy,
+            total_children=plan.total_children,
+        )
+
+        if self._db:
+            self._record_order_result(
+                ctx, first_spec, order_result, edge_result, position, token_id,
+                parent_plan_id=plan.plan_id, child_index=0,
+            )
+
+        if order_result.status in ("simulated", "filled"):
+            ctx.result["trade_executed"] = True
+            self._ws_feed.subscribe(token_id)
+        elif order_result.status in ("submitted", "pending"):
+            ctx.result["trade_attempted"] = True
+
+        # Activate plan so reconciliation knows to advance children
+        self._plan_controller.activate_plan(
+            plan.plan_id, order_result.order_id,
+        )
 
     def _record_order_result(
         self,
@@ -1768,6 +1838,8 @@ class TradingEngine:
         edge_result: Any,
         position: Any,
         token_id: str,
+        parent_plan_id: str = "",
+        child_index: int = 0,
     ) -> None:
         """Record order result to DB based on fill status.
 
@@ -1829,6 +1901,8 @@ class TradingEngine:
                 ttl_secs=getattr(order, "ttl_secs", 0),
                 action_side=action_side,
                 outcome_side=outcome_side,
+                parent_plan_id=parent_plan_id,
+                child_index=child_index,
             ))
             log.info(
                 "engine.order_awaiting_fill",

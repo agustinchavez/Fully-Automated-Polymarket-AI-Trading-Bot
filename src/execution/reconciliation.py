@@ -48,6 +48,7 @@ class OrderReconciler:
         fill_tracker: object | None = None,
         on_buy_fill: Callable[[str], None] | None = None,
         exit_finalizer: object | None = None,
+        plan_controller: object | None = None,
     ):
         self._db = db
         self._clob = clob
@@ -55,6 +56,8 @@ class OrderReconciler:
         self._fill_tracker = fill_tracker
         self._on_buy_fill = on_buy_fill  # callback(token_id) for WS subscription
         self._exit_finalizer = exit_finalizer
+        self._plan_controller = plan_controller
+        self._pending_plan_submissions: list = []  # queued next-child OrderSpecs
 
     def reconcile_once(self) -> ReconciliationResult:
         """Run a single reconciliation pass over all open orders.
@@ -143,11 +146,13 @@ class OrderReconciler:
             result.cancelled += 1
             self._notify_unfilled(order.order_id)
             log.info("reconciler.order_cancelled_by_exchange", order_id=order.order_id[:8])
+            self._notify_plan_controller(order, override_status="cancelled")
         elif clob_status == "expired":
             self._db.update_order_status(order.order_id, "expired")
             result.cancelled += 1
             self._notify_unfilled(order.order_id)
             log.info("reconciler.order_expired", order_id=order.order_id[:8])
+            self._notify_plan_controller(order, override_status="expired")
 
     def _get_order_direction(self, order: object) -> tuple[str, str]:
         """Extract canonical (action_side, outcome_side) from an order."""
@@ -233,6 +238,9 @@ class OrderReconciler:
             fill_price=fill_price,
             fill_size=fill_size,
         )
+
+        # Phase 10E: Notify plan controller and queue next child
+        self._notify_plan_controller(order)
 
     def _handle_sell_fill(self, order: object, fill_price: float, fill_size: float) -> None:
         """Handle a SELL fill using the actual open position for accurate PnL."""
@@ -376,6 +384,7 @@ class OrderReconciler:
             self._db.update_order_status(order.order_id, "cancelled")
             result.stale_cancelled += 1
             self._notify_unfilled(order.order_id)
+            self._notify_plan_controller(order, override_status="cancelled")
             log.info(
                 "reconciler.stale_cancelled",
                 order_id=order.order_id[:8],
@@ -407,6 +416,41 @@ class OrderReconciler:
         if self._fill_tracker and hasattr(self._fill_tracker, "record_unfilled"):
             self._fill_tracker.record_unfilled(order_id)
 
+    def _notify_plan_controller(
+        self, order: object, override_status: str = "",
+    ) -> None:
+        """Notify the plan controller of a child order status change.
+
+        If the controller returns a next child spec, queue it for async
+        submission in the reconciliation loop.
+        """
+        if not self._plan_controller:
+            return
+        parent_id = getattr(order, "parent_plan_id", "")
+        if not parent_id:
+            return
+
+        try:
+            # Build a lightweight OrderRecord-like for the controller
+            from src.storage.models import OrderRecord
+            child = self._db.get_order(order.order_id)
+            if not child:
+                return
+            if override_status:
+                child = OrderRecord(**{**child.__dict__, "status": override_status})
+
+            next_spec = self._plan_controller.update_plan_from_child(child)
+            if next_spec:
+                self._pending_plan_submissions.append(
+                    (next_spec, parent_id, child.child_index + 1)
+                )
+        except Exception as e:
+            log.warning(
+                "reconciler.plan_notify_error",
+                order_id=order.order_id[:8] if hasattr(order, "order_id") else "",
+                error=str(e),
+            )
+
     def _prune_terminal_orders(self) -> int:
         """Remove terminal orders (filled/cancelled/expired/failed) from open_orders.
 
@@ -430,6 +474,7 @@ async def run_reconciliation_loop(
     fill_tracker: object | None = None,
     on_buy_fill: Callable[[str], None] | None = None,
     exit_finalizer: object | None = None,
+    plan_controller: object | None = None,
 ) -> None:
     """Background loop that periodically reconciles open orders.
 
@@ -439,6 +484,7 @@ async def run_reconciliation_loop(
     reconciler = OrderReconciler(
         db, clob, config, fill_tracker, on_buy_fill,
         exit_finalizer=exit_finalizer,
+        plan_controller=plan_controller,
     )
     interval = config.reconciliation_interval_secs
 
@@ -450,6 +496,12 @@ async def run_reconciliation_loop(
         except Exception as e:
             log.error("reconciler.loop_error", error=str(e))
 
+        # Phase 10E: Submit queued plan children (async context)
+        if reconciler._pending_plan_submissions:
+            await _submit_plan_children(
+                reconciler, db, clob, config, on_buy_fill,
+            )
+
         try:
             await asyncio.wait_for(stop_event.wait(), timeout=interval)
             break  # stop_event was set
@@ -457,3 +509,72 @@ async def run_reconciliation_loop(
             pass  # timeout expired — run another pass
 
     log.info("reconciler.loop_stopped")
+
+
+async def _submit_plan_children(
+    reconciler: OrderReconciler,
+    db: object,
+    clob: object,
+    config: ExecutionConfig,
+    on_buy_fill: Callable[[str], None] | None = None,
+) -> None:
+    """Submit queued plan children from the async reconciliation context."""
+    from src.execution.order_router import OrderRouter
+    from src.storage.models import OrderRecord
+
+    pending = list(reconciler._pending_plan_submissions)
+    reconciler._pending_plan_submissions.clear()
+
+    router = OrderRouter(clob, config)
+
+    for spec, plan_id, child_idx in pending:
+        try:
+            result = await router.submit_order(spec)
+
+            # Record child order in DB
+            db.insert_order(OrderRecord(
+                order_id=result.order_id,
+                clob_order_id=result.clob_order_id,
+                market_id=spec.market_id,
+                token_id=spec.token_id,
+                side=spec.side,
+                order_type=spec.order_type,
+                price=spec.price,
+                size=spec.size,
+                stake_usd=spec.stake_usd,
+                status=result.status,
+                dry_run=spec.dry_run,
+                ttl_secs=spec.ttl_secs,
+                action_side=spec.action_side,
+                outcome_side=spec.outcome_side,
+                parent_plan_id=plan_id,
+                child_index=child_idx,
+            ))
+
+            # Update plan's active child
+            if reconciler._plan_controller:
+                db.update_execution_plan(
+                    plan_id,
+                    active_child_order_id=result.order_id,
+                )
+
+            if on_buy_fill and result.status in ("filled", "simulated") and spec.token_id:
+                try:
+                    on_buy_fill(spec.token_id)
+                except Exception:
+                    pass
+
+            log.info(
+                "reconciler.plan_child_submitted",
+                plan_id=plan_id[:8],
+                child_index=child_idx,
+                order_id=result.order_id[:8],
+                status=result.status,
+            )
+        except Exception as e:
+            log.warning(
+                "reconciler.plan_child_submit_error",
+                plan_id=plan_id[:8],
+                child_index=child_idx,
+                error=str(e),
+            )

@@ -238,6 +238,36 @@ class TestMarketOrderPrice:
 
 
 class TestCLOBResponseParsing:
+    def test_matched_valid_taking_amount_happy_path(self):
+        """Normal matched order with valid takingAmount derives correct fill."""
+        order = _make_order_spec(price=0.50, size=100.0)
+        # takingAmount=25.0 at price=0.50 → fill_size = 50 tokens
+        resp = {
+            "orderID": "clob-hp",
+            "status": "matched",
+            "takingAmount": "25.0",
+            "success": True,
+        }
+        result = _parse_clob_response(resp, order, "2025-01-01T00:00:00Z")
+        assert result.status == "filled"
+        assert result.fill_size == pytest.approx(50.0, abs=0.01)
+        assert result.fill_price == 0.50
+
+    def test_partial_fill_taking_amount(self):
+        """takingAmount smaller than full order → partial fill preserved."""
+        order = _make_order_spec(price=0.40, size=200.0)
+        # takingAmount=20.0 at price=0.40 → fill_size = 50 tokens (partial)
+        resp = {
+            "orderID": "clob-pf",
+            "status": "matched",
+            "takingAmount": "20.0",
+            "success": True,
+        }
+        result = _parse_clob_response(resp, order, "2025-01-01T00:00:00Z")
+        assert result.status == "filled"
+        assert result.fill_size == pytest.approx(50.0, abs=0.01)
+        assert result.fill_size < order.size  # partial, not full
+
     def test_fill_size_capped_at_order_size(self):
         """fill_size derived from takingAmount should not exceed order.size."""
         order = _make_order_spec(price=0.50, size=100.0)

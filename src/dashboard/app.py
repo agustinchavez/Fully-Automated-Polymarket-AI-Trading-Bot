@@ -3307,6 +3307,98 @@ def _compute_slippage_distribution(
     return [{"label": b["label"], "count": b["count"]} for b in buckets]
 
 
+# ─── API: Execution Plans (Phase 10E) ────────────────────────────
+
+@app.route("/api/execution-plans")
+def api_execution_plans() -> Any:
+    """Return all execution plans with children and completion stats."""
+    conn = _get_conn()
+    try:
+        tbl = conn.execute(
+            "SELECT name FROM sqlite_master WHERE type='table' AND name='execution_plans'"
+        ).fetchone()
+        if not tbl:
+            return jsonify({"plans": [], "total": 0})
+
+        limit = request.args.get("limit", 50, type=int)
+        rows = conn.execute(
+            "SELECT * FROM execution_plans ORDER BY created_at DESC LIMIT ?",
+            (limit,),
+        ).fetchall()
+        plans = []
+        for r in rows:
+            d = dict(r)
+            d["dry_run"] = bool(d.get("dry_run", 1))
+            completion_pct = (
+                d.get("completed_children", 0) / d.get("total_children", 1) * 100
+                if d.get("total_children", 0) > 0
+                else 0.0
+            )
+            fill_pct = (
+                d.get("filled_size", 0) / d.get("target_size", 1) * 100
+                if d.get("target_size", 0) > 0
+                else 0.0
+            )
+            d["completion_pct"] = round(completion_pct, 1)
+            d["fill_pct"] = round(fill_pct, 1)
+
+            # Attach children
+            children = conn.execute(
+                """SELECT order_id, child_index, status, price, size,
+                          filled_size, avg_fill_price
+                   FROM open_orders WHERE parent_plan_id = ?
+                   ORDER BY child_index ASC""",
+                (d["plan_id"],),
+            ).fetchall()
+            d["children"] = [dict(c) for c in children]
+            plans.append(d)
+
+        return jsonify({"plans": plans, "total": len(plans)})
+    except Exception as e:
+        return jsonify({"plans": [], "total": 0, "error": str(e)})
+
+
+@app.route("/api/execution-plans/active")
+def api_execution_plans_active() -> Any:
+    """Return non-terminal execution plans only."""
+    conn = _get_conn()
+    try:
+        tbl = conn.execute(
+            "SELECT name FROM sqlite_master WHERE type='table' AND name='execution_plans'"
+        ).fetchone()
+        if not tbl:
+            return jsonify({"plans": [], "total": 0})
+
+        rows = conn.execute(
+            """SELECT * FROM execution_plans
+               WHERE status IN ('planned', 'active', 'partial')
+               ORDER BY created_at DESC"""
+        ).fetchall()
+        plans = []
+        for r in rows:
+            d = dict(r)
+            d["dry_run"] = bool(d.get("dry_run", 1))
+            completion_pct = (
+                d.get("completed_children", 0) / d.get("total_children", 1) * 100
+                if d.get("total_children", 0) > 0
+                else 0.0
+            )
+            d["completion_pct"] = round(completion_pct, 1)
+            children = conn.execute(
+                """SELECT order_id, child_index, status, price, size,
+                          filled_size, avg_fill_price
+                   FROM open_orders WHERE parent_plan_id = ?
+                   ORDER BY child_index ASC""",
+                (d["plan_id"],),
+            ).fetchall()
+            d["children"] = [dict(c) for c in children]
+            plans.append(d)
+
+        return jsonify({"plans": plans, "total": len(plans)})
+    except Exception as e:
+        return jsonify({"plans": [], "total": 0, "error": str(e)})
+
+
 # ─── API: Continuous Learning (Phase 8) ──────────────────────────
 
 @app.route("/api/post-mortem/recent")

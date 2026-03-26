@@ -331,6 +331,8 @@ class ExecutionConfig(BaseModel):
     # Phase 10B: Invariant checks
     invariant_checks_enabled: bool = False
     invariant_check_interval_cycles: int = 10
+    # Phase 10E: Execution plan orchestration
+    plan_orchestration_enabled: bool = False
 
 
 class StorageConfig(BaseModel):

@@ -8,7 +8,7 @@ from src.observability.logger import get_logger
 
 log = get_logger(__name__)
 
-SCHEMA_VERSION = 17
+SCHEMA_VERSION = 18
 
 _MIGRATIONS: dict[int, list[str]] = {
     1: [
@@ -1139,6 +1139,38 @@ _MIGRATIONS: dict[int, list[str]] = {
         "ALTER TABLE positions ADD COLUMN outcome_side TEXT DEFAULT '';",
         "ALTER TABLE closed_positions ADD COLUMN action_side TEXT DEFAULT '';",
         "ALTER TABLE closed_positions ADD COLUMN outcome_side TEXT DEFAULT '';",
+    ],
+    # ── Migration 18: Execution plan orchestration (Phase 10E) ─────
+    18: [
+        """
+        CREATE TABLE IF NOT EXISTS execution_plans (
+            plan_id TEXT PRIMARY KEY,
+            market_id TEXT NOT NULL,
+            token_id TEXT DEFAULT '',
+            strategy_type TEXT DEFAULT '',
+            action_side TEXT DEFAULT '',
+            outcome_side TEXT DEFAULT '',
+            target_size REAL DEFAULT 0,
+            target_stake_usd REAL DEFAULT 0,
+            filled_size REAL DEFAULT 0,
+            avg_fill_price REAL DEFAULT 0,
+            total_children INTEGER DEFAULT 0,
+            completed_children INTEGER DEFAULT 0,
+            active_child_order_id TEXT DEFAULT '',
+            next_child_index INTEGER DEFAULT 0,
+            status TEXT DEFAULT 'planned',
+            dry_run INTEGER DEFAULT 1,
+            error TEXT DEFAULT '',
+            metadata_json TEXT DEFAULT '{}',
+            created_at TEXT,
+            updated_at TEXT
+        );
+        """,
+        "CREATE INDEX IF NOT EXISTS idx_exec_plans_status ON execution_plans(status);",
+        "CREATE INDEX IF NOT EXISTS idx_exec_plans_market ON execution_plans(market_id);",
+        "ALTER TABLE open_orders ADD COLUMN parent_plan_id TEXT DEFAULT '';",
+        "ALTER TABLE open_orders ADD COLUMN child_index INTEGER DEFAULT 0;",
+        "CREATE INDEX IF NOT EXISTS idx_open_orders_parent_plan ON open_orders(parent_plan_id);",
     ],
 }
 
