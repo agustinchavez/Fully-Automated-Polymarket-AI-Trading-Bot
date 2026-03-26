@@ -26,6 +26,11 @@ log = get_logger(__name__)
 
 # Incremented when the serialized OrderSpec schema changes.
 SPEC_VERSION = 1
+_SUPPORTED_SPEC_VERSIONS = {1}
+
+
+class UnsupportedSpecVersion(Exception):
+    """Raised when plan metadata has an unrecognized spec_version."""
 
 
 def _serialize_order_spec(spec: OrderSpec) -> dict[str, Any]:
@@ -70,6 +75,20 @@ def _deserialize_order_spec(d: dict[str, Any]) -> OrderSpec:
         child_index=d.get("child_index", 0),
         total_children=d.get("total_children", 1),
     )
+
+
+def _validate_spec_version(meta: dict[str, Any], plan_id: str = "") -> None:
+    """Raise UnsupportedSpecVersion if the metadata version is unrecognized.
+
+    Plans serialized without a spec_version (legacy, pre-versioning) are
+    treated as version 1.
+    """
+    version = meta.get("spec_version", 1)
+    if version not in _SUPPORTED_SPEC_VERSIONS:
+        raise UnsupportedSpecVersion(
+            f"Plan {plan_id[:8] if plan_id else '?'} has spec_version={version}, "
+            f"supported={_SUPPORTED_SPEC_VERSIONS}"
+        )
 
 
 class PlanController:
@@ -162,8 +181,8 @@ class PlanController:
         )
         self._alert(
             "info",
-            f"Execution plan created: {strategy_type} with {len(orders)} children",
-            f"plan={plan_id[:8]} market={first.market_id[:8]}",
+            f"Execution plan created: {strategy_type} with {len(orders)} children "
+            f"(plan={plan_id[:8]} market={first.market_id[:8]})",
         )
         return plan
 
@@ -171,8 +190,10 @@ class PlanController:
         """Return the first child OrderSpec from the plan's metadata.
 
         Assigns a fresh order_id so the child can be submitted.
+        Raises UnsupportedSpecVersion if metadata version is unrecognized.
         """
         meta = json.loads(plan.metadata_json)
+        _validate_spec_version(meta, plan.plan_id)
         children = meta.get("children", [])
         if not children:
             raise ValueError(f"Plan {plan.plan_id} has no serialized children")
@@ -271,14 +292,29 @@ class PlanController:
             )
             self._alert(
                 "info",
-                f"Execution plan {final_status}: {plan.plan_id[:8]}",
-                f"filled={round(total_filled, 2)} fill_ratio={round(fill_ratio, 3)}",
+                f"Execution plan {final_status}: {plan.plan_id[:8]} "
+                f"(filled={round(total_filled, 2)} fill_ratio={round(fill_ratio, 3)})",
             )
             return None
 
         # More children to submit — get the next one
         next_idx = plan.next_child_index
         meta = json.loads(plan.metadata_json)
+        try:
+            _validate_spec_version(meta, plan.plan_id)
+        except UnsupportedSpecVersion as e:
+            self._db.update_execution_plan(
+                plan.plan_id,
+                status="failed",
+                filled_size=round(total_filled, 6),
+                avg_fill_price=round(avg_price, 6),
+                completed_children=terminal,
+                active_child_order_id="",
+                error=str(e),
+            )
+            self._alert("warning", f"Plan {plan.plan_id[:8]} failed: {e}")
+            log.warning("plan_controller.unsupported_spec_version", plan_id=plan.plan_id[:8], error=str(e))
+            return None
         serialized = meta.get("children", [])
 
         if next_idx >= len(serialized):
@@ -347,6 +383,20 @@ class PlanController:
             avg_fill_price=round(avg_price, 6),
         )
 
+        fill_pct = total_filled / plan.target_size * 100 if plan.target_size > 0 else 0.0
+        log.debug(
+            "plan_controller.child_partial",
+            plan_id=plan.plan_id[:8],
+            order_id=order.order_id[:8],
+            total_filled=round(total_filled, 4),
+            fill_pct=round(fill_pct, 1),
+        )
+        self._alert(
+            "info",
+            f"Plan {plan.plan_id[:8]} partial fill progress: "
+            f"{round(fill_pct, 1)}% of target ({round(total_filled, 2)}/{round(plan.target_size, 2)})",
+        )
+
     def _handle_child_terminal(
         self, plan: ExecutionPlanRecord, order: OrderRecord
     ) -> OrderSpec | None:
@@ -386,14 +436,29 @@ class PlanController:
             )
             self._alert(
                 "warning" if total_filled == 0 else "info",
-                f"Execution plan {final_status}: {plan.plan_id[:8]}",
-                f"reason={order.status} filled={round(total_filled, 2)}",
+                f"Execution plan {final_status}: {plan.plan_id[:8]} "
+                f"(reason={order.status} filled={round(total_filled, 2)})",
             )
             return None
 
         # More children remain — continue submitting
         next_idx = plan.next_child_index
         meta = json.loads(plan.metadata_json)
+        try:
+            _validate_spec_version(meta, plan.plan_id)
+        except UnsupportedSpecVersion as e:
+            self._db.update_execution_plan(
+                plan.plan_id,
+                status="failed",
+                filled_size=round(total_filled, 6),
+                avg_fill_price=round(avg_price, 6),
+                completed_children=terminal,
+                active_child_order_id="",
+                error=str(e),
+            )
+            self._alert("warning", f"Plan {plan.plan_id[:8]} failed: {e}")
+            log.warning("plan_controller.unsupported_spec_version", plan_id=plan.plan_id[:8], error=str(e))
+            return None
         serialized = meta.get("children", [])
 
         if next_idx >= len(serialized):
@@ -466,8 +531,8 @@ class PlanController:
         )
         self._alert(
             "warning",
-            f"Execution plan cancelled: {plan_id[:8]}",
-            f"reason={reason or 'cancelled'} filled={round(total_filled, 2)}",
+            f"Execution plan cancelled: {plan_id[:8]} "
+            f"(reason={reason or 'cancelled'} filled={round(total_filled, 2)})",
         )
         return active_child
 

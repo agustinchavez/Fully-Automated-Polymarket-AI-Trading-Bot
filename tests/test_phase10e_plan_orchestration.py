@@ -21,8 +21,10 @@ from src.execution.order_builder import OrderSpec
 from src.execution.plan_controller import (
     PlanController,
     SPEC_VERSION,
+    UnsupportedSpecVersion,
     _serialize_order_spec,
     _deserialize_order_spec,
+    _validate_spec_version,
 )
 from src.observability.invariant_checker import check_invariants
 from src.storage.database import Database
@@ -939,3 +941,234 @@ class TestDashboardPlanEndpoints:
         active = db.get_active_execution_plans()
         assert len(active) == 1
         assert active[0].plan_id == "act-1"
+
+
+# ═══════════════════════════════════════════════════════════════
+# HARDENING ROUND 2: spec-version validation, alert cleanup,
+#   cancel caller, partial-child alerts
+# ═══════════════════════════════════════════════════════════════
+
+
+class TestSpecVersionValidation:
+    """Verify spec_version is validated on read/reconstruction."""
+
+    def test_validate_supported_version(self):
+        """Version 1 should pass without error."""
+        _validate_spec_version({"spec_version": 1}, "test-plan")
+
+    def test_validate_missing_version_defaults_to_1(self):
+        """Legacy plans without spec_version are treated as version 1."""
+        _validate_spec_version({}, "test-plan")  # no error
+
+    def test_validate_unsupported_version_raises(self):
+        """Future versions should be rejected explicitly."""
+        with pytest.raises(UnsupportedSpecVersion, match="spec_version=99"):
+            _validate_spec_version({"spec_version": 99}, "test-plan")
+
+    def test_get_first_child_rejects_bad_version(self):
+        """get_first_child_spec should fail on unsupported version."""
+        db = _make_db()
+        ctrl = PlanController(db)
+        orders = _make_twap_orders(2)
+        plan = ctrl.create_plan(orders, "twap")
+
+        # Tamper metadata to unsupported version
+        meta = json.loads(plan.metadata_json)
+        meta["spec_version"] = 999
+        db.update_execution_plan(plan.plan_id, metadata_json=json.dumps(meta))
+        plan = db.get_execution_plan(plan.plan_id)
+
+        with pytest.raises(UnsupportedSpecVersion):
+            ctrl.get_first_child_spec(plan)
+
+    def test_child_filled_rejects_bad_version(self):
+        """_handle_child_filled should fail the plan on unsupported version."""
+        db = _make_db()
+        ctrl = PlanController(db)
+        orders = _make_twap_orders(3)
+        plan = ctrl.create_plan(orders, "twap")
+
+        # Submit + fill first child
+        first_id = str(uuid.uuid4())
+        db.insert_order(OrderRecord(
+            order_id=first_id, market_id="mkt-1",
+            price=0.60, size=33.33,
+            status="filled", filled_size=33.33, avg_fill_price=0.60,
+            parent_plan_id=plan.plan_id, child_index=0,
+        ))
+        ctrl.activate_plan(plan.plan_id, first_id)
+
+        # Tamper version before the controller tries to read next child
+        meta = json.loads(plan.metadata_json)
+        meta["spec_version"] = 999
+        db.update_execution_plan(plan.plan_id, metadata_json=json.dumps(meta))
+
+        child = db.get_order(first_id)
+        result = ctrl.update_plan_from_child(child)
+        assert result is None  # no next spec returned
+
+        # Plan should be marked failed
+        updated = db.get_execution_plan(plan.plan_id)
+        assert updated.status == "failed"
+        assert "spec_version=999" in updated.error
+
+    def test_child_terminal_rejects_bad_version(self):
+        """_handle_child_terminal should fail the plan on unsupported version."""
+        db = _make_db()
+        ctrl = PlanController(db)
+        orders = _make_twap_orders(3)
+        plan = ctrl.create_plan(orders, "twap")
+
+        # Submit + cancel first child
+        first_id = str(uuid.uuid4())
+        db.insert_order(OrderRecord(
+            order_id=first_id, market_id="mkt-1",
+            price=0.60, size=33.33,
+            status="cancelled",
+            parent_plan_id=plan.plan_id, child_index=0,
+        ))
+        ctrl.activate_plan(plan.plan_id, first_id)
+
+        # Tamper version
+        meta = json.loads(plan.metadata_json)
+        meta["spec_version"] = 999
+        db.update_execution_plan(plan.plan_id, metadata_json=json.dumps(meta))
+
+        child = db.get_order(first_id)
+        result = ctrl.update_plan_from_child(child)
+        assert result is None
+
+        updated = db.get_execution_plan(plan.plan_id)
+        assert updated.status == "failed"
+        assert "spec_version=999" in updated.error
+
+
+class TestAlertChannelCleanup:
+    """Verify all alerts use stable 'plan_controller' channel."""
+
+    def test_create_alert_uses_stable_channel(self):
+        db = _make_db()
+        ctrl = PlanController(db)
+        orders = _make_twap_orders(2)
+        ctrl.create_plan(orders, "twap")
+        alerts = db._conn.execute(
+            "SELECT * FROM alerts_log ORDER BY id DESC LIMIT 1"
+        ).fetchall()
+        assert len(alerts) >= 1
+        last = dict(alerts[0])
+        assert last["channel"] == "plan_controller"
+
+    def test_cancel_alert_uses_stable_channel(self):
+        db = _make_db()
+        ctrl = PlanController(db)
+        orders = _make_twap_orders(2)
+        plan = ctrl.create_plan(orders, "twap")
+        ctrl.cancel_plan(plan.plan_id, "test")
+        alerts = db._conn.execute(
+            "SELECT * FROM alerts_log WHERE message LIKE '%cancelled%'"
+        ).fetchall()
+        assert len(alerts) >= 1
+        last = dict(alerts[0])
+        assert last["channel"] == "plan_controller"
+
+    def test_completion_alert_uses_stable_channel(self):
+        db = _make_db()
+        ctrl = PlanController(db)
+        orders = _make_twap_orders(1)
+        plan = ctrl.create_plan(orders, "twap")
+
+        child_id = str(uuid.uuid4())
+        db.insert_order(OrderRecord(
+            order_id=child_id, market_id="mkt-1",
+            price=0.60, size=100.0,
+            status="filled", filled_size=100.0, avg_fill_price=0.60,
+            parent_plan_id=plan.plan_id, child_index=0,
+        ))
+        ctrl.activate_plan(plan.plan_id, child_id)
+        ctrl.update_plan_from_child(db.get_order(child_id))
+
+        alerts = db._conn.execute(
+            "SELECT * FROM alerts_log WHERE message LIKE '%filled%' ORDER BY id DESC LIMIT 1"
+        ).fetchall()
+        assert len(alerts) >= 1
+        assert dict(alerts[0])["channel"] == "plan_controller"
+
+    def test_alert_message_contains_details(self):
+        """Details should be in message, not in channel."""
+        db = _make_db()
+        ctrl = PlanController(db)
+        orders = _make_twap_orders(2)
+        plan = ctrl.create_plan(orders, "twap")
+        alerts = db._conn.execute(
+            "SELECT * FROM alerts_log ORDER BY id DESC LIMIT 1"
+        ).fetchall()
+        last = dict(alerts[0])
+        # Details like plan_id and market_id should be in the message
+        assert "plan=" in last["message"] or "mkt-" in last["message"]
+
+
+class TestCancelPlanEndToEnd:
+    """Verify cancel_plan caller behavior and child handling."""
+
+    def test_cancel_returns_active_child_id(self):
+        db = _make_db()
+        ctrl = PlanController(db)
+        orders = _make_twap_orders(2)
+        plan = ctrl.create_plan(orders, "twap")
+        ctrl.activate_plan(plan.plan_id, "child-abc")
+        result = ctrl.cancel_plan(plan.plan_id, "testing")
+        assert result == "child-abc"
+
+    def test_cancel_no_active_child_returns_empty(self):
+        db = _make_db()
+        ctrl = PlanController(db)
+        orders = _make_twap_orders(2)
+        plan = ctrl.create_plan(orders, "twap")
+        # Plan is in "planned" state, no active child
+        result = ctrl.cancel_plan(plan.plan_id, "testing")
+        assert result == ""
+
+    def test_cancel_already_terminal_returns_empty(self):
+        db = _make_db()
+        ctrl = PlanController(db)
+        orders = _make_twap_orders(2)
+        plan = ctrl.create_plan(orders, "twap")
+        db.update_execution_plan(plan.plan_id, status="filled")
+        result = ctrl.cancel_plan(plan.plan_id, "testing")
+        assert result == ""
+
+    def test_cancel_nonexistent_returns_empty(self):
+        db = _make_db()
+        ctrl = PlanController(db)
+        result = ctrl.cancel_plan("no-such-plan", "testing")
+        assert result == ""
+
+
+class TestPartialChildAlert:
+    """Verify partial fill progress alerts are emitted."""
+
+    def test_partial_fill_emits_alert(self):
+        db = _make_db()
+        ctrl = PlanController(db)
+        orders = _make_twap_orders(2)
+        plan = ctrl.create_plan(orders, "twap")
+
+        child_id = str(uuid.uuid4())
+        db.insert_order(OrderRecord(
+            order_id=child_id, market_id="mkt-1",
+            price=0.60, size=50.0,
+            status="partial", filled_size=25.0, avg_fill_price=0.60,
+            parent_plan_id=plan.plan_id, child_index=0,
+        ))
+        ctrl.activate_plan(plan.plan_id, child_id)
+
+        child = db.get_order(child_id)
+        ctrl.update_plan_from_child(child)
+
+        alerts = db._conn.execute(
+            "SELECT * FROM alerts_log WHERE message LIKE '%partial fill%'"
+        ).fetchall()
+        assert len(alerts) >= 1
+        last = dict(alerts[0])
+        assert "%" in last["message"]  # contains percentage
+        assert last["channel"] == "plan_controller"

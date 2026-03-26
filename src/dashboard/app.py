@@ -3401,6 +3401,65 @@ def api_execution_plans_active() -> Any:
         return jsonify({"plans": [], "total": 0, "error": str(e)})
 
 
+@app.route("/api/execution-plans/<plan_id>/cancel", methods=["POST"])
+def api_cancel_execution_plan(plan_id: str) -> Any:
+    """Cancel an active execution plan and its active child order.
+
+    Expects optional JSON body: {"reason": "user cancellation"}
+    Returns the cancelled plan status and whether the venue child was cancelled.
+    """
+    global _engine_instance
+
+    data = request.get_json(silent=True) or {}
+    reason = data.get("reason", "dashboard cancellation")
+
+    # Need the plan controller from the engine
+    if not _engine_instance or not getattr(_engine_instance, "_plan_controller", None):
+        return jsonify({"error": "Plan controller not available (engine not running or plan orchestration disabled)"}), 503
+
+    plan_controller = _engine_instance._plan_controller
+    active_child_id = plan_controller.cancel_plan(plan_id, reason)
+
+    venue_cancelled = False
+    if active_child_id:
+        # Cancel the active child on the venue
+        try:
+            conn = _get_conn()
+            child_row = conn.execute(
+                "SELECT clob_order_id FROM open_orders WHERE order_id = ?",
+                (active_child_id,),
+            ).fetchone()
+            if child_row and child_row["clob_order_id"]:
+                from src.connectors.polymarket_clob import CLOBClient
+                clob = CLOBClient()
+                try:
+                    clob.cancel_order(child_row["clob_order_id"])
+                    venue_cancelled = True
+                finally:
+                    if hasattr(clob, "close"):
+                        try:
+                            import asyncio
+                            asyncio.run(clob.close())
+                        except Exception:
+                            pass
+            # Update child status in DB
+            conn.execute(
+                "UPDATE open_orders SET status = 'cancelled' WHERE order_id = ?",
+                (active_child_id,),
+            )
+            conn.commit()
+        except Exception:
+            pass  # best-effort venue cancellation
+
+    return jsonify({
+        "plan_id": plan_id,
+        "status": "cancelled",
+        "reason": reason,
+        "active_child_cancelled": active_child_id or "",
+        "venue_cancelled": venue_cancelled,
+    })
+
+
 # ─── API: Continuous Learning (Phase 8) ──────────────────────────
 
 @app.route("/api/post-mortem/recent")
