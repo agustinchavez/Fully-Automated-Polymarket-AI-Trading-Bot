@@ -24,6 +24,9 @@ from src.observability.logger import get_logger
 
 log = get_logger(__name__)
 
+# Incremented when the serialized OrderSpec schema changes.
+SPEC_VERSION = 1
+
 
 def _serialize_order_spec(spec: OrderSpec) -> dict[str, Any]:
     """Serialize an OrderSpec to a JSON-safe dict (exclude non-serializable metadata)."""
@@ -76,6 +79,17 @@ class PlanController:
         self._db = db
         self._config = config or ExecutionConfig()
 
+    # ── Helpers ──────────────────────────────────────────────────
+
+    def _alert(self, level: str, message: str, channel: str = "plan_controller") -> None:
+        """Insert a DB alert if the database supports it."""
+        try:
+            self._db.insert_alert(level, message, channel)
+        except Exception:
+            pass  # alerts are best-effort
+
+    # ── Lifecycle ────────────────────────────────────────────────
+
     def create_plan(
         self,
         orders: list[OrderSpec],
@@ -102,6 +116,7 @@ class PlanController:
         # Serialize children for deferred reconstruction
         serialized_children = [_serialize_order_spec(o) for o in orders]
         plan_metadata: dict[str, Any] = {
+            "spec_version": SPEC_VERSION,
             "children": serialized_children,
         }
         if metadata:
@@ -144,6 +159,11 @@ class PlanController:
             children=len(orders),
             target_size=round(target_size, 4),
             market_id=first.market_id,
+        )
+        self._alert(
+            "info",
+            f"Execution plan created: {strategy_type} with {len(orders)} children",
+            f"plan={plan_id[:8]} market={first.market_id[:8]}",
         )
         return plan
 
@@ -215,7 +235,7 @@ class PlanController:
         children = self._db.get_plan_children(plan.plan_id)
         total_filled = 0.0
         total_cost = 0.0
-        completed = 0
+        terminal = 0
 
         for child in children:
             if child.status in ("filled", "partial"):
@@ -224,12 +244,12 @@ class PlanController:
                 total_filled += child_fill
                 total_cost += child_fill * child_price
             if child.status in ("filled", "cancelled", "expired", "failed"):
-                completed += 1
+                terminal += 1
 
         avg_price = total_cost / total_filled if total_filled > 0 else 0.0
 
         # Check if all children are done
-        if completed >= plan.total_children:
+        if terminal >= plan.total_children:
             # All children processed — determine final status
             fill_ratio = total_filled / plan.target_size if plan.target_size > 0 else 0.0
             final_status = "filled" if fill_ratio >= 0.99 else "partial"
@@ -239,7 +259,7 @@ class PlanController:
                 status=final_status,
                 filled_size=round(total_filled, 6),
                 avg_fill_price=round(avg_price, 6),
-                completed_children=completed,
+                completed_children=terminal,
                 active_child_order_id="",
             )
             log.info(
@@ -248,6 +268,11 @@ class PlanController:
                 status=final_status,
                 filled_size=round(total_filled, 4),
                 fill_ratio=round(fill_ratio, 4),
+            )
+            self._alert(
+                "info",
+                f"Execution plan {final_status}: {plan.plan_id[:8]}",
+                f"filled={round(total_filled, 2)} fill_ratio={round(fill_ratio, 3)}",
             )
             return None
 
@@ -263,7 +288,7 @@ class PlanController:
                 status="partial" if total_filled > 0 else "failed",
                 filled_size=round(total_filled, 6),
                 avg_fill_price=round(avg_price, 6),
-                completed_children=completed,
+                completed_children=terminal,
                 active_child_order_id="",
                 error="next_child_index exceeds serialized children count",
             )
@@ -278,13 +303,15 @@ class PlanController:
         next_spec = _deserialize_order_spec(serialized[next_idx])
         next_spec.order_id = str(uuid.uuid4())
 
-        # Update plan state
+        # Clear active_child_order_id — the submission path will set it
+        # to the new child's order_id once actually submitted.
         self._db.update_execution_plan(
             plan.plan_id,
             filled_size=round(total_filled, 6),
             avg_fill_price=round(avg_price, 6),
-            completed_children=completed,
+            completed_children=terminal,
             next_child_index=next_idx + 1,
+            active_child_order_id="",
         )
 
         log.info(
@@ -292,6 +319,10 @@ class PlanController:
             plan_id=plan.plan_id[:8],
             child_index=next_idx,
             child_order_id=next_spec.order_id[:8],
+        )
+        self._alert(
+            "info",
+            f"Plan {plan.plan_id[:8]} advancing to child {next_idx + 1}/{plan.total_children}",
         )
         return next_spec
 
@@ -323,7 +354,7 @@ class PlanController:
         children = self._db.get_plan_children(plan.plan_id)
         total_filled = 0.0
         total_cost = 0.0
-        completed = 0
+        terminal = 0
 
         for child in children:
             if child.status in ("filled", "partial"):
@@ -332,11 +363,11 @@ class PlanController:
                 total_filled += child_fill
                 total_cost += child_fill * child_price
             if child.status in ("filled", "cancelled", "expired", "failed"):
-                completed += 1
+                terminal += 1
 
         avg_price = total_cost / total_filled if total_filled > 0 else 0.0
 
-        if completed >= plan.total_children:
+        if terminal >= plan.total_children:
             # All done
             final_status = "partial" if total_filled > 0 else order.status
             self._db.update_execution_plan(
@@ -344,7 +375,7 @@ class PlanController:
                 status=final_status,
                 filled_size=round(total_filled, 6),
                 avg_fill_price=round(avg_price, 6),
-                completed_children=completed,
+                completed_children=terminal,
                 active_child_order_id="",
             )
             log.info(
@@ -352,6 +383,11 @@ class PlanController:
                 plan_id=plan.plan_id[:8],
                 status=final_status,
                 reason=order.status,
+            )
+            self._alert(
+                "warning" if total_filled == 0 else "info",
+                f"Execution plan {final_status}: {plan.plan_id[:8]}",
+                f"reason={order.status} filled={round(total_filled, 2)}",
             )
             return None
 
@@ -367,7 +403,7 @@ class PlanController:
                 status=final_status,
                 filled_size=round(total_filled, 6),
                 avg_fill_price=round(avg_price, 6),
-                completed_children=completed,
+                completed_children=terminal,
                 active_child_order_id="",
             )
             return None
@@ -375,12 +411,14 @@ class PlanController:
         next_spec = _deserialize_order_spec(serialized[next_idx])
         next_spec.order_id = str(uuid.uuid4())
 
+        # Clear active_child_order_id — submission path will set it
         self._db.update_execution_plan(
             plan.plan_id,
             filled_size=round(total_filled, 6),
             avg_fill_price=round(avg_price, 6),
-            completed_children=completed,
+            completed_children=terminal,
             next_child_index=next_idx + 1,
+            active_child_order_id="",
         )
 
         log.info(
@@ -391,13 +429,19 @@ class PlanController:
         )
         return next_spec
 
-    def cancel_plan(self, plan_id: str, reason: str = "") -> None:
-        """Cancel a plan and mark it as cancelled."""
+    def cancel_plan(self, plan_id: str, reason: str = "") -> str:
+        """Cancel a plan and mark it as cancelled.
+
+        Returns the active_child_order_id if one exists, so the caller
+        can cancel it on the venue.  Returns empty string if no active child.
+        """
         plan = self._db.get_execution_plan(plan_id)
         if plan is None:
-            return
+            return ""
         if plan.status in ("filled", "cancelled", "failed", "expired"):
-            return
+            return ""
+
+        active_child = plan.active_child_order_id or ""
 
         children = self._db.get_plan_children(plan_id)
         total_filled = sum(
@@ -418,7 +462,14 @@ class PlanController:
             plan_id=plan_id[:8],
             status=final_status,
             filled_size=round(total_filled, 4),
+            active_child=active_child[:8] if active_child else "",
         )
+        self._alert(
+            "warning",
+            f"Execution plan cancelled: {plan_id[:8]}",
+            f"reason={reason or 'cancelled'} filled={round(total_filled, 2)}",
+        )
+        return active_child
 
     def get_plan_summary(self, plan_id: str) -> dict[str, Any]:
         """Return a dashboard-friendly summary of a plan and its children."""
@@ -427,7 +478,7 @@ class PlanController:
             return {}
 
         children = self._db.get_plan_children(plan_id)
-        completion_pct = (
+        terminal_pct = (
             plan.completed_children / plan.total_children * 100
             if plan.total_children > 0
             else 0.0
@@ -450,8 +501,8 @@ class PlanController:
             "filled_size": plan.filled_size,
             "avg_fill_price": plan.avg_fill_price,
             "total_children": plan.total_children,
-            "completed_children": plan.completed_children,
-            "completion_pct": round(completion_pct, 1),
+            "terminal_children": plan.completed_children,
+            "terminal_pct": round(terminal_pct, 1),
             "fill_pct": round(fill_pct, 1),
             "dry_run": plan.dry_run,
             "error": plan.error,

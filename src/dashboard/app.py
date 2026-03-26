@@ -3329,7 +3329,7 @@ def api_execution_plans() -> Any:
         for r in rows:
             d = dict(r)
             d["dry_run"] = bool(d.get("dry_run", 1))
-            completion_pct = (
+            terminal_pct = (
                 d.get("completed_children", 0) / d.get("total_children", 1) * 100
                 if d.get("total_children", 0) > 0
                 else 0.0
@@ -3339,7 +3339,8 @@ def api_execution_plans() -> Any:
                 if d.get("target_size", 0) > 0
                 else 0.0
             )
-            d["completion_pct"] = round(completion_pct, 1)
+            d["terminal_children"] = d.pop("completed_children", 0)
+            d["terminal_pct"] = round(terminal_pct, 1)
             d["fill_pct"] = round(fill_pct, 1)
 
             # Attach children
@@ -3378,12 +3379,13 @@ def api_execution_plans_active() -> Any:
         for r in rows:
             d = dict(r)
             d["dry_run"] = bool(d.get("dry_run", 1))
-            completion_pct = (
+            terminal_pct = (
                 d.get("completed_children", 0) / d.get("total_children", 1) * 100
                 if d.get("total_children", 0) > 0
                 else 0.0
             )
-            d["completion_pct"] = round(completion_pct, 1)
+            d["terminal_children"] = d.pop("completed_children", 0)
+            d["terminal_pct"] = round(terminal_pct, 1)
             children = conn.execute(
                 """SELECT order_id, child_index, status, price, size,
                           filled_size, avg_fill_price

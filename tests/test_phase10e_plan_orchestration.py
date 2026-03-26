@@ -5,6 +5,7 @@ Tests cover:
   - Batch B: PlanController lifecycle (create, activate, update, cancel, summary)
   - Batch C: Engine loop plan branching, reconciliation plan-aware callbacks
   - Batch D: Dashboard endpoints, invariant check #13
+  - Hardening: active_child timing, terminology, spec versioning, cancel semantics, alerts
 """
 
 from __future__ import annotations
@@ -19,6 +20,7 @@ from src.config import ExecutionConfig, StorageConfig
 from src.execution.order_builder import OrderSpec
 from src.execution.plan_controller import (
     PlanController,
+    SPEC_VERSION,
     _serialize_order_spec,
     _deserialize_order_spec,
 )
@@ -349,6 +351,30 @@ class TestPlanControllerCreatePlan:
         assert len(meta["children"]) == 2
         assert meta["children"][0]["size"] == orders[0].size
 
+    def test_metadata_contains_spec_version(self):
+        """Verify spec_version is tagged in metadata for future compat."""
+        db = _make_db()
+        ctrl = PlanController(db)
+        orders = _make_twap_orders(2)
+        plan = ctrl.create_plan(orders, "twap")
+        meta = json.loads(plan.metadata_json)
+        assert "spec_version" in meta
+        assert meta["spec_version"] == SPEC_VERSION
+
+    def test_create_plan_inserts_alert(self):
+        """Plan creation should emit a DB alert."""
+        db = _make_db()
+        ctrl = PlanController(db)
+        orders = _make_twap_orders(2)
+        ctrl.create_plan(orders, "twap")
+        # Check alerts_log table
+        alerts = db._conn.execute(
+            "SELECT * FROM alerts_log ORDER BY id DESC LIMIT 1"
+        ).fetchall()
+        assert len(alerts) >= 1
+        last = dict(alerts[0])
+        assert "execution plan" in last["message"].lower() or "plan created" in last["message"].lower()
+
 
 class TestPlanControllerActivate:
     def test_activate_plan(self):
@@ -420,6 +446,27 @@ class TestPlanControllerUpdateFromChild:
         updated = db.get_execution_plan(plan.plan_id)
         assert updated.filled_size > 0
         assert updated.completed_children == 1
+
+    def test_child_filled_clears_active_child_order_id(self):
+        """When a child fills and next is returned, active_child_order_id
+        should be cleared (submission path will set it to the new child)."""
+        db = _make_db()
+        ctrl, plan, first_id = self._setup_active_plan(db)
+
+        # Verify active child is set
+        before = db.get_execution_plan(plan.plan_id)
+        assert before.active_child_order_id == first_id
+
+        # Fill first child
+        db.update_order_status(first_id, "filled",
+                               filled_size=33.33, avg_fill_price=0.60)
+        child_order = db.get_order(first_id)
+        next_spec = ctrl.update_plan_from_child(child_order)
+        assert next_spec is not None
+
+        # active_child_order_id should now be empty
+        after = db.get_execution_plan(plan.plan_id)
+        assert after.active_child_order_id == ""
 
     def test_last_child_filled_completes_plan(self):
         db = _make_db()
@@ -534,6 +581,21 @@ class TestPlanControllerUpdateFromChild:
         assert updated.avg_fill_price == pytest.approx(0.625, abs=0.001)
         assert updated.status == "filled"
 
+    def test_terminal_child_also_clears_active_child(self):
+        """When a child is cancelled and next is returned, active_child_order_id
+        should be cleared."""
+        db = _make_db()
+        ctrl, plan, first_id = self._setup_active_plan(db, num_children=2)
+
+        # Cancel first child
+        db.update_order_status(first_id, "cancelled")
+        child_order = db.get_order(first_id)
+        next_spec = ctrl.update_plan_from_child(child_order)
+        assert next_spec is not None
+
+        updated = db.get_execution_plan(plan.plan_id)
+        assert updated.active_child_order_id == ""
+
 
 class TestPlanControllerCancel:
     def test_cancel_plan_no_fills(self):
@@ -541,10 +603,24 @@ class TestPlanControllerCancel:
         ctrl = PlanController(db)
         orders = _make_twap_orders(3)
         plan = ctrl.create_plan(orders, "twap")
-        ctrl.cancel_plan(plan.plan_id, "user requested")
+        active_child = ctrl.cancel_plan(plan.plan_id, "user requested")
         updated = db.get_execution_plan(plan.plan_id)
         assert updated.status == "cancelled"
         assert updated.error == "user requested"
+        # No active child yet (plan was just planned)
+        assert active_child == ""
+
+    def test_cancel_plan_returns_active_child(self):
+        """cancel_plan() should return the active child order ID for venue cancellation."""
+        db = _make_db()
+        ctrl = PlanController(db)
+        orders = _make_twap_orders(3)
+        plan = ctrl.create_plan(orders, "twap")
+        ctrl.activate_plan(plan.plan_id, "child-on-book")
+        active_child = ctrl.cancel_plan(plan.plan_id, "user cancel")
+        assert active_child == "child-on-book"
+        updated = db.get_execution_plan(plan.plan_id)
+        assert updated.active_child_order_id == ""
 
     def test_cancel_plan_with_fills_partial(self):
         db = _make_db()
@@ -568,9 +644,21 @@ class TestPlanControllerCancel:
         db.insert_execution_plan(ExecutionPlanRecord(
             plan_id="already-done", market_id="m1", status="filled",
         ))
-        ctrl.cancel_plan("already-done")
+        active_child = ctrl.cancel_plan("already-done")
+        assert active_child == ""
         updated = db.get_execution_plan("already-done")
         assert updated.status == "filled"  # Unchanged
+
+    def test_cancel_plan_emits_alert(self):
+        db = _make_db()
+        ctrl = PlanController(db)
+        orders = _make_twap_orders(2)
+        plan = ctrl.create_plan(orders, "twap")
+        ctrl.cancel_plan(plan.plan_id, "test cancel")
+        alerts = db._conn.execute(
+            "SELECT * FROM alerts_log WHERE message LIKE '%cancelled%' ORDER BY id DESC LIMIT 1"
+        ).fetchall()
+        assert len(alerts) >= 1
 
 
 class TestPlanControllerSummary:
@@ -593,6 +681,20 @@ class TestPlanControllerSummary:
         assert summary["plan_id"] == plan.plan_id
         assert summary["strategy_type"] == "twap"
         assert len(summary["children"]) == 2
+
+    def test_summary_uses_terminal_terminology(self):
+        """Summary should use terminal_children and terminal_pct, not completion."""
+        db = _make_db()
+        ctrl = PlanController(db)
+        orders = _make_twap_orders(2)
+        plan = ctrl.create_plan(orders, "twap")
+        summary = ctrl.get_plan_summary(plan.plan_id)
+        assert "terminal_children" in summary
+        assert "terminal_pct" in summary
+        assert "fill_pct" in summary
+        # Should NOT have the old names
+        assert "completed_children" not in summary
+        assert "completion_pct" not in summary
 
     def test_summary_not_found(self):
         db = _make_db()
@@ -715,6 +817,39 @@ class TestReconciliationPlanAware:
         order = db.get_order("no-parent")
         reconciler._notify_plan_controller(order)
         assert len(reconciler._pending_plan_submissions) == 0
+
+    def test_active_child_set_after_submission(self):
+        """After _submit_plan_children runs, active_child_order_id should be set."""
+        # This tests the end-to-end flow:
+        # 1. Child fills → controller clears active_child_order_id
+        # 2. _submit_plan_children sets it to the new child
+        db = _make_db()
+        ctrl = PlanController(db)
+        orders = _make_twap_orders(2)
+        plan = ctrl.create_plan(orders, "twap")
+        ctrl.activate_plan(plan.plan_id, "old-child")
+
+        # Simulate: controller returns next spec, clears active_child
+        first_id = str(uuid.uuid4())
+        db.insert_order(OrderRecord(
+            order_id=first_id, market_id="mkt-1",
+            price=0.60, size=50.0,
+            status="filled", filled_size=50.0, avg_fill_price=0.60,
+            parent_plan_id=plan.plan_id, child_index=0,
+        ))
+        child = db.get_order(first_id)
+        next_spec = ctrl.update_plan_from_child(child)
+        assert next_spec is not None
+
+        # At this point active_child_order_id should be empty
+        mid = db.get_execution_plan(plan.plan_id)
+        assert mid.active_child_order_id == ""
+
+        # Simulate what _submit_plan_children does after submission
+        new_child_id = "new-child-id"
+        db.update_execution_plan(plan.plan_id, active_child_order_id=new_child_id)
+        after = db.get_execution_plan(plan.plan_id)
+        assert after.active_child_order_id == new_child_id
 
 
 # ═══════════════════════════════════════════════════════════════
