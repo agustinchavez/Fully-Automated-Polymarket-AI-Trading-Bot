@@ -3460,6 +3460,46 @@ def api_cancel_execution_plan(plan_id: str) -> Any:
     })
 
 
+# ─── API: Reconciliation Metrics (Phase 10E) ────────────────────
+
+@app.route("/api/reconciliation")
+def api_reconciliation() -> Any:
+    """Return reconciliation metrics, active plan gauge, and invariant violation counts."""
+    from src.observability.metrics import metrics as _recon_metrics
+
+    snap = _recon_metrics.snapshot()
+    counters = snap.get("counters", {})
+
+    recon = {
+        "passes": counters.get("reconciliation.passes", 0),
+        "checked": counters.get("reconciliation.checked", 0),
+        "filled": counters.get("reconciliation.filled", 0),
+        "partial": counters.get("reconciliation.partial", 0),
+        "cancelled": counters.get("reconciliation.cancelled", 0),
+        "stale_cancelled": counters.get("reconciliation.stale_cancelled", 0),
+        "pruned": counters.get("reconciliation.pruned", 0),
+        "errors": counters.get("reconciliation.errors", 0),
+    }
+
+    gauges = snap.get("gauges", {})
+    plans = {
+        "active_count": gauges.get("plans.active_count", 0),
+    }
+
+    # Collect invariant violation counters
+    invariant_violations = {}
+    for key, val in counters.items():
+        if key.startswith("invariant.violations.") and not key.startswith("invariant.violations_by_severity."):
+            check_name = key.replace("invariant.violations.", "")
+            invariant_violations[check_name] = val
+
+    return jsonify({
+        "reconciliation": recon,
+        "plans": plans,
+        "invariant_violations": invariant_violations,
+    })
+
+
 # ─── API: Continuous Learning (Phase 8) ──────────────────────────
 
 @app.route("/api/post-mortem/recent")

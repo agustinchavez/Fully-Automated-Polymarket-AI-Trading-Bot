@@ -28,6 +28,15 @@ log = get_logger(__name__)
 SPEC_VERSION = 1
 _SUPPORTED_SPEC_VERSIONS = {1}
 
+# Sentinel value for active_child_order_id during the timing window between
+# the controller returning the next child spec and the submission path setting
+# the real order_id. Prevents invariant #13 false-positives.
+ADVANCING_SENTINEL = "__advancing__"
+
+# Terminal plan statuses — once a plan reaches any of these, no further
+# child updates should mutate it.
+_TERMINAL_PLAN_STATUSES = frozenset({"filled", "partial", "cancelled", "failed", "expired"})
+
 
 class UnsupportedSpecVersion(Exception):
     """Raised when plan metadata has an unrecognized spec_version."""
@@ -236,7 +245,17 @@ class PlanController:
             return None
 
         # Skip if plan is already terminal
-        if plan.status in ("filled", "cancelled", "failed", "expired"):
+        if plan.status in _TERMINAL_PLAN_STATUSES:
+            return None
+
+        # Guard: child fill can arrive before activate_plan() is called
+        if plan.status == "planned":
+            log.info(
+                "plan_controller.child_update_before_activation",
+                plan_id=plan_id[:8],
+                order_id=order.order_id[:8],
+                child_status=order.status,
+            )
             return None
 
         if order.status == "filled":
@@ -268,6 +287,15 @@ class PlanController:
                 terminal += 1
 
         avg_price = total_cost / total_filled if total_filled > 0 else 0.0
+
+        # Re-read guard: detect concurrent cancel/terminal between initial read and now
+        plan = self._db.get_execution_plan(plan.plan_id)
+        if plan is None or plan.status in _TERMINAL_PLAN_STATUSES:
+            log.info(
+                "plan_controller.reread_terminal_in_handle_filled",
+                plan_id=(plan.plan_id[:8] if plan else "?"),
+            )
+            return None
 
         # Check if all children are done
         if terminal >= plan.total_children:
@@ -339,15 +367,16 @@ class PlanController:
         next_spec = _deserialize_order_spec(serialized[next_idx])
         next_spec.order_id = str(uuid.uuid4())
 
-        # Clear active_child_order_id — the submission path will set it
-        # to the new child's order_id once actually submitted.
+        # Use __advancing__ sentinel instead of "" to prevent invariant #13
+        # from firing during the natural timing window between controller
+        # clearing and submission setting the real order_id.
         self._db.update_execution_plan(
             plan.plan_id,
             filled_size=round(total_filled, 6),
             avg_fill_price=round(avg_price, 6),
             completed_children=terminal,
             next_child_index=next_idx + 1,
-            active_child_order_id="",
+            active_child_order_id=ADVANCING_SENTINEL,
         )
 
         log.info(
@@ -423,6 +452,15 @@ class PlanController:
 
         avg_price = total_cost / total_filled if total_filled > 0 else 0.0
 
+        # Re-read guard: detect concurrent cancel/terminal between initial read and now
+        plan = self._db.get_execution_plan(plan.plan_id)
+        if plan is None or plan.status in _TERMINAL_PLAN_STATUSES:
+            log.info(
+                "plan_controller.reread_terminal_in_handle_terminal",
+                plan_id=(plan.plan_id[:8] if plan else "?"),
+            )
+            return None
+
         if terminal >= plan.total_children:
             # All done
             final_status = "partial" if total_filled > 0 else order.status
@@ -482,14 +520,14 @@ class PlanController:
         next_spec = _deserialize_order_spec(serialized[next_idx])
         next_spec.order_id = str(uuid.uuid4())
 
-        # Clear active_child_order_id — submission path will set it
+        # Use __advancing__ sentinel (same rationale as _handle_child_filled)
         self._db.update_execution_plan(
             plan.plan_id,
             filled_size=round(total_filled, 6),
             avg_fill_price=round(avg_price, 6),
             completed_children=terminal,
             next_child_index=next_idx + 1,
-            active_child_order_id="",
+            active_child_order_id=ADVANCING_SENTINEL,
         )
 
         log.info(
@@ -509,7 +547,7 @@ class PlanController:
         plan = self._db.get_execution_plan(plan_id)
         if plan is None:
             return ""
-        if plan.status in ("filled", "cancelled", "failed", "expired"):
+        if plan.status in _TERMINAL_PLAN_STATUSES:
             return ""
 
         active_child = plan.active_child_order_id or ""

@@ -14,6 +14,11 @@ Checks:
   11. Active orders missing canonical fields
   12. Reconciled SELL fills that hit orphan fallback
   13. Stale execution plan (active but no active child and remaining children)
+  14. Active child order of terminal plan
+  15. Plan child index overflow (next_child_index > total_children)
+  16. Plan overfill (filled_size > target_size * 1.01)
+  17. Plan child missing canonical fields
+  18. Partial plan with zero fill
 """
 
 from __future__ import annotations
@@ -108,6 +113,31 @@ def check_invariants(db: object) -> list[InvariantViolation]:
         violations.extend(_check_stale_execution_plan(db))
     except Exception as e:
         log.warning("invariant_checker.stale_execution_plan_error", error=str(e))
+
+    try:
+        violations.extend(_check_terminal_plan_active_child(db))
+    except Exception as e:
+        log.warning("invariant_checker.terminal_plan_active_child_error", error=str(e))
+
+    try:
+        violations.extend(_check_plan_child_index_overflow(db))
+    except Exception as e:
+        log.warning("invariant_checker.plan_child_index_overflow_error", error=str(e))
+
+    try:
+        violations.extend(_check_plan_overfill(db))
+    except Exception as e:
+        log.warning("invariant_checker.plan_overfill_error", error=str(e))
+
+    try:
+        violations.extend(_check_plan_child_missing_canonical(db))
+    except Exception as e:
+        log.warning("invariant_checker.plan_child_missing_canonical_error", error=str(e))
+
+    try:
+        violations.extend(_check_partial_plan_zero_fill(db))
+    except Exception as e:
+        log.warning("invariant_checker.partial_plan_zero_fill_error", error=str(e))
 
     return violations
 
@@ -384,6 +414,150 @@ def _check_stale_execution_plan(db: object) -> list[InvariantViolation]:
             severity="critical",
             market_id=r["market_id"],
             message=f"Plan {r['plan_id'][:8]} is active but has no active child and remaining children",
+        )
+        for r in rows
+    ]
+
+
+def _check_terminal_plan_active_child(db: object) -> list[InvariantViolation]:
+    """#14: Detect active child orders whose parent plan is terminal.
+
+    An order with status submitted/pending whose parent_plan_id references
+    a terminal plan indicates an orphaned child that should have been cancelled.
+    """
+    tbl = db._conn.execute(
+        "SELECT name FROM sqlite_master WHERE type='table' AND name='execution_plans'"
+    ).fetchone()
+    if not tbl:
+        return []
+
+    rows = db._conn.execute(
+        """SELECT o.order_id, o.market_id, o.parent_plan_id, ep.status AS plan_status
+        FROM open_orders o
+        JOIN execution_plans ep ON o.parent_plan_id = ep.plan_id
+        WHERE o.status IN ('submitted', 'pending')
+        AND o.parent_plan_id != ''
+        AND ep.status IN ('filled', 'partial', 'cancelled', 'failed', 'expired')"""
+    ).fetchall()
+
+    return [
+        InvariantViolation(
+            check="terminal_plan_active_child",
+            severity="critical",
+            market_id=r["market_id"],
+            message=(
+                f"Order {r['order_id'][:8]} is active but parent plan "
+                f"{r['parent_plan_id'][:8]} is {r['plan_status']}"
+            ),
+        )
+        for r in rows
+    ]
+
+
+def _check_plan_child_index_overflow(db: object) -> list[InvariantViolation]:
+    """#15: Detect non-terminal plans where next_child_index > total_children."""
+    tbl = db._conn.execute(
+        "SELECT name FROM sqlite_master WHERE type='table' AND name='execution_plans'"
+    ).fetchone()
+    if not tbl:
+        return []
+
+    rows = db._conn.execute(
+        """SELECT plan_id, market_id, next_child_index, total_children
+        FROM execution_plans
+        WHERE status NOT IN ('filled', 'partial', 'cancelled', 'failed', 'expired')
+        AND next_child_index > total_children"""
+    ).fetchall()
+
+    return [
+        InvariantViolation(
+            check="plan_child_index_overflow",
+            severity="warning",
+            market_id=r["market_id"],
+            message=(
+                f"Plan {r['plan_id'][:8]} has next_child_index={r['next_child_index']} "
+                f"but total_children={r['total_children']}"
+            ),
+        )
+        for r in rows
+    ]
+
+
+def _check_plan_overfill(db: object) -> list[InvariantViolation]:
+    """#16: Detect plans where filled_size exceeds target_size by >1%."""
+    tbl = db._conn.execute(
+        "SELECT name FROM sqlite_master WHERE type='table' AND name='execution_plans'"
+    ).fetchone()
+    if not tbl:
+        return []
+
+    rows = db._conn.execute(
+        """SELECT plan_id, market_id, filled_size, target_size
+        FROM execution_plans
+        WHERE target_size > 0
+        AND filled_size > target_size * 1.01"""
+    ).fetchall()
+
+    return [
+        InvariantViolation(
+            check="plan_overfill",
+            severity="critical",
+            market_id=r["market_id"],
+            message=(
+                f"Plan {r['plan_id'][:8]} overfilled: "
+                f"{r['filled_size']:.2f} > target {r['target_size']:.2f}"
+            ),
+        )
+        for r in rows
+    ]
+
+
+def _check_plan_child_missing_canonical(db: object) -> list[InvariantViolation]:
+    """#17: Detect active plan children missing canonical direction fields."""
+    tbl = db._conn.execute(
+        "SELECT name FROM sqlite_master WHERE type='table' AND name='execution_plans'"
+    ).fetchone()
+    if not tbl:
+        return []
+
+    rows = db._conn.execute(
+        """SELECT order_id, market_id FROM open_orders
+        WHERE parent_plan_id != ''
+        AND status IN ('submitted', 'pending')
+        AND (action_side = '' OR outcome_side = '')"""
+    ).fetchall()
+
+    return [
+        InvariantViolation(
+            check="plan_child_missing_canonical",
+            severity="warning",
+            market_id=r["market_id"],
+            message=f"Plan child {r['order_id'][:8]} missing canonical direction fields",
+        )
+        for r in rows
+    ]
+
+
+def _check_partial_plan_zero_fill(db: object) -> list[InvariantViolation]:
+    """#18: Detect plans with status='partial' but zero filled_size."""
+    tbl = db._conn.execute(
+        "SELECT name FROM sqlite_master WHERE type='table' AND name='execution_plans'"
+    ).fetchone()
+    if not tbl:
+        return []
+
+    rows = db._conn.execute(
+        """SELECT plan_id, market_id FROM execution_plans
+        WHERE status = 'partial'
+        AND filled_size <= 0"""
+    ).fetchall()
+
+    return [
+        InvariantViolation(
+            check="partial_plan_zero_fill",
+            severity="warning",
+            market_id=r["market_id"],
+            message=f"Plan {r['plan_id'][:8]} is partial but has zero filled_size",
         )
         for r in rows
     ]

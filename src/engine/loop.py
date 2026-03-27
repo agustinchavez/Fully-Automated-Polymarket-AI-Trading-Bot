@@ -528,6 +528,7 @@ class TradingEngine:
 
         try:
             from src.observability.invariant_checker import check_invariants
+            from src.observability.metrics import metrics as _inv_metrics
             violations = check_invariants(self._db)
             if violations:
                 for v in violations:
@@ -538,6 +539,8 @@ class TradingEngine:
                         market_id=v.market_id[:8],
                         message=v.message,
                     )
+                    _inv_metrics.incr(f"invariant.violations.{v.check}")
+                    _inv_metrics.incr(f"invariant.violations_by_severity.{v.severity}")
                     if v.severity == "critical":
                         self._db.insert_alert("critical", v.message, "invariant_checker")
         except Exception as e:

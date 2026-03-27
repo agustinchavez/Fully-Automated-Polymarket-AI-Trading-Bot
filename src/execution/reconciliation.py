@@ -21,6 +21,7 @@ from typing import Any, Callable
 from src.config import ExecutionConfig, is_live_trading_enabled
 from src.execution.direction import parse_direction
 from src.observability.logger import get_logger
+from src.observability.metrics import metrics
 
 log = get_logger(__name__)
 
@@ -114,6 +115,17 @@ class OrderReconciler:
             pruned=result.pruned,
             errors=result.errors,
         )
+
+        # Emit reconciliation metrics
+        metrics.incr("reconciliation.passes")
+        metrics.incr("reconciliation.checked", result.checked)
+        metrics.incr("reconciliation.filled", result.filled)
+        metrics.incr("reconciliation.partial", result.partial)
+        metrics.incr("reconciliation.cancelled", result.cancelled)
+        metrics.incr("reconciliation.stale_cancelled", result.stale_cancelled)
+        metrics.incr("reconciliation.pruned", result.pruned)
+        metrics.incr("reconciliation.errors", result.errors)
+
         return result
 
     def _reconcile_order(self, order: object, result: ReconciliationResult) -> None:
@@ -522,6 +534,13 @@ async def run_reconciliation_loop(
             except Exception as e:
                 log.warning("reconciler.stuck_plan_recovery_error", error=str(e))
 
+            # Emit active plans gauge
+            try:
+                active = db.get_active_execution_plans()
+                metrics.gauge("plans.active_count", len(active))
+            except Exception:
+                pass
+
         try:
             await asyncio.wait_for(stop_event.wait(), timeout=interval)
             break  # stop_event was set
@@ -549,6 +568,19 @@ async def _submit_plan_children(
 
     for spec, plan_id, child_idx in pending:
         try:
+            # Re-read guard: skip submission if plan became terminal
+            current_plan = db.get_execution_plan(plan_id)
+            if not current_plan or current_plan.status in (
+                "filled", "partial", "cancelled", "failed", "expired",
+            ):
+                log.info(
+                    "reconciler.plan_child_submit_skipped_terminal",
+                    plan_id=plan_id[:8],
+                    child_index=child_idx,
+                    status=current_plan.status if current_plan else "missing",
+                )
+                continue
+
             result = await router.submit_order(spec)
 
             # Record child order in DB
