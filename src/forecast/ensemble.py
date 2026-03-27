@@ -28,6 +28,7 @@ from src.research.evidence_extractor import EvidencePackage
 from src.observability.logger import get_logger
 from src.connectors.rate_limiter import rate_limiter
 from src.observability.metrics import cost_tracker
+from src.observability.circuit_breaker import circuit_breakers
 
 log = get_logger(__name__)
 
@@ -313,6 +314,13 @@ async def _query_openai(model: str, prompt: str, config: ForecastingConfig, time
     import time
     from openai import AsyncOpenAI
 
+    provider_cb = circuit_breakers.get("openai")
+    if not provider_cb.allow_request():
+        return ModelForecast(
+            model_name=model, model_probability=0.5,
+            error=f"Circuit breaker open for openai (retry after {provider_cb.time_until_retry():.0f}s)",
+            latency_ms=0.0,
+        )
     start = time.monotonic()
     try:
         await rate_limiter.get("openai").acquire()
@@ -337,8 +345,10 @@ async def _query_openai(model: str, prompt: str, config: ForecastingConfig, time
             input_tokens=getattr(usage, "prompt_tokens", 0) or 0,
             output_tokens=getattr(usage, "completion_tokens", 0) or 0,
         )
+        provider_cb.record_success()
         return _build_model_forecast(model, parsed, (time.monotonic() - start) * 1000)
     except Exception as e:
+        provider_cb.record_failure()
         return ModelForecast(
             model_name=model, model_probability=0.5, error=str(e),
             latency_ms=(time.monotonic() - start) * 1000,
@@ -349,6 +359,13 @@ async def _query_anthropic(model: str, prompt: str, config: ForecastingConfig, t
     """Query an Anthropic Claude model."""
     import time
 
+    provider_cb = circuit_breakers.get("anthropic")
+    if not provider_cb.allow_request():
+        return ModelForecast(
+            model_name=model, model_probability=0.5,
+            error=f"Circuit breaker open for anthropic (retry after {provider_cb.time_until_retry():.0f}s)",
+            latency_ms=0.0,
+        )
     start = time.monotonic()
     try:
         import anthropic
@@ -372,8 +389,10 @@ async def _query_anthropic(model: str, prompt: str, config: ForecastingConfig, t
             input_tokens=getattr(usage, "input_tokens", 0) or 0,
             output_tokens=getattr(usage, "output_tokens", 0) or 0,
         )
+        provider_cb.record_success()
         return _build_model_forecast(model, parsed, (time.monotonic() - start) * 1000)
     except Exception as e:
+        provider_cb.record_failure()
         return ModelForecast(
             model_name=model, model_probability=0.5, error=str(e),
             latency_ms=(time.monotonic() - start) * 1000,
@@ -384,6 +403,13 @@ async def _query_google(model: str, prompt: str, config: ForecastingConfig, time
     """Query a Google Gemini model."""
     import time
 
+    provider_cb = circuit_breakers.get("google")
+    if not provider_cb.allow_request():
+        return ModelForecast(
+            model_name=model, model_probability=0.5,
+            error=f"Circuit breaker open for google (retry after {provider_cb.time_until_retry():.0f}s)",
+            latency_ms=0.0,
+        )
     start = time.monotonic()
     try:
         import google.generativeai as genai
@@ -408,8 +434,10 @@ async def _query_google(model: str, prompt: str, config: ForecastingConfig, time
             input_tokens=getattr(usage_meta, "prompt_token_count", 0) or 0,
             output_tokens=getattr(usage_meta, "candidates_token_count", 0) or 0,
         )
+        provider_cb.record_success()
         return _build_model_forecast(model, parsed, (time.monotonic() - start) * 1000)
     except Exception as e:
+        provider_cb.record_failure()
         return ModelForecast(
             model_name=model, model_probability=0.5, error=str(e),
             latency_ms=(time.monotonic() - start) * 1000,

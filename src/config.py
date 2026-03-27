@@ -160,6 +160,8 @@ class RiskConfig(BaseModel):
     # Phase 3: Edge uncertainty
     uncertainty_enabled: bool = False          # penalize edge based on forecast uncertainty
     uncertainty_penalty_factor: float = 0.5    # how much uncertainty penalizes edge (0-1)
+    # Cost model: convert percentage-of-stake into probability space (cost_pct * price)
+    use_probability_space_costs: bool = False
     category_stake_multipliers: dict[str, float] = Field(
         default_factory=lambda: {
             "MACRO": 1.0,

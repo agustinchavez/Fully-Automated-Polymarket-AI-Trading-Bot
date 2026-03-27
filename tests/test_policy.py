@@ -615,3 +615,121 @@ class TestStopLossTakeProfit:
         rc = RC()
         assert rc.stop_loss_pct == 0.20
         assert rc.take_profit_pct == 0.30
+
+
+# ─── probability-space costs ───────────────────────────────────────────
+
+
+class TestProbabilitySpaceCosts:
+    """Fix #3: Edge cost calculation in probability space.
+
+    When use_probability_space_costs=True, transaction costs are converted
+    from percentage-of-stake into probability space: cost_in_prob = fee_pct * price.
+    A 2% fee on a 0.20 contract costs 0.004 in probability units, not 0.02.
+    """
+
+    def test_cheap_contract_lower_cost(self) -> None:
+        """Cheap contracts (0.20) have proportionally lower cost in prob space."""
+        result = calculate_edge(
+            implied_prob=0.20, model_prob=0.30,
+            transaction_fee_pct=0.02,
+            use_probability_space_costs=True,
+        )
+        # cost = 0.20 (BUY_YES), cost_in_prob = 0.02 * 0.20 = 0.004
+        # net_edge = 0.10 - 0.004 = 0.096
+        assert result.net_edge == pytest.approx(0.096, abs=0.002)
+        assert result.direction == "BUY_YES"
+
+    def test_expensive_contract_higher_cost(self) -> None:
+        """Expensive contracts (0.90) have proportionally higher cost."""
+        result = calculate_edge(
+            implied_prob=0.90, model_prob=0.95,
+            transaction_fee_pct=0.02,
+            use_probability_space_costs=True,
+        )
+        # cost = 0.90, cost_in_prob = 0.02 * 0.90 = 0.018
+        # net_edge = 0.05 - 0.018 = 0.032
+        assert result.net_edge == pytest.approx(0.032, abs=0.002)
+
+    def test_buy_no_uses_complement_cost(self) -> None:
+        """BUY_NO uses cost = (1 - implied_prob) as the contract price."""
+        result = calculate_edge(
+            implied_prob=0.80, model_prob=0.60,
+            transaction_fee_pct=0.02,
+            use_probability_space_costs=True,
+        )
+        # direction=BUY_NO, cost = 1 - 0.80 = 0.20
+        # raw_edge = abs(0.60 - 0.80) = 0.20
+        # cost_in_prob = 0.02 * 0.20 = 0.004
+        # net_edge = 0.20 - 0.004 = 0.196
+        assert result.direction == "BUY_NO"
+        assert result.net_edge == pytest.approx(0.196, abs=0.002)
+
+    def test_midpoint_new_vs_legacy(self) -> None:
+        """At implied=0.50, new mode gives higher net_edge (cost=0.01 vs 0.02)."""
+        old = calculate_edge(
+            implied_prob=0.50, model_prob=0.60,
+            transaction_fee_pct=0.02,
+            use_probability_space_costs=False,
+        )
+        new = calculate_edge(
+            implied_prob=0.50, model_prob=0.60,
+            transaction_fee_pct=0.02,
+            use_probability_space_costs=True,
+        )
+        # old: net_edge = 0.10 - 0.02 = 0.08
+        # new: net_edge = 0.10 - 0.01 = 0.09
+        assert new.net_edge > old.net_edge
+
+    def test_legacy_mode_unchanged(self) -> None:
+        """use_probability_space_costs=False produces identical legacy results."""
+        result = calculate_edge(
+            implied_prob=0.50, model_prob=0.60,
+            transaction_fee_pct=0.02,
+            use_probability_space_costs=False,
+        )
+        assert result.net_edge == pytest.approx(0.08, abs=0.005)
+
+    def test_break_even_consistent_with_net_edge(self) -> None:
+        """Break-even and net_edge should agree on profitability.
+
+        If model_prob > break_even, net_edge should be positive.
+        """
+        result = calculate_edge(
+            implied_prob=0.60, model_prob=0.65,
+            transaction_fee_pct=0.05,
+            use_probability_space_costs=True,
+        )
+        if result.model_probability > result.break_even_probability:
+            assert result.net_edge > 0
+        else:
+            assert result.net_edge <= 0
+
+    def test_multi_outcome_probability_space(self) -> None:
+        """Multi-outcome edge uses per-outcome cost in probability space."""
+        from src.policy.edge_calc import calculate_multi_outcome_edge
+        result = calculate_multi_outcome_edge(
+            market_id="test",
+            outcomes=["A", "B", "C"],
+            implied_probs=[0.20, 0.50, 0.30],
+            model_probs=[0.40, 0.40, 0.20],
+            transaction_fee_pct=0.02,
+            use_probability_space_costs=True,
+        )
+        # Best edge on A: edge=0.20, cost=0.20, net=0.20 - 0.02*0.20 = 0.196
+        assert result.best_outcome_index == 0
+        assert result.best_edge == pytest.approx(0.20, abs=0.01)
+
+    def test_multi_outcome_legacy(self) -> None:
+        """Multi-outcome with legacy mode is backward compatible."""
+        from src.policy.edge_calc import calculate_multi_outcome_edge
+        result = calculate_multi_outcome_edge(
+            market_id="test",
+            outcomes=["A", "B"],
+            implied_probs=[0.40, 0.60],
+            model_probs=[0.50, 0.50],
+            transaction_fee_pct=0.02,
+            use_probability_space_costs=False,
+        )
+        # Edge on A: 0.10, Edge on B: -0.10. Both net = abs(0.10) - 0.02 = 0.08
+        assert result.best_outcome_index >= 0

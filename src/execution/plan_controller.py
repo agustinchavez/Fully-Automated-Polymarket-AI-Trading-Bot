@@ -147,10 +147,16 @@ class PlanController:
             "spec_version": SPEC_VERSION,
             "children": serialized_children,
         }
+        # TWAP time staggering: store minimum interval between child submissions
+        plan_metadata["min_child_interval_secs"] = 0
+        if metadata and "min_child_interval_secs" in metadata:
+            plan_metadata["min_child_interval_secs"] = metadata["min_child_interval_secs"]
+        plan_metadata["last_child_completed_at"] = ""
         if metadata:
             plan_metadata["extra"] = {
                 k: v for k, v in metadata.items()
-                if isinstance(v, (str, int, float, bool, type(None), list, dict))
+                if k != "min_child_interval_secs"
+                and isinstance(v, (str, int, float, bool, type(None), list, dict))
             }
 
         now = dt.datetime.now(dt.timezone.utc).isoformat()
@@ -364,6 +370,38 @@ class PlanController:
             )
             return None
 
+        # TWAP time stagger: enforce minimum interval between child submissions
+        min_interval = meta.get("min_child_interval_secs", 0)
+        now_ts = dt.datetime.now(dt.timezone.utc)
+        if min_interval > 0:
+            last_completed = meta.get("last_child_completed_at", "")
+            if last_completed:
+                try:
+                    last_ts = dt.datetime.fromisoformat(last_completed)
+                    elapsed = (now_ts - last_ts).total_seconds()
+                    if elapsed < min_interval:
+                        # Not enough time elapsed — record fill, let recovery pick up later
+                        meta["last_child_completed_at"] = now_ts.isoformat()
+                        self._db.update_execution_plan(
+                            plan.plan_id,
+                            filled_size=round(total_filled, 6),
+                            avg_fill_price=round(avg_price, 6),
+                            completed_children=terminal,
+                            active_child_order_id="",
+                            metadata_json=json.dumps(meta),
+                        )
+                        log.info(
+                            "plan_controller.twap_interval_wait",
+                            plan_id=plan.plan_id[:8],
+                            elapsed=round(elapsed, 1),
+                            interval=min_interval,
+                        )
+                        return None
+                except (ValueError, TypeError):
+                    pass  # bad timestamp — proceed normally
+        # Record completion timestamp for future interval checks
+        meta["last_child_completed_at"] = now_ts.isoformat()
+
         next_spec = _deserialize_order_spec(serialized[next_idx])
         next_spec.order_id = str(uuid.uuid4())
 
@@ -377,6 +415,7 @@ class PlanController:
             completed_children=terminal,
             next_child_index=next_idx + 1,
             active_child_order_id=ADVANCING_SENTINEL,
+            metadata_json=json.dumps(meta),
         )
 
         log.info(
@@ -623,6 +662,19 @@ class PlanController:
                 continue  # has an active child or is advancing — not stuck
             if plan.next_child_index >= plan.total_children:
                 continue  # all children submitted — awaiting last fill
+
+            # Check TWAP interval: plan may be deliberately waiting, not stuck
+            try:
+                _meta = json.loads(plan.metadata_json)
+                _min_interval = _meta.get("min_child_interval_secs", 0)
+                _last_completed = _meta.get("last_child_completed_at", "")
+                if _min_interval > 0 and _last_completed:
+                    _last_ts = dt.datetime.fromisoformat(_last_completed)
+                    _elapsed = (dt.datetime.now(dt.timezone.utc) - _last_ts).total_seconds()
+                    if _elapsed < _min_interval:
+                        continue  # still waiting for interval, not stuck
+            except (json.JSONDecodeError, ValueError, TypeError):
+                pass  # proceed with normal recovery
 
             # This plan is stuck — attempt recovery
             try:

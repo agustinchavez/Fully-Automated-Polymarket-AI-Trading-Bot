@@ -79,6 +79,10 @@ DEFAULT_BREAKER_CONFIGS: dict[str, CircuitBreakerConfig] = {
         failure_threshold=5, window_secs=60.0,
         recovery_timeout_secs=30.0, half_open_max_calls=2, name="Anthropic",
     ),
+    "google": CircuitBreakerConfig(
+        failure_threshold=5, window_secs=60.0,
+        recovery_timeout_secs=30.0, half_open_max_calls=2, name="Google Gemini",
+    ),
     "serpapi": CircuitBreakerConfig(
         failure_threshold=3, window_secs=120.0,
         recovery_timeout_secs=60.0, half_open_max_calls=1, name="SerpAPI",

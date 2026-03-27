@@ -959,8 +959,14 @@ class TradingEngine:
                                 reason=f"Research failed: {e}")
             return False
         finally:
-            await source_fetcher.close()
-            await search_provider.close()
+            try:
+                await source_fetcher.close()
+            except Exception:
+                log.warning("engine.source_fetcher_close_error", exc_info=True)
+            try:
+                await search_provider.close()
+            except Exception:
+                log.warning("engine.search_provider_close_error", exc_info=True)
 
         log.info(
             "engine.research_done", market_id=ctx.market_id,
@@ -1260,6 +1266,7 @@ class TradingEngine:
             transaction_fee_pct=self.config.risk.transaction_fee_pct,
             gas_cost_usd=self.config.risk.gas_cost_usd,
             holding_hours=ctx.features.hours_to_resolution,
+            use_probability_space_costs=self.config.risk.use_probability_space_costs,
         )
 
         # Track whale convergence for min_edge override later
@@ -1315,7 +1322,10 @@ class TradingEngine:
                         transaction_fee_pct=self.config.risk.transaction_fee_pct,
                         gas_cost_usd=self.config.risk.gas_cost_usd,
                         holding_hours=ctx.features.hours_to_resolution,
+                        use_probability_space_costs=self.config.risk.use_probability_space_costs,
                     )
+                    ctx.edge_result.pre_whale_probability = ctx.forecast.model_probability
+                    ctx.edge_result.whale_adjustment = scaled_boost
                     ctx_whale_converged = True
                     ctx.whale_converged = True
                     log.info("engine.whale_edge_boost", market_id=ctx.market_id,
@@ -1335,7 +1345,10 @@ class TradingEngine:
                         transaction_fee_pct=self.config.risk.transaction_fee_pct,
                         gas_cost_usd=self.config.risk.gas_cost_usd,
                         holding_hours=ctx.features.hours_to_resolution,
+                        use_probability_space_costs=self.config.risk.use_probability_space_costs,
                     )
+                    ctx.edge_result.pre_whale_probability = ctx.forecast.model_probability
+                    ctx.edge_result.whale_adjustment = -penalty
                     log.info("engine.whale_edge_penalty", market_id=ctx.market_id,
                              penalty=penalty, new_edge=round(ctx.edge_result.abs_net_edge, 4))
                 break  # only apply first matching signal
@@ -1799,8 +1812,13 @@ class TradingEngine:
         Remaining children are submitted sequentially by the reconciliation
         loop as each child fills.
         """
+        plan_metadata = None
+        if execution_strategy == "twap":
+            plan_metadata = {
+                "min_child_interval_secs": self.config.execution.twap_interval_secs,
+            }
         plan = self._plan_controller.create_plan(
-            orders, execution_strategy,
+            orders, execution_strategy, metadata=plan_metadata,
         )
 
         first_spec = self._plan_controller.get_first_child_spec(plan)
