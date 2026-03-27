@@ -256,6 +256,20 @@ class ReplayEngine:
             "duration_secs": result.duration_secs,
         })
 
+        # Store backtest Sharpe in main DB for preflight validation
+        if result.sharpe_ratio != 0.0:
+            try:
+                from src.storage.database import Database
+                main_db = Database(self._config.storage)
+                main_db.connect()
+                main_db.set_engine_state(
+                    "last_backtest_sharpe",
+                    str(round(result.sharpe_ratio, 4)),
+                )
+                main_db.close()
+            except Exception as e:
+                log.warning("backtest.sharpe_persist_error", error=str(e))
+
         log.info(
             "replay.complete",
             run_id=run_id,

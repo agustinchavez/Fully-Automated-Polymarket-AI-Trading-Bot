@@ -41,9 +41,10 @@ class Database:
         """Open database connection and run migrations."""
         db_path = Path(self._config.sqlite_path)
         db_path.parent.mkdir(parents=True, exist_ok=True)
-        self._conn = sqlite3.connect(str(db_path))
+        self._conn = sqlite3.connect(str(db_path), timeout=30.0)
         self._conn.row_factory = sqlite3.Row
         self._conn.execute("PRAGMA journal_mode=WAL")
+        self._conn.execute("PRAGMA busy_timeout=30000")
         self._conn.execute("PRAGMA foreign_keys=ON")
         run_migrations(self._conn)
         log.info("database.connected", path=str(db_path))
@@ -58,6 +59,28 @@ class Database:
         if self._conn is None:
             raise RuntimeError("Database not connected. Call connect() first.")
         return self._conn
+
+    def _execute_with_retry(
+        self, sql: str, params: tuple = (), *, max_retries: int = 3,
+    ) -> sqlite3.Cursor:
+        """Execute SQL with exponential backoff on OperationalError (locked)."""
+        import time as _time
+        for attempt in range(max_retries):
+            try:
+                return self.conn.execute(sql, params)
+            except sqlite3.OperationalError as e:
+                if "locked" in str(e).lower() and attempt < max_retries - 1:
+                    wait = 0.1 * (2 ** attempt)  # 0.1, 0.2, 0.4
+                    log.warning(
+                        "database.retry",
+                        attempt=attempt + 1,
+                        wait=wait,
+                        error=str(e),
+                    )
+                    _time.sleep(wait)
+                else:
+                    raise
+        raise sqlite3.OperationalError("max retries exceeded")
 
     # ── Markets ──────────────────────────────────────────────────────
 
@@ -135,7 +158,7 @@ class Database:
 
     def insert_trade(self, trade: TradeRecord) -> str:
         tid = trade.id or str(uuid.uuid4())
-        self.conn.execute(
+        self._execute_with_retry(
             """
             INSERT INTO trades
                 (id, order_id, market_id, token_id, side,
@@ -303,7 +326,7 @@ class Database:
     def set_engine_state(self, key: str, value: str) -> None:
         """Persist engine state (for cross-process dashboard reads)."""
         import time as _time
-        self.conn.execute(
+        self._execute_with_retry(
             "INSERT OR REPLACE INTO engine_state (key, value, updated_at) VALUES (?, ?, ?)",
             (key, value, _time.time()),
         )
@@ -339,7 +362,7 @@ class Database:
         order_status: str,
     ) -> None:
         import datetime as _dt
-        self.conn.execute(
+        self._execute_with_retry(
             """INSERT INTO candidates
                 (cycle_id, market_id, question, market_type, implied_prob,
                  model_prob, edge, evidence_quality, num_sources, confidence,
@@ -364,7 +387,7 @@ class Database:
 
     def insert_alert(self, level: str, message: str, channel: str = "system", market_id: str = "") -> None:
         import datetime as _dt
-        self.conn.execute(
+        self._execute_with_retry(
             "INSERT INTO alerts_log (level, channel, message, market_id, created_at) VALUES (?,?,?,?,?)",
             (level, channel, message, market_id, _dt.datetime.now(_dt.timezone.utc).isoformat()),
         )
@@ -741,7 +764,7 @@ class Database:
     def insert_order(self, order: OrderRecord) -> None:
         """Insert a new order into the open_orders table."""
         try:
-            self.conn.execute(
+            self._execute_with_retry(
                 """INSERT OR REPLACE INTO open_orders
                     (order_id, clob_order_id, market_id, token_id, side,
                      order_type, price, size, filled_size, avg_fill_price,

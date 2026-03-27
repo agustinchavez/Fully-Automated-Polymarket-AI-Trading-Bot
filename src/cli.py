@@ -809,6 +809,31 @@ def backtest_cache_stats(ctx: click.Context) -> None:
     db.close()
 
 
+@backtest.command("validate")
+@click.pass_context
+def backtest_validate(ctx: click.Context) -> None:
+    """Compare latest backtest Sharpe to paper trading Sharpe."""
+    import sqlite3
+    from src.observability.preflight import PreflightChecker
+
+    cfg: BotConfig = ctx.obj["config"]
+    conn = sqlite3.connect(cfg.storage.sqlite_path)
+    conn.row_factory = sqlite3.Row
+
+    checker = PreflightChecker(cfg, conn)
+    result = checker.check_backtest_paper_agreement()
+
+    table = Table(title="Backtest vs Paper Validation")
+    table.add_column("Field", style="bold")
+    table.add_column("Value")
+    table.add_row("Check", result.name)
+    table.add_row("Passed", "[green]Yes[/green]" if result.passed else "[red]No[/red]")
+    table.add_row("Details", result.message)
+
+    console.print(table)
+    conn.close()
+
+
 # ── Production commands (Phase 9) ────────────────────────────────
 
 

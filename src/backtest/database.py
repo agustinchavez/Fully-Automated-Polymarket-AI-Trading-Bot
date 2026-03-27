@@ -34,9 +34,10 @@ class BacktestDatabase:
         """Open database connection and run migrations."""
         path = Path(self._db_path)
         path.parent.mkdir(parents=True, exist_ok=True)
-        self._conn = sqlite3.connect(str(path))
+        self._conn = sqlite3.connect(str(path), timeout=30.0)
         self._conn.row_factory = sqlite3.Row
         self._conn.execute("PRAGMA journal_mode=WAL")
+        self._conn.execute("PRAGMA busy_timeout=30000")
         self._conn.execute("PRAGMA foreign_keys=ON")
         run_migrations(self._conn)
         log.info("backtest_db.connected", path=str(path))
