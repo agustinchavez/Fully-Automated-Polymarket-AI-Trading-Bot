@@ -3484,6 +3484,10 @@ def api_reconciliation() -> Any:
     gauges = snap.get("gauges", {})
     plans = {
         "active_count": gauges.get("plans.active_count", 0),
+        "avg_fill_pct": gauges.get("plans.avg_fill_pct", 0),
+        "completion_rate": gauges.get("plans.completion_rate", 0),
+        "cancel_rate": gauges.get("plans.cancel_rate", 0),
+        "avg_children_per_completed": gauges.get("plans.avg_children_per_completed", 0),
     }
 
     # Collect invariant violation counters

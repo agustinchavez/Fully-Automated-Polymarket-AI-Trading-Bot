@@ -534,10 +534,9 @@ async def run_reconciliation_loop(
             except Exception as e:
                 log.warning("reconciler.stuck_plan_recovery_error", error=str(e))
 
-            # Emit active plans gauge
+            # Emit plan-level metrics
             try:
-                active = db.get_active_execution_plans()
-                metrics.gauge("plans.active_count", len(active))
+                plan_controller.emit_plan_metrics()
             except Exception:
                 pass
 

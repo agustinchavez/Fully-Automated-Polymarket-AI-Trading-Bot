@@ -572,10 +572,13 @@ class PlanController:
             active_child_order_id="",
             error=reason or "cancelled",
         )
-        # Cancel remaining non-terminal children in open_orders
+        # Cancel remaining non-terminal children in open_orders.
+        # "partial" children still have an open venue order for the remaining
+        # quantity, so we cancel those too — their filled portion is already
+        # captured in the aggregate above.
         cancelled_children = 0
         for c in children:
-            if c.status in ("submitted", "pending"):
+            if c.status in ("submitted", "pending", "partial"):
                 try:
                     self._db.update_order_status(c.order_id, "cancelled")
                     cancelled_children += 1
@@ -617,7 +620,7 @@ class PlanController:
             if plan.status != "active":
                 continue
             if plan.active_child_order_id:
-                continue  # has an active child — not stuck
+                continue  # has an active child or is advancing — not stuck
             if plan.next_child_index >= plan.total_children:
                 continue  # all children submitted — awaiting last fill
 
@@ -644,6 +647,7 @@ class PlanController:
                 self._db.update_execution_plan(
                     plan.plan_id,
                     next_child_index=next_idx + 1,
+                    active_child_order_id=ADVANCING_SENTINEL,
                 )
 
                 recovered.append((plan.plan_id, next_spec))
@@ -725,3 +729,75 @@ class PlanController:
                 for c in children
             ],
         }
+
+    def emit_plan_metrics(self) -> dict[str, float]:
+        """Compute and emit plan-level metrics. Returns the metrics dict."""
+        from src.observability.metrics import metrics
+
+        try:
+            all_plans = self._db._conn.execute(
+                "SELECT status, strategy_type, filled_size, target_size, "
+                "total_children, created_at, updated_at FROM execution_plans"
+            ).fetchall()
+        except Exception:
+            return {}
+
+        active = 0
+        completed = 0
+        cancelled = 0
+        failed = 0
+        total_fill_pct = 0.0
+        fill_pct_count = 0
+        total_children_sum = 0
+        completed_plans = 0
+        strategy_completions: dict[str, int] = {}
+        recovered = metrics.snapshot().get("counters", {}).get(
+            "plan_controller.stuck_plan_recovered", 0
+        )
+
+        for p in all_plans:
+            status = p["status"]
+            if status == "active":
+                active += 1
+            elif status in ("filled", "partial"):
+                completed += 1
+                completed_plans += 1
+                total_children_sum += p["total_children"]
+                strategy = p["strategy_type"] or "unknown"
+                strategy_completions[strategy] = strategy_completions.get(strategy, 0) + 1
+            elif status == "cancelled":
+                cancelled += 1
+            elif status == "failed":
+                failed += 1
+
+            if p["target_size"] and p["target_size"] > 0:
+                fill_pct = p["filled_size"] / p["target_size"] * 100
+                total_fill_pct += fill_pct
+                fill_pct_count += 1
+
+        avg_fill_pct = total_fill_pct / fill_pct_count if fill_pct_count > 0 else 0.0
+        avg_children = total_children_sum / completed_plans if completed_plans > 0 else 0.0
+        total = active + completed + cancelled + failed
+        completion_rate = completed / total * 100 if total > 0 else 0.0
+        cancel_rate = cancelled / total * 100 if total > 0 else 0.0
+
+        metrics.gauge("plans.active_count", active)
+        metrics.gauge("plans.avg_fill_pct", round(avg_fill_pct, 1))
+        metrics.gauge("plans.completion_rate", round(completion_rate, 1))
+        metrics.gauge("plans.cancel_rate", round(cancel_rate, 1))
+        metrics.gauge("plans.avg_children_per_completed", round(avg_children, 1))
+
+        for strategy, count in strategy_completions.items():
+            metrics.gauge(f"plans.completions_by_strategy.{strategy}", count)
+
+        result = {
+            "active": active,
+            "completed": completed,
+            "cancelled": cancelled,
+            "failed": failed,
+            "avg_fill_pct": round(avg_fill_pct, 1),
+            "completion_rate": round(completion_rate, 1),
+            "cancel_rate": round(cancel_rate, 1),
+            "avg_children_per_completed": round(avg_children, 1),
+        }
+        return result

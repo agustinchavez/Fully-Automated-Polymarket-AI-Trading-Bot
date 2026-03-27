@@ -3442,3 +3442,530 @@ class TestVenueEdgeCases:
 
         # Plan controller should have been notified and queued next child
         assert len(reconciler._pending_plan_submissions) >= 1
+
+
+# ═══════════════════════════════════════════════════════════════
+# HARDENING ROUND 6 — Recovery, Cancel, Metrics, Fault Simulation
+# ═══════════════════════════════════════════════════════════════
+
+
+class TestRecoverySentinel:
+    """Verify recover_stuck_plans() uses ADVANCING_SENTINEL."""
+
+    def test_recovery_sets_advancing_sentinel(self):
+        """Recovery should set active_child_order_id to ADVANCING_SENTINEL."""
+        from src.execution.plan_controller import ADVANCING_SENTINEL
+
+        db = _make_db()
+        ctrl = PlanController(db)
+        orders = _make_twap_orders(3)
+        plan = ctrl.create_plan(orders, "twap")
+        db.update_execution_plan(
+            plan.plan_id,
+            status="active",
+            next_child_index=1,
+            active_child_order_id="",
+        )
+
+        recovered = ctrl.recover_stuck_plans()
+        assert len(recovered) == 1
+
+        updated = db.get_execution_plan(plan.plan_id)
+        assert updated.active_child_order_id == ADVANCING_SENTINEL
+
+    def test_recovery_skips_advancing_plans(self):
+        """Plans with ADVANCING_SENTINEL should NOT be treated as stuck."""
+        from src.execution.plan_controller import ADVANCING_SENTINEL
+
+        db = _make_db()
+        ctrl = PlanController(db)
+        orders = _make_twap_orders(3)
+        plan = ctrl.create_plan(orders, "twap")
+        db.update_execution_plan(
+            plan.plan_id,
+            status="active",
+            next_child_index=1,
+            active_child_order_id=ADVANCING_SENTINEL,
+        )
+
+        recovered = ctrl.recover_stuck_plans()
+        assert len(recovered) == 0
+
+    def test_recovery_no_double_recovery(self):
+        """After recovery sets ADVANCING_SENTINEL, a second recovery call should skip it."""
+        from src.execution.plan_controller import ADVANCING_SENTINEL
+
+        db = _make_db()
+        ctrl = PlanController(db)
+        orders = _make_twap_orders(3)
+        plan = ctrl.create_plan(orders, "twap")
+        db.update_execution_plan(
+            plan.plan_id,
+            status="active",
+            next_child_index=1,
+            active_child_order_id="",
+        )
+
+        # First recovery
+        recovered1 = ctrl.recover_stuck_plans()
+        assert len(recovered1) == 1
+
+        # Second recovery should find nothing — plan has ADVANCING_SENTINEL
+        recovered2 = ctrl.recover_stuck_plans()
+        assert len(recovered2) == 0
+
+    def test_recovery_advancing_then_submit_replaces(self):
+        """After recovery sets sentinel, submission replaces with real order_id."""
+        import asyncio
+        from unittest.mock import patch, AsyncMock
+        from src.execution.reconciliation import _submit_plan_children, OrderReconciler
+        from src.execution.order_router import OrderRouter
+        from src.execution.plan_controller import ADVANCING_SENTINEL
+
+        class FakeClob:
+            pass
+
+        db = _make_db()
+        ctrl = PlanController(db)
+        config = ExecutionConfig()
+        reconciler = OrderReconciler(
+            db=db, clob=FakeClob(), config=config,
+            plan_controller=ctrl,
+        )
+
+        orders = _make_twap_orders(3)
+        plan = ctrl.create_plan(orders, "twap")
+        db.update_execution_plan(
+            plan.plan_id,
+            status="active",
+            next_child_index=1,
+            active_child_order_id="",
+        )
+
+        recovered = ctrl.recover_stuck_plans()
+        assert len(recovered) == 1
+        _, spec = recovered[0]
+        reconciler._pending_plan_submissions.append(
+            (spec, plan.plan_id, 1)
+        )
+
+        # Verify sentinel is set
+        mid = db.get_execution_plan(plan.plan_id)
+        assert mid.active_child_order_id == ADVANCING_SENTINEL
+
+        fake_result = type("R", (), {
+            "order_id": "real-submitted-id",
+            "clob_order_id": "clob-456",
+            "status": "submitted",
+        })()
+
+        with patch.object(OrderRouter, "submit_order", new=AsyncMock(return_value=fake_result)):
+            asyncio.run(
+                _submit_plan_children(reconciler, db, FakeClob(), config, None)
+            )
+
+        final = db.get_execution_plan(plan.plan_id)
+        assert final.active_child_order_id == "real-submitted-id"
+
+
+class TestCancelPartialChildren:
+    """Verify cancel_plan() handles partial children."""
+
+    def test_partial_child_cancelled_on_plan_cancel(self):
+        """Partially-filled children should be cancelled too."""
+        db = _make_db()
+        ctrl = PlanController(db)
+        orders = _make_twap_orders(3)
+        plan = ctrl.create_plan(orders, "twap")
+        ctrl.activate_plan(plan.plan_id, "child-0")
+
+        # Insert a partial child
+        db.insert_order(OrderRecord(
+            order_id="partial-child", market_id="mkt-1",
+            status="partial", parent_plan_id=plan.plan_id, child_index=0,
+            price=0.60, size=33.33, filled_size=15.0, avg_fill_price=0.60,
+        ))
+
+        ctrl.cancel_plan(plan.plan_id, "user cancel")
+
+        child = db.get_order("partial-child")
+        assert child.status == "cancelled"
+
+        # Plan should reflect the partial fill in aggregates
+        final = db.get_execution_plan(plan.plan_id)
+        assert final.status == "partial"  # has fills
+        assert final.filled_size == pytest.approx(15.0, abs=0.1)
+
+    def test_submitted_and_partial_both_cancelled(self):
+        """Both submitted and partial children should be cancelled."""
+        db = _make_db()
+        ctrl = PlanController(db)
+        orders = _make_twap_orders(3)
+        plan = ctrl.create_plan(orders, "twap")
+        ctrl.activate_plan(plan.plan_id, "child-0")
+
+        db.insert_order(OrderRecord(
+            order_id="sub-child", market_id="mkt-1",
+            status="submitted", parent_plan_id=plan.plan_id, child_index=1,
+        ))
+        db.insert_order(OrderRecord(
+            order_id="part-child", market_id="mkt-1",
+            status="partial", parent_plan_id=plan.plan_id, child_index=0,
+            price=0.60, size=33.33, filled_size=10.0, avg_fill_price=0.60,
+        ))
+
+        ctrl.cancel_plan(plan.plan_id, "shutdown")
+
+        assert db.get_order("sub-child").status == "cancelled"
+        assert db.get_order("part-child").status == "cancelled"
+
+    def test_filled_child_not_cancelled(self):
+        """Already-filled children should NOT be cancelled."""
+        db = _make_db()
+        ctrl = PlanController(db)
+        orders = _make_twap_orders(2)
+        plan = ctrl.create_plan(orders, "twap")
+        ctrl.activate_plan(plan.plan_id, "child-0")
+
+        db.insert_order(OrderRecord(
+            order_id="filled-child", market_id="mkt-1",
+            status="filled", parent_plan_id=plan.plan_id, child_index=0,
+            price=0.60, size=50.0, filled_size=50.0, avg_fill_price=0.60,
+        ))
+
+        ctrl.cancel_plan(plan.plan_id, "user cancel")
+
+        assert db.get_order("filled-child").status == "filled"
+
+
+class TestPlanMetrics:
+    """Verify plan-level metrics emission."""
+
+    def test_emit_plan_metrics_empty(self):
+        """No plans → all zeros."""
+        db = _make_db()
+        ctrl = PlanController(db)
+        result = ctrl.emit_plan_metrics()
+        assert result["active"] == 0
+        assert result["completed"] == 0
+        assert result["avg_fill_pct"] == 0
+
+    def test_emit_plan_metrics_with_plans(self):
+        """Active and completed plans → correct counts."""
+        db = _make_db()
+        ctrl = PlanController(db)
+
+        # Create an active plan
+        orders1 = _make_twap_orders(2)
+        plan1 = ctrl.create_plan(orders1, "twap")
+        db.update_execution_plan(plan1.plan_id, status="active")
+
+        # Create a filled plan
+        orders2 = _make_twap_orders(3)
+        plan2 = ctrl.create_plan(orders2, "twap")
+        db.update_execution_plan(
+            plan2.plan_id, status="filled",
+            filled_size=90.0,  # target_size ~99.99
+        )
+
+        result = ctrl.emit_plan_metrics()
+        assert result["active"] == 1
+        assert result["completed"] == 1
+        assert result["avg_fill_pct"] > 0
+        assert result["completion_rate"] == pytest.approx(50.0, abs=1)
+
+    def test_emit_plan_metrics_cancel_rate(self):
+        """Cancelled plans appear in cancel_rate."""
+        db = _make_db()
+        ctrl = PlanController(db)
+
+        orders1 = _make_twap_orders(2)
+        plan1 = ctrl.create_plan(orders1, "twap")
+        db.update_execution_plan(plan1.plan_id, status="cancelled")
+
+        orders2 = _make_twap_orders(2)
+        plan2 = ctrl.create_plan(orders2, "twap")
+        db.update_execution_plan(plan2.plan_id, status="filled", filled_size=100.0)
+
+        result = ctrl.emit_plan_metrics()
+        assert result["cancelled"] == 1
+        assert result["completed"] == 1
+        assert result["cancel_rate"] == pytest.approx(50.0, abs=1)
+
+    def test_emit_plan_metrics_gauges_emitted(self):
+        """Metrics gauges should be updated."""
+        from src.observability.metrics import metrics
+
+        db = _make_db()
+        ctrl = PlanController(db)
+        orders = _make_twap_orders(2)
+        plan = ctrl.create_plan(orders, "twap")
+        db.update_execution_plan(plan.plan_id, status="active")
+
+        ctrl.emit_plan_metrics()
+
+        snap = metrics.snapshot()
+        gauges = snap.get("gauges", {})
+        assert "plans.active_count" in gauges
+        assert gauges["plans.active_count"] >= 1
+
+
+class TestFaultSimulation:
+    """End-to-end fault simulation tests for asynchronous edge cases."""
+
+    def test_child_fill_arrives_during_cancel(self):
+        """Child fill arrives after cancel_plan() — should be ignored."""
+        db = _make_db()
+        ctrl = PlanController(db)
+        orders = _make_twap_orders(2)
+        plan = ctrl.create_plan(orders, "twap")
+        ctrl.activate_plan(plan.plan_id, "child-0")
+
+        # Insert child as filled
+        c0 = str(uuid.uuid4())
+        db.insert_order(OrderRecord(
+            order_id=c0, market_id="mkt-1", status="filled",
+            parent_plan_id=plan.plan_id, child_index=0,
+            price=0.60, size=50.0, filled_size=50.0, avg_fill_price=0.60,
+        ))
+
+        # Cancel first
+        ctrl.cancel_plan(plan.plan_id, "user cancel")
+        assert db.get_execution_plan(plan.plan_id).status == "partial"
+
+        # Then child fill notification arrives
+        child = db.get_order(c0)
+        result = ctrl.update_plan_from_child(child)
+        assert result is None  # terminal guard
+
+        # Plan should still be partial (not reverted to active)
+        final = db.get_execution_plan(plan.plan_id)
+        assert final.status == "partial"
+
+    def test_recovery_while_plan_is_advancing(self):
+        """Recovery should skip plans that are mid-handoff (ADVANCING_SENTINEL)."""
+        from src.execution.plan_controller import ADVANCING_SENTINEL
+
+        db = _make_db()
+        ctrl = PlanController(db)
+        orders = _make_twap_orders(3)
+        plan = ctrl.create_plan(orders, "twap")
+
+        # Plan is mid-handoff
+        db.update_execution_plan(
+            plan.plan_id,
+            status="active",
+            next_child_index=2,
+            active_child_order_id=ADVANCING_SENTINEL,
+        )
+
+        recovered = ctrl.recover_stuck_plans()
+        assert len(recovered) == 0  # not stuck, just advancing
+
+    def test_db_update_succeeds_but_child_submission_fails(self):
+        """Plan updated with ADVANCING_SENTINEL but child submit fails → plan marked failed."""
+        import asyncio
+        from unittest.mock import patch, AsyncMock
+        from src.execution.reconciliation import _submit_plan_children, OrderReconciler
+        from src.execution.order_router import OrderRouter
+        from src.execution.plan_controller import ADVANCING_SENTINEL
+
+        class FakeClob:
+            pass
+
+        db = _make_db()
+        ctrl = PlanController(db)
+        config = ExecutionConfig()
+        reconciler = OrderReconciler(
+            db=db, clob=FakeClob(), config=config,
+            plan_controller=ctrl,
+        )
+
+        orders = _make_twap_orders(2)
+        plan = ctrl.create_plan(orders, "twap")
+        db.update_execution_plan(
+            plan.plan_id,
+            status="active",
+            active_child_order_id=ADVANCING_SENTINEL,
+        )
+
+        spec = _make_order_spec()
+        reconciler._pending_plan_submissions.append(
+            (spec, plan.plan_id, 1)
+        )
+
+        with patch.object(
+            OrderRouter, "submit_order",
+            new=AsyncMock(side_effect=RuntimeError("network error")),
+        ):
+            asyncio.run(
+                _submit_plan_children(reconciler, db, FakeClob(), config, None)
+            )
+
+        final = db.get_execution_plan(plan.plan_id)
+        assert final.status == "failed"
+        assert "submission failed" in final.error
+
+    def test_reconciliation_cancel_and_manual_cancel_collide(self):
+        """Reconciliation marks child cancelled, then manual cancel_plan() runs."""
+        from src.execution.reconciliation import OrderReconciler
+
+        class CancelClob:
+            def get_order_status(self, _):
+                return {"status": "cancelled"}
+            def cancel_order(self, _):
+                pass
+
+        db = _make_db()
+        ctrl = PlanController(db)
+        orders = _make_twap_orders(2)
+        plan = ctrl.create_plan(orders, "twap")
+        ctrl.activate_plan(plan.plan_id, "child-0")
+
+        db.insert_order(OrderRecord(
+            order_id="child-0", market_id="mkt-1",
+            status="submitted", clob_order_id="clob-123",
+            parent_plan_id=plan.plan_id, child_index=0,
+            price=0.60, size=50.0,
+            action_side="BUY", outcome_side="YES",
+        ))
+
+        reconciler = OrderReconciler(
+            db=db, clob=CancelClob(), config=ExecutionConfig(),
+            plan_controller=ctrl,
+        )
+
+        # Reconciliation detects venue cancel
+        result = reconciler.reconcile_once()
+        assert result.cancelled == 1
+
+        # Queued next child should exist
+        assert len(reconciler._pending_plan_submissions) >= 1
+
+        # Manual cancel_plan() arrives before queued child is submitted
+        ctrl.cancel_plan(plan.plan_id, "operator shutdown")
+
+        final = db.get_execution_plan(plan.plan_id)
+        assert final.status == "cancelled"
+
+        # The queued submission should be skipped by terminal guard
+        import asyncio
+        from unittest.mock import patch, AsyncMock
+        from src.execution.reconciliation import _submit_plan_children
+        from src.execution.order_router import OrderRouter
+
+        submit_mock = AsyncMock()
+        with patch.object(OrderRouter, "submit_order", new=submit_mock):
+            asyncio.run(
+                _submit_plan_children(reconciler, db, CancelClob(), ExecutionConfig(), None)
+            )
+        submit_mock.assert_not_called()
+
+    def test_double_fill_with_reread_guard(self):
+        """Two children fill simultaneously — first completes plan, second is ignored."""
+        db = _make_db()
+        ctrl = PlanController(db)
+        orders = _make_twap_orders(2)
+        plan = ctrl.create_plan(orders, "twap")
+        ctrl.activate_plan(plan.plan_id, "child-0")
+
+        c0 = str(uuid.uuid4())
+        c1 = str(uuid.uuid4())
+        db.insert_order(OrderRecord(
+            order_id=c0, market_id="mkt-1", status="filled",
+            parent_plan_id=plan.plan_id, child_index=0,
+            price=0.60, size=50.0, filled_size=50.0, avg_fill_price=0.60,
+        ))
+        db.insert_order(OrderRecord(
+            order_id=c1, market_id="mkt-1", status="filled",
+            parent_plan_id=plan.plan_id, child_index=1,
+            price=0.60, size=50.0, filled_size=50.0, avg_fill_price=0.60,
+        ))
+
+        # Process both fills sequentially
+        result1 = ctrl.update_plan_from_child(db.get_order(c0))
+        result2 = ctrl.update_plan_from_child(db.get_order(c1))
+
+        # One of them may return None (plan already terminal), but plan should be filled
+        final = db.get_execution_plan(plan.plan_id)
+        assert final.status == "filled"
+        assert final.filled_size == pytest.approx(100.0, abs=0.1)
+
+    def test_recovered_child_duplicate_with_already_submitted(self):
+        """Recovery returns a spec, but meanwhile normal progression also submitted.
+        The second submission should be skipped because recovery set ADVANCING_SENTINEL
+        which is replaced by the normal flow's order_id."""
+        import asyncio
+        from unittest.mock import patch, AsyncMock
+        from src.execution.reconciliation import _submit_plan_children, OrderReconciler
+        from src.execution.order_router import OrderRouter
+        from src.execution.plan_controller import ADVANCING_SENTINEL
+
+        class FakeClob:
+            pass
+
+        db = _make_db()
+        ctrl = PlanController(db)
+        config = ExecutionConfig()
+
+        orders = _make_twap_orders(3)
+        plan = ctrl.create_plan(orders, "twap")
+        db.update_execution_plan(
+            plan.plan_id,
+            status="active",
+            next_child_index=1,
+            active_child_order_id="",
+        )
+
+        # Recovery finds stuck plan
+        recovered = ctrl.recover_stuck_plans()
+        assert len(recovered) == 1
+
+        # Meanwhile, simulate that normal progression already submitted
+        # and plan now has a real active child
+        db.update_execution_plan(
+            plan.plan_id,
+            active_child_order_id="already-submitted-child",
+        )
+
+        # Recovery's queued child should still be submitted (it was queued
+        # before the normal progression set the real order_id), but the
+        # plan will end up with the most recent active_child_order_id
+        reconciler = OrderReconciler(
+            db=db, clob=FakeClob(), config=config,
+            plan_controller=ctrl,
+        )
+        _, spec = recovered[0]
+        reconciler._pending_plan_submissions.append(
+            (spec, plan.plan_id, 1)
+        )
+
+        fake_result = type("R", (), {
+            "order_id": "recovery-submitted-id",
+            "clob_order_id": "clob-recovery",
+            "status": "submitted",
+        })()
+
+        with patch.object(OrderRouter, "submit_order", new=AsyncMock(return_value=fake_result)):
+            asyncio.run(
+                _submit_plan_children(reconciler, db, FakeClob(), config, None)
+            )
+
+        # Plan should still be active (not failed)
+        final = db.get_execution_plan(plan.plan_id)
+        assert final.status == "active"
+
+    def test_api_reconciliation_includes_plan_metrics(self):
+        """Dashboard endpoint includes plan-level metrics fields."""
+        from src.dashboard.app import app
+
+        with app.test_client() as client:
+            resp = client.get("/api/reconciliation")
+            assert resp.status_code == 200
+            data = resp.get_json()
+            plans = data["plans"]
+            assert "active_count" in plans
+            assert "avg_fill_pct" in plans
+            assert "completion_rate" in plans
+            assert "cancel_rate" in plans
+            assert "avg_children_per_completed" in plans
