@@ -430,7 +430,7 @@ class ReplayEngine:
 
         Returns (exit_price, pnl).
         """
-        entry_with_slip = entry_price + slippage_pct
+        entry_with_slip = entry_price * (1 + slippage_pct)
         entry_with_slip = min(entry_with_slip, 0.99)
 
         if direction == "BUY_YES":

@@ -539,6 +539,15 @@ class EnsembleForecaster:
                 )
             successes = [fallback]
 
+        # Warn when ensemble is degraded (fewer than 2 models succeeded)
+        if len(successes) < 2 and len(self._ensemble.models) >= 2:
+            log.warning(
+                "ensemble.degraded_single_model",
+                succeeded=len(successes),
+                configured=len(self._ensemble.models),
+                model=successes[0].model_name if successes else "none",
+            )
+
         # Aggregate probabilities
         model_probs = [(f.model_name, f.model_probability) for f in successes]
         agg_prob, agg_method_used = self._aggregate(model_probs)

@@ -151,8 +151,8 @@ class TestComputeEdgeUncertainty:
         assert diff > 0.1  # significant increase
         assert diff <= _W_DECOMPOSITION  # capped by weight
 
-    def test_no_decomposition_uses_neutral(self) -> None:
-        """Empty sub_probs → 0.5 default → 0.2 × 0.5 = 0.1 contribution."""
+    def test_no_decomposition_uses_zero(self) -> None:
+        """Empty sub_probs → 0.0 default → no decomposition penalty."""
         inputs = UncertaintyInputs(
             ensemble_spread=0.0,
             evidence_quality=1.0,
@@ -160,10 +160,10 @@ class TestComputeEdgeUncertainty:
             model_probability=0.5,
         )
         score = compute_edge_uncertainty(inputs)
-        assert score == pytest.approx(0.1, abs=0.01)
+        assert score == pytest.approx(0.0, abs=0.01)
 
     def test_single_sub_question_zero_disagreement(self) -> None:
-        """One sub-prob → uses neutral (0.5) since std requires >= 2 samples."""
+        """One sub-prob → uses default 0.0 since std requires >= 2 samples."""
         inputs = UncertaintyInputs(
             ensemble_spread=0.0,
             evidence_quality=1.0,
@@ -172,8 +172,8 @@ class TestComputeEdgeUncertainty:
             decomposition_sub_probs=[0.7],
         )
         score = compute_edge_uncertainty(inputs)
-        # With single sub-prob, uses neutral 0.5 → 0.2 * 0.5 = 0.1
-        assert score == pytest.approx(0.1, abs=0.01)
+        # With single sub-prob, uses default 0.0 → no decomp penalty
+        assert score == pytest.approx(0.0, abs=0.01)
 
     def test_clamped_to_0_1(self) -> None:
         """Extreme inputs stay within [0, 1]."""

@@ -265,31 +265,40 @@ class TradingEngine:
 
             # Compute paper Sharpe from daily summaries (every 10 cycles)
             if self._cycle_count % 10 == 0:
-                try:
-                    rows = self._db.conn.execute(
-                        "SELECT total_pnl FROM daily_summaries "
-                        "ORDER BY summary_date DESC LIMIT 30"
-                    ).fetchall()
-                    if len(rows) >= 7:  # need at least a week of data
-                        import math
-                        pnls = [r["total_pnl"] for r in rows]
-                        mean_pnl = sum(pnls) / len(pnls)
-                        variance = sum((p - mean_pnl) ** 2 for p in pnls) / len(pnls)
-                        std = math.sqrt(variance) if variance > 0 else 0.0
-                        paper_sharpe = (mean_pnl / std) if std > 0 else 0.0
-                        self._db.set_engine_state(
-                            "paper_sharpe", str(round(paper_sharpe, 4)),
-                        )
-                except Exception:
-                    pass  # daily_summaries table may not exist yet
+                self._compute_paper_sharpe()
         except Exception as e:
             log.warning("engine.persist_state_error", error=str(e))
+
+    def _compute_paper_sharpe(self) -> None:
+        """Compute paper Sharpe from daily summaries and store in engine_state."""
+        if not self._db:
+            return
+        try:
+            rows = self._db.conn.execute(
+                "SELECT total_pnl FROM daily_summaries "
+                "ORDER BY summary_date DESC LIMIT 30"
+            ).fetchall()
+            if len(rows) >= 7:  # need at least a week of data
+                import math
+                pnls = [r["total_pnl"] for r in rows]
+                mean_pnl = sum(pnls) / len(pnls)
+                variance = sum((p - mean_pnl) ** 2 for p in pnls) / len(pnls)
+                std = math.sqrt(variance) if variance > 0 else 0.0
+                paper_sharpe = (mean_pnl / std) if std > 0 else 0.0
+                self._db.set_engine_state(
+                    "paper_sharpe", str(round(paper_sharpe, 4)),
+                )
+        except Exception:
+            pass  # daily_summaries table may not exist yet
 
     async def start(self) -> None:
         self._running = True
         interval = self.config.engine.cycle_interval_secs
         self._init_db()
         self._restore_kill_switch_state()
+
+        # Compute paper Sharpe at startup to avoid stale data
+        self._compute_paper_sharpe()
 
         # Phase 10B: Create shared exit finalizer
         if self._db:

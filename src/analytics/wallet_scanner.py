@@ -203,7 +203,7 @@ class WalletScanner:
         3. Detect position deltas (new entries / exits)
         4. Compute conviction signals (multi-whale consensus)
         """
-        now = dt.datetime.utcnow().isoformat() + "Z"
+        now = dt.datetime.now(dt.timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.%fZ")
         result = ScanResult(scanned_at=now)
 
         # Phase 1: Fetch all wallet positions
@@ -279,7 +279,7 @@ class WalletScanner:
             win_rate=win_rate,
             active_positions=len(positions),
             total_volume=total_invested,
-            last_scanned=dt.datetime.utcnow().isoformat() + "Z",
+            last_scanned=dt.datetime.now(dt.timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.%fZ"),
             score=min(score, 100),
         )
 

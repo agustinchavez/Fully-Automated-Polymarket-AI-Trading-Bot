@@ -25,8 +25,8 @@ _W_EVIDENCE_QUALITY = 0.25
 _W_BASE_RATE_DISTANCE = 0.25
 _W_DECOMPOSITION = 0.20
 
-# Default decomposition disagreement when no data available (neutral)
-_DEFAULT_DECOMPOSITION_DISAGREEMENT = 0.5
+# Default decomposition disagreement when decomposition is disabled (no penalty)
+_DEFAULT_DECOMPOSITION_DISAGREEMENT = 0.0
 
 # Maximum possible std_dev for probabilities in [0, 1]
 _MAX_PROB_STDDEV = 0.25

@@ -241,6 +241,7 @@ class PipelineRunner:
 
             # Select model tier based on opportunity characteristics
             ens_cfg = self.config.ensemble
+            tier_used = None
             if self.config.model_tiers.enabled:
                 rough_edge = abs(ctx.features.implied_probability - 0.5)
                 tier = select_tier(
@@ -253,6 +254,7 @@ class PipelineRunner:
                     models=tier.models,
                     reason=tier.reason,
                 )
+                tier_used = tier.tier
                 if tier.models != ens_cfg.models:
                     ens_cfg = ens_cfg.model_copy(
                         update={"models": tier.models},
@@ -383,6 +385,15 @@ class PipelineRunner:
                 log.info("engine.ensemble_low_evidence_penalty",
                          original=round(old_prob, 3),
                          adjusted=round(ctx.forecast.model_probability, 3))
+
+            # Scout tier confidence gate: reject LOW confidence scout forecasts
+            if tier_used == "scout" and ctx.forecast.confidence_level == "LOW":
+                log.info(
+                    "engine.scout_confidence_gate_rejected",
+                    market_id=ctx.market_id,
+                    confidence=ctx.forecast.confidence_level,
+                )
+                return False
         else:
             from src.forecast.llm_forecaster import LLMForecaster
             forecaster = LLMForecaster(self.config.forecasting)

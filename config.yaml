@@ -66,6 +66,7 @@ risk:
   max_holding_hours: 240
   min_stake_usd: 1.0
   min_annualized_edge: 0.15
+  use_probability_space_costs: true
   volatility_high_threshold: 0.15
   volatility_med_threshold: 0.1
   volatility_high_min_mult: 0.4

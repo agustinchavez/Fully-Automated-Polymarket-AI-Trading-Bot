@@ -63,20 +63,33 @@ class HistoricalDataScraper:
         try:
             while collected < max_markets:
                 batch_limit = min(batch_size, max_markets - collected)
-                try:
-                    markets = await client.list_markets(
-                        limit=batch_limit,
-                        offset=offset,
-                        active=False,
-                        closed=True,
-                        order="volume",
-                        ascending=False,
-                    )
-                except Exception as e:
-                    result.errors.append(f"API error at offset {offset}: {e}")
-                    log.error(
-                        "scraper.api_error", offset=offset, error=str(e),
-                    )
+                markets = None
+                for attempt in range(3):
+                    try:
+                        markets = await client.list_markets(
+                            limit=batch_limit,
+                            offset=offset,
+                            active=False,
+                            closed=True,
+                            order="volume",
+                            ascending=False,
+                        )
+                        break
+                    except Exception as e:
+                        if attempt < 2:
+                            wait = 1.0 * (2 ** attempt)  # 1s, 2s
+                            log.warning(
+                                "scraper.retry",
+                                offset=offset, attempt=attempt + 1, wait=wait,
+                                error=str(e),
+                            )
+                            time.sleep(wait)
+                        else:
+                            result.errors.append(f"API error at offset {offset}: {e}")
+                            log.error(
+                                "scraper.api_error", offset=offset, error=str(e),
+                            )
+                if markets is None:
                     break
 
                 if not markets:
@@ -144,17 +157,30 @@ class HistoricalDataScraper:
 
         try:
             while True:
-                try:
-                    markets = await client.list_markets(
-                        limit=100,
-                        offset=offset,
-                        active=False,
-                        closed=True,
-                        order="startDate",
-                        ascending=False,
-                    )
-                except Exception as e:
-                    result.errors.append(f"API error: {e}")
+                markets = None
+                for attempt in range(3):
+                    try:
+                        markets = await client.list_markets(
+                            limit=100,
+                            offset=offset,
+                            active=False,
+                            closed=True,
+                            order="startDate",
+                            ascending=False,
+                        )
+                        break
+                    except Exception as e:
+                        if attempt < 2:
+                            wait = 1.0 * (2 ** attempt)
+                            log.warning(
+                                "scraper.recent_retry",
+                                offset=offset, attempt=attempt + 1, wait=wait,
+                                error=str(e),
+                            )
+                            time.sleep(wait)
+                        else:
+                            result.errors.append(f"API error: {e}")
+                if markets is None:
                     break
 
                 if not markets:

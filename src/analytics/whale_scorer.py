@@ -137,7 +137,7 @@ class WhaleScorer:
         """Score a single wallet on all dimensions."""
         address = wallet.address
         name = getattr(wallet, "name", "")
-        now = dt.datetime.utcnow().isoformat() + "Z"
+        now = dt.datetime.now(dt.timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.%fZ")
 
         roi = self._compute_historical_roi(address)
         cal, timing = self._compute_calibration(address)
@@ -146,8 +146,8 @@ class WhaleScorer:
 
         # Count trades in lookback
         cutoff = (
-            dt.datetime.utcnow() - dt.timedelta(days=self._lookback_days)
-        ).isoformat() + "Z"
+            dt.datetime.now(dt.timezone.utc) - dt.timedelta(days=self._lookback_days)
+        ).strftime("%Y-%m-%dT%H:%M:%S.%fZ")
         try:
             row = self._conn.execute(
                 "SELECT COUNT(*) FROM wallet_deltas WHERE wallet_address = ? AND detected_at >= ?",
@@ -181,8 +181,8 @@ class WhaleScorer:
         Normalizes: -50% ROI → 0, +100% ROI → 100, linear interpolation.
         """
         cutoff = (
-            dt.datetime.utcnow() - dt.timedelta(days=self._lookback_days)
-        ).isoformat() + "Z"
+            dt.datetime.now(dt.timezone.utc) - dt.timedelta(days=self._lookback_days)
+        ).strftime("%Y-%m-%dT%H:%M:%S.%fZ")
         try:
             rows = self._conn.execute(
                 """SELECT action, value_change_usd
@@ -398,7 +398,7 @@ class WhaleScorer:
         direction: str,
     ) -> None:
         """Record a price snapshot when a whale enters a position."""
-        now = dt.datetime.utcnow().isoformat() + "Z"
+        now = dt.datetime.now(dt.timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.%fZ")
         conn.execute(
             """INSERT INTO whale_price_snapshots
                (wallet_address, market_slug, outcome, entry_price,
@@ -421,8 +421,8 @@ class WhaleScorer:
             Number of snapshots updated.
         """
         cutoff = (
-            dt.datetime.utcnow() - dt.timedelta(hours=24)
-        ).isoformat() + "Z"
+            dt.datetime.now(dt.timezone.utc) - dt.timedelta(hours=24)
+        ).strftime("%Y-%m-%dT%H:%M:%S.%fZ")
 
         try:
             rows = conn.execute(

@@ -97,6 +97,7 @@ class OrderRouter:
                 signing = self._clob.get_signing_client()
 
                 # Slippage guard: reject if price deviates beyond tolerance
+                actual_price = order.price  # reference price for fill accounting
                 if order.order_type == "limit":
                     resp = signing.create_and_post_order(
                         token_id=order.token_id,
@@ -107,14 +108,14 @@ class OrderRouter:
                 else:
                     # Market order: use aggressive pricing with slippage tolerance
                     slippage = self._config.slippage_tolerance
-                    aggressive_price = (
+                    actual_price = (
                         min(order.price * (1 + slippage), 0.99)
                         if order.side == "BUY"
                         else max(order.price * (1 - slippage), 0.01)
                     )
                     resp = signing.create_and_post_order(
                         token_id=order.token_id,
-                        price=aggressive_price,
+                        price=actual_price,
                         size=order.size,
                         side=order.side,
                     )
@@ -127,7 +128,7 @@ class OrderRouter:
                 )
                 metrics.incr("orders.submitted")
 
-                return _parse_clob_response(resp, order, ts)
+                return _parse_clob_response(resp, order, ts, actual_price)
 
             except Exception as e:
                 last_error = str(e)
@@ -165,8 +166,13 @@ def _parse_clob_response(
     resp: Any,
     order: OrderSpec,
     timestamp: str,
+    actual_price: float | None = None,
 ) -> OrderResult:
     """Parse the py-clob-client response into a structured OrderResult.
+
+    Args:
+        actual_price: The price actually submitted to the exchange (may differ from
+            order.price for market orders that use aggressive pricing).
 
     The CLOB response typically contains:
       - orderID (str): exchange-assigned order ID
@@ -198,9 +204,10 @@ def _parse_clob_response(
         except (TypeError, ValueError):
             taking_value = 0.0
 
-        if taking_value > 0 and order.price > 0:
-            fill_size = taking_value / order.price
-            fill_price = order.price
+        ref_price = actual_price if actual_price else order.price
+        if taking_value > 0 and ref_price > 0:
+            fill_size = taking_value / ref_price
+            fill_price = ref_price
             # Guard: fill_size should never exceed order size by more than 1%
             if fill_size > order.size * 1.01:
                 log.warning(
@@ -210,7 +217,7 @@ def _parse_clob_response(
                     order_size=order.size,
                 )
                 fill_size = order.size
-        elif taking_value > 0 and order.price <= 0:
+        elif taking_value > 0 and ref_price <= 0:
             # Cannot derive fill_size without a reference price
             log.warning(
                 "order_router.missing_reference_price",
