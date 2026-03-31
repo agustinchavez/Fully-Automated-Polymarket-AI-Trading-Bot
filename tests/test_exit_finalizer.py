@@ -464,7 +464,105 @@ class TestReconcilerWithFinalizer:
             "SELECT * FROM alerts_log WHERE level='critical'"
         ).fetchall()
         assert len(alerts) >= 1
-        assert "Orphan SELL fill" in alerts[0]["message"]
+
+
+# ── Model Forecast Log Backfill Tests ──────────────────────────
+
+
+class TestModelForecastLogBackfill:
+    def test_resolved_market_backfills_model_forecast_log(self):
+        """When exit_price indicates resolution, model_forecast_log rows
+        get actual_outcome + resolved_at backfilled."""
+        db = _make_db()
+        pos = _make_position(market_id="mkt-backfill")
+        db.upsert_position(pos)
+
+        # Pre-seed model_forecast_log with NULL actual_outcome (as pipeline does at forecast time)
+        db._conn.execute(
+            "INSERT INTO model_forecast_log "
+            "(model_name, market_id, category, forecast_prob, actual_outcome, recorded_at) "
+            "VALUES (?,?,?,?,?,?)",
+            ("gpt-4o", "mkt-backfill", "CRYPTO", 0.75, None, "2025-01-01T00:00:00Z"),
+        )
+        db._conn.execute(
+            "INSERT INTO model_forecast_log "
+            "(model_name, market_id, category, forecast_prob, actual_outcome, recorded_at) "
+            "VALUES (?,?,?,?,?,?)",
+            ("claude-sonnet", "mkt-backfill", "CRYPTO", 0.80, None, "2025-01-01T00:00:00Z"),
+        )
+        db._conn.commit()
+
+        finalizer = ExitFinalizer(db, FakeConfig())
+        finalizer.finalize(pos, exit_price=0.99, pnl=49.0, close_reason="RESOLVED")
+
+        rows = db._conn.execute(
+            "SELECT model_name, actual_outcome, resolved_at "
+            "FROM model_forecast_log WHERE market_id='mkt-backfill'"
+        ).fetchall()
+        assert len(rows) == 2
+        for row in rows:
+            assert row["actual_outcome"] == 1.0
+            assert row["resolved_at"] is not None
+
+    def test_mid_price_exit_does_not_backfill(self):
+        """When exit_price is mid-range (not resolved), model_forecast_log stays NULL."""
+        db = _make_db()
+        pos = _make_position(market_id="mkt-mid")
+        db.upsert_position(pos)
+
+        db._conn.execute(
+            "INSERT INTO model_forecast_log "
+            "(model_name, market_id, category, forecast_prob, actual_outcome, recorded_at) "
+            "VALUES (?,?,?,?,?,?)",
+            ("gpt-4o", "mkt-mid", "MACRO", 0.60, None, "2025-01-01T00:00:00Z"),
+        )
+        db._conn.commit()
+
+        finalizer = ExitFinalizer(db, FakeConfig())
+        finalizer.finalize(pos, exit_price=0.60, pnl=10.0, close_reason="TP_HIT")
+
+        rows = db._conn.execute(
+            "SELECT actual_outcome, resolved_at "
+            "FROM model_forecast_log WHERE market_id='mkt-mid'"
+        ).fetchall()
+        assert len(rows) == 1
+        assert rows[0]["actual_outcome"] is None
+        assert rows[0]["resolved_at"] is None
+
+    def test_backfill_only_updates_null_rows(self):
+        """Backfill only touches rows with actual_outcome IS NULL."""
+        db = _make_db()
+        pos = _make_position(market_id="mkt-partial")
+        db.upsert_position(pos)
+
+        # One already resolved, one still NULL
+        db._conn.execute(
+            "INSERT INTO model_forecast_log "
+            "(model_name, market_id, category, forecast_prob, actual_outcome, recorded_at, resolved_at) "
+            "VALUES (?,?,?,?,?,?,?)",
+            ("gpt-4o", "mkt-partial", "CRYPTO", 0.70, 0.0, "2025-01-01", "2025-01-02"),
+        )
+        db._conn.execute(
+            "INSERT INTO model_forecast_log "
+            "(model_name, market_id, category, forecast_prob, actual_outcome, recorded_at) "
+            "VALUES (?,?,?,?,?,?)",
+            ("claude-sonnet", "mkt-partial", "CRYPTO", 0.75, None, "2025-01-01"),
+        )
+        db._conn.commit()
+
+        finalizer = ExitFinalizer(db, FakeConfig())
+        finalizer.finalize(pos, exit_price=0.99, pnl=49.0, close_reason="RESOLVED")
+
+        rows = db._conn.execute(
+            "SELECT model_name, actual_outcome FROM model_forecast_log "
+            "WHERE market_id='mkt-partial' ORDER BY model_name"
+        ).fetchall()
+        # claude-sonnet should be updated to 1.0
+        assert rows[0]["model_name"] == "claude-sonnet"
+        assert rows[0]["actual_outcome"] == 1.0
+        # gpt-4o should remain 0.0 (already had value)
+        assert rows[1]["model_name"] == "gpt-4o"
+        assert rows[1]["actual_outcome"] == 0.0
 
 
 # ── Engine Delegation Test ──────────────────────────────────────

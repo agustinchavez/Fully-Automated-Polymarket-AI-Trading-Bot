@@ -148,6 +148,17 @@ class ExitFinalizer:
                 holding_hours=round(holding_hours, 1),
                 category=category,
             )
+
+            # Backfill model_forecast_log with actual outcome
+            if actual_outcome is not None:
+                resolved_at = _dt.datetime.now(_dt.timezone.utc).isoformat()
+                self._db.conn.execute(
+                    "UPDATE model_forecast_log "
+                    "SET actual_outcome = ?, resolved_at = ? "
+                    "WHERE market_id = ? AND actual_outcome IS NULL",
+                    (actual_outcome, resolved_at, pos.market_id),
+                )
+                self._db.conn.commit()
         except Exception as e:
             log.warning("exit_finalizer.performance_log_error", error=str(e))
 

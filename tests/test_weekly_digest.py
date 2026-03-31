@@ -447,3 +447,52 @@ class TestSchedulerWiring:
         bot = TelegramKillBot(token="test", chat_id="123")
         bot._start_scheduler()
         assert bot._scheduler is None
+
+
+# ── Markdown Escape Tests ──────────────────────────────────────
+
+
+class TestMarkdownEscape:
+    def test_escape_md_asterisk(self) -> None:
+        from src.observability.reports import _escape_md
+        assert _escape_md("Will *BTC* rise?") == r"Will \*BTC\* rise?"
+
+    def test_escape_md_brackets(self) -> None:
+        from src.observability.reports import _escape_md
+        assert _escape_md("Will [BTC] hit $100k?") == r"Will \[BTC] hit $100k?"
+
+    def test_escape_md_underscore(self) -> None:
+        from src.observability.reports import _escape_md
+        assert _escape_md("some_variable_name") == r"some\_variable\_name"
+
+    def test_escape_md_backtick(self) -> None:
+        from src.observability.reports import _escape_md
+        assert _escape_md("code `block`") == r"code \`block\`"
+
+    def test_best_worst_trade_escapes_question(self) -> None:
+        """best_trade and worst_trade strings have Markdown chars escaped."""
+        from src.observability.reports import WeeklyDigestGenerator
+        conn = _create_test_db()
+        today = dt.datetime.now(dt.timezone.utc)
+        # Populate min data days
+        for i in range(5):
+            d = (today - dt.timedelta(days=i)).strftime("%Y-%m-%d")
+            conn.execute(
+                "INSERT INTO daily_summaries "
+                "(summary_date, total_pnl, realized_pnl) VALUES (?,?,?)",
+                (d, 5.0, 5.0),
+            )
+        # Insert a trade with Markdown-special question
+        d = today.strftime("%Y-%m-%d")
+        conn.execute(
+            "INSERT INTO performance_log "
+            "(market_id, question, pnl, stake_usd, resolved_at) "
+            "VALUES (?,?,?,?,?)",
+            ("mkt-md", "Will [BTC] hit *$100k* before_halving?", 10.0, 50.0, d),
+        )
+        conn.commit()
+        gen = WeeklyDigestGenerator(conn, bankroll=5000.0)
+        digest = gen.generate(days=7)
+        # The asterisks and brackets should be escaped
+        assert r"\*" in digest.best_trade
+        assert r"\[" in digest.best_trade

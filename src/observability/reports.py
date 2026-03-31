@@ -25,6 +25,13 @@ MIN_TRADES_FOR_MODEL_ACCURACY = 10
 TELEGRAM_MAX_LEN = 4096
 
 
+def _escape_md(text: str) -> str:
+    """Escape Telegram MarkdownV1 special characters."""
+    for ch in ("*", "_", "`", "["):
+        text = text.replace(ch, f"\\{ch}")
+    return text
+
+
 # ── Digest Dataclasses ───────────────────────────────────────────────
 
 
@@ -372,7 +379,7 @@ class WeeklyDigestGenerator:
                 (start, end),
             ).fetchone()
             if best:
-                d.best_trade = f"{best['question'][:60]} +${best['pnl']:.2f}"
+                d.best_trade = f"{_escape_md(best['question'][:60])} +${best['pnl']:.2f}"
         except sqlite3.OperationalError:
             pass
 
@@ -384,7 +391,7 @@ class WeeklyDigestGenerator:
                 (start, end),
             ).fetchone()
             if worst:
-                d.worst_trade = f"{worst['question'][:60]} ${worst['pnl']:.2f}"
+                d.worst_trade = f"{_escape_md(worst['question'][:60])} ${worst['pnl']:.2f}"
         except sqlite3.OperationalError:
             pass
 
