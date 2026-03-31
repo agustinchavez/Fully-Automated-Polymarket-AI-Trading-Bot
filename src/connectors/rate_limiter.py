@@ -35,6 +35,11 @@ DEFAULT_LIMITS: dict[str, BucketConfig] = {
     "open_meteo": BucketConfig(tokens_per_second=2.0, max_burst=5, name="Open-Meteo"),
     "binance": BucketConfig(tokens_per_second=5.0, max_burst=10, name="Binance"),
     "kalshi": BucketConfig(tokens_per_second=3.0, max_burst=6, name="Kalshi"),
+    "fred": BucketConfig(tokens_per_second=2.0, max_burst=4, name="FRED"),
+    "coingecko": BucketConfig(tokens_per_second=0.5, max_burst=2, name="CoinGecko"),
+    "congress": BucketConfig(tokens_per_second=1.4, max_burst=3, name="Congress.gov"),
+    "gdelt": BucketConfig(tokens_per_second=1.0, max_burst=3, name="GDELT"),
+    "courtlistener": BucketConfig(tokens_per_second=1.0, max_burst=3, name="CourtListener"),
 }
 
 

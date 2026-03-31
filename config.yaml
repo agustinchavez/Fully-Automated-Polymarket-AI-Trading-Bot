@@ -28,6 +28,16 @@ research:
   min_corroborating_sources: 2
   stale_days_penalty_threshold: 7
   stale_days_heavy_penalty: 30
+  fred_enabled: false
+  congress_enabled: false
+  courtlistener_enabled: false
+  coingecko_enabled: false
+  openmeteo_enabled: true
+  gdelt_enabled: true
+  fred_max_series: 3
+  congress_max_bills: 5
+  coingecko_max_coins: 3
+  gdelt_timespan_days: 7
 forecasting:
   llm_model: gpt-4o
   evidence_model: gpt-4o-mini

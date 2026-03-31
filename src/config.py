@@ -53,6 +53,18 @@ class ResearchConfig(BaseModel):
     stale_days_penalty_threshold: int = 7
     stale_days_heavy_penalty: int = 30
 
+    # Structured API connectors
+    fred_enabled: bool = False
+    congress_enabled: bool = False
+    courtlistener_enabled: bool = False
+    coingecko_enabled: bool = False
+    openmeteo_enabled: bool = True
+    gdelt_enabled: bool = True
+    fred_max_series: int = 3
+    congress_max_bills: int = 5
+    coingecko_max_coins: int = 3
+    gdelt_timespan_days: int = 7
+
 
 class ForecastingConfig(BaseModel):
     llm_model: str = "gpt-4o"
@@ -600,6 +612,8 @@ _SECRET_FIELDS = frozenset({
     "telegram_bot_token", "discord_webhook_url", "slack_webhook_url",
     "email_smtp_password", "kalshi_api_key_id", "kalshi_private_key_path",
     "telegram_kill_token", "sentry_dsn",
+    "fred_api_key", "coingecko_api_key", "congress_api_key",
+    "courtlistener_api_key",
 })
 
 

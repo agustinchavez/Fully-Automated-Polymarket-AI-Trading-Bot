@@ -68,16 +68,57 @@ class SourceFetcher:
     async def close(self) -> None:
         await self._http.aclose()
 
+    async def fetch_structured_sources(
+        self,
+        question: str,
+        market_type: str,
+    ) -> list[FetchedSource]:
+        """Fetch from structured API connectors before web search.
+
+        Returns a list of ``FetchedSource`` with ``extraction_method='api'``.
+        Failures are swallowed per-connector — never raises.
+        """
+        from src.research.connectors.registry import get_enabled_connectors
+
+        connectors = get_enabled_connectors(self._config)
+        if not connectors:
+            return []
+
+        results: list[FetchedSource] = []
+        for conn in connectors:
+            if market_type in conn.relevant_categories() or conn.is_relevant(question, market_type):
+                sources = await conn.fetch(question, market_type)
+                results.extend(sources)
+        return results
+
     async def fetch_sources(
         self,
         queries: list[SearchQuery],
         market_type: str = "UNKNOWN",
         max_sources: int | None = None,
+        market_question: str = "",
     ) -> list[FetchedSource]:
         """Run all queries, filter, de-dup, rank, fetch content, return top sources."""
         max_sources = max_sources or self._config.max_sources
         seen_urls: set[str] = set()
         all_sources: list[FetchedSource] = []
+
+        # ── Structured API sources (run before web search) ───────
+        if market_question:
+            structured = await self.fetch_structured_sources(
+                market_question, market_type,
+            )
+            for src in structured:
+                canonical = _canonical_url(src.url)
+                if canonical not in seen_urls:
+                    seen_urls.add(canonical)
+                    all_sources.append(src)
+            if structured:
+                log.info(
+                    "source_fetcher.structured_sources",
+                    count=len(structured),
+                    market_type=market_type,
+                )
 
         primary = self._config.primary_domains.get(market_type, [])
         secondary = self._config.secondary_domains

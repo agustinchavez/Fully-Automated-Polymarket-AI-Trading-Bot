@@ -1,0 +1,135 @@
+"""GDELT research connector — global news volume/tone for broad market types.
+
+Uses the free GDELT 2.0 DOC API (no key required) to fetch news volume
+timelines and detect coverage spikes for prediction market questions.
+"""
+
+from __future__ import annotations
+
+import re
+from typing import Any
+
+from src.connectors.rate_limiter import rate_limiter
+from src.observability.logger import get_logger
+from src.research.connectors.base import BaseResearchConnector
+from src.research.source_fetcher import FetchedSource
+
+log = get_logger(__name__)
+
+_GDELT_BASE = "https://api.gdeltproject.org/api/v2/doc/doc"
+
+# Broad category coverage — GDELT is useful for most market types
+_RELEVANT_CATEGORIES: set[str] = {
+    "MACRO", "ELECTION", "CORPORATE", "LEGAL", "GEOPOLITICS",
+}
+
+
+class GdeltConnector(BaseResearchConnector):
+    """Fetch news volume/tone data from the GDELT 2.0 DOC API."""
+
+    @property
+    def name(self) -> str:
+        return "gdelt"
+
+    def relevant_categories(self) -> set[str]:
+        return _RELEVANT_CATEGORIES
+
+    def is_relevant(self, question: str, market_type: str) -> bool:
+        return market_type in self.relevant_categories()
+
+    async def _fetch_impl(
+        self,
+        question: str,
+        market_type: str,
+    ) -> list[FetchedSource]:
+        if not self.is_relevant(question, market_type):
+            return []
+
+        timespan_days = getattr(self._config, "gdelt_timespan_days", 7)
+        search_term = self._extract_topic(question)
+        if not search_term:
+            return []
+
+        return await self._fetch_timeline(search_term, timespan_days)
+
+    def _extract_topic(self, question: str) -> str:
+        """Extract core topic from question for GDELT search."""
+        q = question.strip().rstrip("?")
+        q = re.sub(
+            r"^(Will|Is|Does|Has|Are|Do|Can|Should)\s+(the\s+)?",
+            "", q, flags=re.I,
+        )
+        q = re.sub(r"\s+(by|before|after|in)\s+\d{4}.*$", "", q, flags=re.I)
+        return q.strip()[:80]
+
+    async def _fetch_timeline(
+        self,
+        search_term: str,
+        timespan_days: int,
+    ) -> list[FetchedSource]:
+        """Fetch news volume timeline from GDELT."""
+        await rate_limiter.get("gdelt").acquire()
+
+        client = self._get_client()
+        resp = await client.get(
+            _GDELT_BASE,
+            params={
+                "query": search_term,
+                "mode": "timelinevol",
+                "timespan": f"{timespan_days}d",
+                "format": "json",
+            },
+        )
+        resp.raise_for_status()
+        data = resp.json()
+
+        timeline = data.get("timeline", [])
+        if not timeline:
+            return []
+
+        # First series in timeline
+        series = timeline[0].get("data", [])
+        if not series:
+            return []
+
+        # Extract volume values and detect spikes
+        volumes = [point.get("value", 0) for point in series]
+        dates = [point.get("date", "") for point in series]
+
+        if not volumes:
+            return []
+
+        avg_vol = sum(volumes) / len(volumes) if volumes else 0
+        max_vol = max(volumes)
+        spike_detected = max_vol > (avg_vol * 2) if avg_vol > 0 else False
+
+        # Find peak date
+        peak_idx = volumes.index(max_vol)
+        peak_date = dates[peak_idx] if peak_idx < len(dates) else ""
+
+        spike_text = "SPIKE DETECTED" if spike_detected else "No spike"
+        content = (
+            f"GDELT News Volume: {search_term}\n"
+            f"Period: last {timespan_days} days\n"
+            f"Average daily volume: {avg_vol:.1f}\n"
+            f"Peak volume: {max_vol:.1f} ({peak_date})\n"
+            f"Volume spike: {spike_text}\n"
+            f"Data points: {len(volumes)}\n"
+            f"Source: GDELT Project (global news monitoring)"
+        )
+
+        snippet = (
+            f"News volume for '{search_term}': "
+            f"avg={avg_vol:.0f}, peak={max_vol:.0f} — {spike_text}"
+        )
+
+        return [
+            self._make_source(
+                title=f"GDELT: News Volume — {search_term[:40]}",
+                url=f"https://api.gdeltproject.org/api/v2/doc/doc?query={search_term}&mode=timelinevol",
+                snippet=snippet,
+                publisher="GDELT Project",
+                content=content,
+                authority_score=0.4,  # Aggregator, not primary source
+            )
+        ]

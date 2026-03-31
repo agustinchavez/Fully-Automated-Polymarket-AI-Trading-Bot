@@ -127,6 +127,7 @@ class PipelineRunner:
                 queries,
                 market_type=ctx.classification.category or ctx.market.market_type,
                 max_sources=self.config.research.max_sources,
+                market_question=ctx.question,
             )
             extractor = EvidenceExtractor(self.config.forecasting)
             ctx.evidence = await extractor.extract(
