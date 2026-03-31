@@ -412,6 +412,7 @@ class TelegramKillBot:
             analyst = AIAnalyst(
                 conn=self._engine._db.conn,
                 config=analyst_cfg,
+                bot_config=config,
             )
             result = await analyst.analyse(days=days)
             if not result.data_sufficient:

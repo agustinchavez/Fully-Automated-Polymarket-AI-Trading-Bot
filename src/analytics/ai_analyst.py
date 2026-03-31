@@ -18,7 +18,7 @@ import time
 from dataclasses import dataclass, field
 from typing import Any
 
-from src.config import AnalystConfig
+from src.config import AnalystConfig, BotConfig
 from src.observability.logger import get_logger
 
 log = get_logger(__name__)
@@ -197,9 +197,11 @@ class AIAnalyst:
         self,
         conn: sqlite3.Connection,
         config: AnalystConfig,
+        bot_config: BotConfig | None = None,
     ) -> None:
         self._conn = conn
         self._config = config
+        self._bot_config = bot_config
 
     def assemble_context(self, days: int = 30) -> AnalystContext:
         """Assemble performance data into a context for the AI prompt."""
@@ -337,13 +339,22 @@ class AIAnalyst:
         except sqlite3.OperationalError:
             pass
 
-        # Config snapshot
-        ctx.config_snapshot = (
-            f"Config: provider={self._config.provider}, "
-            f"model={self._config.model}, "
-            f"min_resolved_trades={self._config.min_resolved_trades}, "
-            f"min_data_days={self._config.min_data_days}"
-        )
+        # Config snapshot — trading config for actionable recommendations
+        if self._bot_config:
+            bc = self._bot_config
+            ctx.config_snapshot = (
+                f"Trading config: min_edge={bc.risk.min_edge}, "
+                f"kelly_fraction={bc.risk.kelly_fraction}, "
+                f"max_stake={bc.risk.max_stake_per_market}, "
+                f"min_confidence={bc.forecasting.min_confidence_level}, "
+                f"transaction_fee={bc.risk.transaction_fee_pct}, "
+                f"ensemble_models={bc.ensemble.models}, "
+                f"aggregation={bc.ensemble.aggregation}, "
+                f"tier_routing={'on' if bc.model_tiers.enabled else 'off'}, "
+                f"premium_min_edge={bc.model_tiers.premium_min_edge}"
+            )
+        else:
+            ctx.config_snapshot = ""
 
         return ctx
 

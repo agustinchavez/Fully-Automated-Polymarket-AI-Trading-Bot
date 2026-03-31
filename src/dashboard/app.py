@@ -8315,7 +8315,7 @@ def api_insights_ai_analysis_get() -> Any:
     try:
         cfg = _get_config()
         from src.analytics.ai_analyst import AIAnalyst
-        analyst = AIAnalyst(conn=conn, config=cfg.analyst)
+        analyst = AIAnalyst(conn=conn, config=cfg.analyst, bot_config=cfg)
         result = analyst.get_cached_result()
         if result:
             return jsonify(result.to_dict())
@@ -8335,7 +8335,7 @@ def api_insights_ai_analysis_post() -> Any:
         if not cfg.analyst.enabled:
             return jsonify({"error": "AI analyst is disabled"}), 400
         from src.analytics.ai_analyst import AIAnalyst
-        analyst = AIAnalyst(conn=conn, config=cfg.analyst)
+        analyst = AIAnalyst(conn=conn, config=cfg.analyst, bot_config=cfg)
         if not analyst._check_rate_limit():
             remaining = 0
             try:

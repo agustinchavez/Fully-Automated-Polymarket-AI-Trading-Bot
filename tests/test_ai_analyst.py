@@ -259,6 +259,59 @@ class TestContextAssembly:
         assert ctx.category_stats  # non-empty
         assert ctx.model_stats  # non-empty
 
+    def test_null_sentinel_excluded_from_model_stats(self) -> None:
+        """Rows with actual_outcome=NULL are excluded from model accuracy queries."""
+        from src.analytics.ai_analyst import AIAnalyst
+        conn = _create_test_db()
+        _populate_test_db(conn, days=30, trades=60)
+        # Insert unresolved rows (NULL actual_outcome, like pipeline does now)
+        today = dt.datetime.now(dt.timezone.utc).strftime("%Y-%m-%d")
+        for i in range(50):
+            conn.execute(
+                "INSERT INTO model_forecast_log "
+                "(model_name, market_id, forecast_prob, actual_outcome, recorded_at) "
+                "VALUES (?,?,?,?,?)",
+                ("gpt-4o", f"unresolved_{i}", 0.99, None, today),
+            )
+        conn.commit()
+        cfg = _make_config()
+        analyst = AIAnalyst(conn=conn, config=cfg)
+        ctx = analyst.assemble_context(days=30)
+        # The 50 NULL rows should NOT inflate gpt-4o's Brier score
+        # With the old -1.0 sentinel, (0.99 - (-1.0))^2 = 3.96 would corrupt the score
+        assert "gpt-4o" in ctx.model_stats
+        # Brier for resolved rows should be < 0.5 (reasonable)
+        for line in ctx.model_stats.split("\n"):
+            if "gpt-4o" in line and "Brier" in line:
+                brier_str = line.split("Brier")[1].split(",")[0].strip()
+                brier_val = float(brier_str)
+                assert brier_val < 0.5, f"Brier {brier_val} too high — NULL rows may be leaking"
+
+    def test_config_snapshot_with_bot_config(self) -> None:
+        """Config snapshot contains trading config when bot_config is passed."""
+        from src.analytics.ai_analyst import AIAnalyst
+        from src.config import BotConfig
+        conn = _create_test_db()
+        _populate_test_db(conn, days=30, trades=60)
+        cfg = _make_config()
+        bot_cfg = BotConfig()
+        analyst = AIAnalyst(conn=conn, config=cfg, bot_config=bot_cfg)
+        ctx = analyst.assemble_context(days=30)
+        assert "min_edge=" in ctx.config_snapshot
+        assert "kelly_fraction=" in ctx.config_snapshot
+        assert "min_confidence=" in ctx.config_snapshot
+        assert "ensemble_models=" in ctx.config_snapshot
+
+    def test_config_snapshot_without_bot_config(self) -> None:
+        """Config snapshot is empty when bot_config is not passed."""
+        from src.analytics.ai_analyst import AIAnalyst
+        conn = _create_test_db()
+        _populate_test_db(conn, days=30, trades=60)
+        cfg = _make_config()
+        analyst = AIAnalyst(conn=conn, config=cfg)
+        ctx = analyst.assemble_context(days=30)
+        assert ctx.config_snapshot == ""
+
     def test_context_empty_db(self) -> None:
         """Context marks data_sufficient=False for empty DB."""
         from src.analytics.ai_analyst import AIAnalyst

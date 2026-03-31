@@ -1212,7 +1212,7 @@ class PipelineRunner:
                     """, (
                         model_name, ctx.market_id,
                         ctx.classification.category if ctx.classification else "UNKNOWN",
-                        prob, -1.0,
+                        prob, None,
                         time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
                     ))
                     self._db.conn.commit()
