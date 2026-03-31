@@ -141,7 +141,9 @@ def research(ctx: click.Context, market_id: str) -> None:
             market = await gamma.get_market(market_id)
             queries = build_queries(market)
             sources = await fetcher.fetch_sources(
-                queries, market_type=market.market_type
+                queries,
+                market_type=market.market_type,
+                market_question=market.question,
             )
             evidence = await extractor.extract(
                 market.id, market.question, sources,
@@ -212,7 +214,9 @@ def forecast(ctx: click.Context, market_id: str) -> None:
             console.print("\n[cyan]🔍 Researching...[/cyan]")
             queries = build_queries(market)
             sources = await fetcher.fetch_sources(
-                queries, market_type=market.market_type
+                queries,
+                market_type=market.market_type,
+                market_question=market.question,
             )
             evidence = await extractor.extract(
                 market.id, market.question, sources,

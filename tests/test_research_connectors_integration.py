@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import asyncio
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
@@ -145,10 +145,7 @@ class TestSourceFetcherIntegration:
         )
         assert src.authority_score == 0.4
 
-    @patch("src.research.connectors.registry.get_enabled_connectors")
-    def test_fetch_structured_sources_calls_relevant_connectors(
-        self, mock_get_connectors: MagicMock,
-    ) -> None:
+    def test_fetch_structured_sources_calls_relevant_connectors(self) -> None:
         """fetch_structured_sources dispatches to matching connectors."""
         from src.research.source_fetcher import SourceFetcher
 
@@ -167,10 +164,9 @@ class TestSourceFetcherIntegration:
                 )
             ]
         )
-        mock_get_connectors.return_value = [mock_connector]
 
         fetcher = SourceFetcher.__new__(SourceFetcher)
-        fetcher._config = MagicMock()
+        fetcher._connectors = [mock_connector]
         result = asyncio.run(
             fetcher.fetch_structured_sources("test question", "MACRO")
         )
@@ -179,19 +175,15 @@ class TestSourceFetcherIntegration:
         assert result[0].extraction_method == "api"
         mock_connector.fetch.assert_awaited_once()
 
-    @patch("src.research.connectors.registry.get_enabled_connectors")
-    def test_irrelevant_connectors_skipped(
-        self, mock_get_connectors: MagicMock,
-    ) -> None:
+    def test_irrelevant_connectors_skipped(self) -> None:
         """Connectors that are not relevant are skipped."""
         from src.research.source_fetcher import SourceFetcher
 
         mock_connector = MagicMock(spec=BaseResearchConnector)
         mock_connector.is_relevant.return_value = False
-        mock_get_connectors.return_value = [mock_connector]
 
         fetcher = SourceFetcher.__new__(SourceFetcher)
-        fetcher._config = MagicMock()
+        fetcher._connectors = [mock_connector]
         result = asyncio.run(
             fetcher.fetch_structured_sources("test question", "CRYPTO")
         )
@@ -199,10 +191,7 @@ class TestSourceFetcherIntegration:
         assert result == []
         mock_connector.fetch.assert_not_called()
 
-    @patch("src.research.connectors.registry.get_enabled_connectors")
-    def test_connector_failure_doesnt_break_pipeline(
-        self, mock_get_connectors: MagicMock,
-    ) -> None:
+    def test_connector_failure_doesnt_break_pipeline(self) -> None:
         """A failing connector returns [] without breaking others."""
         from src.research.source_fetcher import SourceFetcher
 
@@ -226,10 +215,8 @@ class TestSourceFetcherIntegration:
         mock_bad.is_relevant.return_value = True
         mock_bad.fetch = AsyncMock(return_value=[])  # error swallowed in base
 
-        mock_get_connectors.return_value = [mock_bad, mock_good]
-
         fetcher = SourceFetcher.__new__(SourceFetcher)
-        fetcher._config = MagicMock()
+        fetcher._connectors = [mock_bad, mock_good]
         result = asyncio.run(
             fetcher.fetch_structured_sources("test", "MACRO")
         )

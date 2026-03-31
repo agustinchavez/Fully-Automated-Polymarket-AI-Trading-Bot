@@ -64,9 +64,14 @@ class SourceFetcher:
             follow_redirects=True,
             headers={"User-Agent": "Mozilla/5.0 (compatible; PolymarketBot/0.2)"},
         )
+        # Instantiate connectors once — reused across all fetch_sources() calls
+        from src.research.connectors.registry import get_enabled_connectors
+        self._connectors = get_enabled_connectors(config)
 
     async def close(self) -> None:
         await self._http.aclose()
+        for conn in self._connectors:
+            await conn.close()
 
     async def fetch_structured_sources(
         self,
@@ -78,14 +83,11 @@ class SourceFetcher:
         Returns a list of ``FetchedSource`` with ``extraction_method='api'``.
         Failures are swallowed per-connector — never raises.
         """
-        from src.research.connectors.registry import get_enabled_connectors
-
-        connectors = get_enabled_connectors(self._config)
-        if not connectors:
+        if not self._connectors:
             return []
 
         results: list[FetchedSource] = []
-        for conn in connectors:
+        for conn in self._connectors:
             if market_type in conn.relevant_categories() or conn.is_relevant(question, market_type):
                 sources = await conn.fetch(question, market_type)
                 results.extend(sources)

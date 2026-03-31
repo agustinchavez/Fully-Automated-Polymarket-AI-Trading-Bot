@@ -11,7 +11,6 @@ import pytest
 from src.research.connectors.coingecko import (
     CoinGeckoConnector,
     _COIN_MAP,
-    _cache,
 )
 from src.research.source_fetcher import FetchedSource
 
@@ -125,7 +124,7 @@ class TestFetch:
         c._client = mock_client
 
         # Clear cache to force API call
-        _cache.clear()
+        c._cache.clear()
         result = asyncio.run(c.fetch("Will bitcoin hit 100k?", "CRYPTO"))
 
         assert len(result) == 1
@@ -142,8 +141,8 @@ class TestFetch:
         mock_rl.get.return_value.acquire = AsyncMock()
         c = _make_connector()
 
-        # Pre-fill cache
-        _cache["bitcoin"] = (
+        # Pre-fill cache on the instance
+        c._cache["bitcoin"] = (
             time.monotonic(),
             _price_response("bitcoin")["bitcoin"],
         )
@@ -157,9 +156,6 @@ class TestFetch:
         # Client.get should NOT have been called (cache hit)
         mock_client.get.assert_not_called()
 
-        # Clean up
-        _cache.clear()
-
     @patch("src.research.connectors.coingecko.rate_limiter")
     def test_api_error_returns_empty(self, mock_rl: MagicMock) -> None:
         mock_rl.get.return_value.acquire = AsyncMock()
@@ -169,7 +165,7 @@ class TestFetch:
         mock_client.get = AsyncMock(side_effect=RuntimeError("API down"))
         c._client = mock_client
 
-        _cache.clear()
+        c._cache.clear()
         result = asyncio.run(c.fetch("Will bitcoin hit 100k?", "CRYPTO"))
         assert result == []
 

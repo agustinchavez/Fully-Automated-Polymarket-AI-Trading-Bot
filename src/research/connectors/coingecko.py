@@ -53,13 +53,15 @@ _CRYPTO_KEYWORDS: list[str] = [
     "crypto", "coin", "cardano", "dogecoin", "xrp",
 ]
 
-# Simple response cache: {coin_id: (timestamp, data)}
-_cache: dict[str, tuple[float, dict]] = {}
 _CACHE_TTL = 60  # seconds
 
 
 class CoinGeckoConnector(BaseResearchConnector):
     """Fetch cryptocurrency data from CoinGecko's free API."""
+
+    def __init__(self, config: Any = None) -> None:
+        super().__init__(config)
+        self._cache: dict[str, tuple[float, dict]] = {}
 
     @property
     def name(self) -> str:
@@ -122,7 +124,7 @@ class CoinGeckoConnector(BaseResearchConnector):
         """Fetch current price + 24h change for a coin."""
         # Check cache
         now = time.monotonic()
-        cached = _cache.get(coin_id)
+        cached = self._cache.get(coin_id)
         if cached and (now - cached[0]) < _CACHE_TTL:
             return self._format_price(coin_id, cached[1])
 
@@ -153,7 +155,7 @@ class CoinGeckoConnector(BaseResearchConnector):
             return None
 
         # Cache the result
-        _cache[coin_id] = (now, coin_data)
+        self._cache[coin_id] = (now, coin_data)
         return self._format_price(coin_id, coin_data)
 
     def _format_price(self, coin_id: str, data: dict) -> FetchedSource:
