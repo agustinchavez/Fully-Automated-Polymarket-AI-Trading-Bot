@@ -7937,6 +7937,423 @@ def api_config_schema() -> Any:
 
 # ─── API: Backtest ─────────────────────────────────────────────────
 
+# ── Insights API Routes ──────────────────────────────────────────────
+
+
+def _get_digest_generator():
+    """Create a WeeklyDigestGenerator from the dashboard DB connection."""
+    from src.observability.reports import WeeklyDigestGenerator
+    cfg = _get_config()
+    conn = _get_conn()
+    return WeeklyDigestGenerator(
+        conn=conn,
+        bankroll=cfg.risk.bankroll,
+        transaction_fee_pct=cfg.risk.transaction_fee_pct,
+    ), conn
+
+
+@app.route("/api/insights/pnl-overview")
+def api_insights_pnl_overview() -> Any:
+    """P&L overview: KPIs, equity curve, daily bars, rolling windows."""
+    days = min(int(request.args.get("days", 30)), 90)
+    gen, conn = _get_digest_generator()
+    try:
+        digest = gen.generate(days=days)
+        if not digest.data_sufficient:
+            return jsonify({
+                "insufficient_data": True,
+                "days_available": digest.data_days_available,
+            })
+
+        # KPIs
+        kpis = {
+            "total_pnl": digest.total_pnl,
+            "roi_pct": digest.roi_pct,
+            "win_rate": digest.win_rate,
+            "sharpe_7d": digest.sharpe_7d,
+            "max_drawdown_pct": digest.max_drawdown_pct,
+            "trades_resolved": digest.total_trades_resolved,
+        }
+
+        # Daily P&L bars
+        start = digest.period_start
+        end = digest.period_end
+        daily_bars = []
+        try:
+            rows = conn.execute(
+                "SELECT summary_date, total_pnl FROM daily_summaries "
+                "WHERE summary_date BETWEEN ? AND ? ORDER BY summary_date",
+                (start, end),
+            ).fetchall()
+            daily_bars = [{"date": r["summary_date"], "pnl": r["total_pnl"]} for r in rows]
+        except Exception:
+            pass
+
+        # Equity curve
+        equity_curve = []
+        try:
+            rows = conn.execute(
+                "SELECT timestamp, equity, pnl_cumulative, drawdown_pct "
+                "FROM equity_snapshots ORDER BY timestamp DESC LIMIT 500"
+            ).fetchall()
+            equity_curve = [
+                {"timestamp": r["timestamp"], "equity": r["equity"],
+                 "pnl_cumulative": r["pnl_cumulative"],
+                 "drawdown_pct": r["drawdown_pct"]}
+                for r in reversed(rows)
+            ]
+        except Exception:
+            pass
+
+        # Rolling windows
+        rolling_windows = []
+        for window in [7, 14, 30]:
+            wd = gen.generate(days=window)
+            if wd.data_sufficient:
+                rolling_windows.append({
+                    "window": window,
+                    "pnl": wd.total_pnl,
+                    "roi_pct": wd.roi_pct,
+                    "win_rate": wd.win_rate,
+                    "sharpe": wd.sharpe_7d,
+                })
+
+        return jsonify({
+            "kpis": kpis,
+            "daily_bars": daily_bars,
+            "equity_curve": equity_curve,
+            "rolling_windows": rolling_windows,
+        })
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+    finally:
+        conn.close()
+
+
+@app.route("/api/insights/category-breakdown")
+def api_insights_category_breakdown() -> Any:
+    """Category performance breakdown."""
+    days = min(int(request.args.get("days", 30)), 90)
+    gen, conn = _get_digest_generator()
+    try:
+        digest = gen.generate(days=days)
+        if not digest.data_sufficient:
+            return jsonify({
+                "insufficient_data": True,
+                "days_available": digest.data_days_available,
+            })
+
+        categories = [
+            {"category": c.category, "trades": c.trades, "wins": c.wins,
+             "total_pnl": c.total_pnl, "avg_edge_at_entry": c.avg_edge_at_entry,
+             "win_rate": c.win_rate}
+            for c in digest.category_breakdown
+        ]
+
+        # Scatter points: edge at entry vs actual ROI per trade
+        scatter_points = []
+        try:
+            rows = conn.execute(
+                "SELECT f.market_type as category, f.edge, "
+                "p.pnl / NULLIF(p.stake_usd, 0) as roi "
+                "FROM performance_log p "
+                "JOIN forecasts f ON p.market_id = f.market_id "
+                "WHERE date(p.resolved_at) >= date('now', ?)",
+                (f"-{days} days",),
+            ).fetchall()
+            scatter_points = [
+                {"category": r["category"] or "UNKNOWN",
+                 "edge": r["edge"], "roi": r["roi"]}
+                for r in rows if r["roi"] is not None
+            ]
+        except Exception:
+            pass
+
+        return jsonify({
+            "categories": categories,
+            "scatter_points": scatter_points,
+        })
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+    finally:
+        conn.close()
+
+
+@app.route("/api/insights/model-accuracy")
+def api_insights_model_accuracy() -> Any:
+    """Model accuracy leaderboard, calibration buckets, agreement matrix."""
+    days = min(int(request.args.get("days", 30)), 90)
+    gen, conn = _get_digest_generator()
+    try:
+        digest = gen.generate(days=days)
+        if not digest.data_sufficient:
+            return jsonify({
+                "insufficient_data": True,
+                "days_available": digest.data_days_available,
+            })
+
+        models = [
+            {"model_name": m.model_name, "forecasts": m.forecasts,
+             "brier_score": m.brier_score,
+             "directional_accuracy": m.directional_accuracy,
+             "avg_error": m.avg_error}
+            for m in digest.model_accuracy
+        ]
+
+        # Calibration buckets (0-10%, 10-20%, ..., 90-100%)
+        calibration_buckets = []
+        try:
+            rows = conn.execute(
+                "SELECT model_name, forecast_prob, actual_outcome "
+                "FROM model_forecast_log "
+                "WHERE actual_outcome IS NOT NULL "
+                "AND date(recorded_at) >= date('now', ?)",
+                (f"-{days} days",),
+            ).fetchall()
+
+            # Group by model and bucket
+            from collections import defaultdict
+            buckets: dict[str, dict[int, list]] = defaultdict(lambda: defaultdict(list))
+            for r in rows:
+                bucket = min(int(r["forecast_prob"] * 10), 9)
+                buckets[r["model_name"]][bucket].append(r["actual_outcome"])
+
+            for model_name, model_buckets in buckets.items():
+                for bucket_idx in range(10):
+                    outcomes = model_buckets.get(bucket_idx, [])
+                    if outcomes:
+                        calibration_buckets.append({
+                            "model": model_name,
+                            "bucket": f"{bucket_idx * 10}-{(bucket_idx + 1) * 10}%",
+                            "bucket_idx": bucket_idx,
+                            "avg_predicted": (bucket_idx + 0.5) / 10,
+                            "avg_actual": sum(outcomes) / len(outcomes),
+                            "count": len(outcomes),
+                        })
+        except Exception:
+            pass
+
+        return jsonify({
+            "models": models,
+            "calibration_buckets": calibration_buckets,
+        })
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+    finally:
+        conn.close()
+
+
+@app.route("/api/insights/friction")
+def api_insights_friction() -> Any:
+    """Friction analysis: waterfall, friction over time, fee summary."""
+    days = min(int(request.args.get("days", 30)), 90)
+    gen, conn = _get_digest_generator()
+    try:
+        digest = gen.generate(days=days)
+        if not digest.data_sufficient:
+            return jsonify({
+                "insufficient_data": True,
+                "days_available": digest.data_days_available,
+            })
+
+        fa = digest.friction_analysis
+        cfg = _get_config()
+
+        # Waterfall: gross edge → fees → model error → net
+        fee_pct = cfg.risk.transaction_fee_pct * 2 * 100  # round-trip in %
+        model_error = fa.friction_gap - fee_pct if fa.friction_gap > fee_pct else 0
+        waterfall = {
+            "gross_edge": fa.avg_edge_at_entry,
+            "fees": round(fee_pct, 2),
+            "model_error": round(model_error, 2),
+            "net_realized": fa.avg_pnl_per_trade,
+        }
+
+        # Edge distribution histogram
+        edge_distribution = []
+        try:
+            rows = conn.execute(
+                "SELECT f.edge FROM forecasts f "
+                "JOIN trades t ON f.market_id = t.market_id "
+                "WHERE date(f.created_at) >= date('now', ?)",
+                (f"-{days} days",),
+            ).fetchall()
+            edges = [r["edge"] for r in rows if r["edge"] is not None]
+            if edges:
+                import math
+                min_e = min(edges)
+                max_e = max(edges)
+                n_bins = 10
+                bin_width = (max_e - min_e) / n_bins if max_e > min_e else 0.01
+                for i in range(n_bins):
+                    lo = min_e + i * bin_width
+                    hi = lo + bin_width
+                    count = sum(1 for e in edges if lo <= e < hi or (i == n_bins - 1 and e == hi))
+                    edge_distribution.append({
+                        "bin_start": round(lo * 100, 1),
+                        "bin_end": round(hi * 100, 1),
+                        "count": count,
+                    })
+        except Exception:
+            pass
+
+        # Fee summary
+        fee_summary = {
+            "transaction_fee_pct": cfg.risk.transaction_fee_pct,
+            "exit_fee_pct": cfg.risk.exit_fee_pct,
+            "total_fees_paid": fa.fee_cost_total,
+            "friction_gap_pct": fa.friction_gap,
+        }
+
+        return jsonify({
+            "waterfall": waterfall,
+            "edge_distribution": edge_distribution,
+            "fee_summary": fee_summary,
+        })
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+    finally:
+        conn.close()
+
+
+@app.route("/api/insights/summary")
+def api_insights_summary() -> Any:
+    """Quick summary: top insight + data sufficiency check."""
+    gen, conn = _get_digest_generator()
+    try:
+        digest = gen.generate(days=7)
+        if not digest.data_sufficient:
+            return jsonify({
+                "top_insight": "Not enough data yet.",
+                "data_days": digest.data_days_available,
+                "min_data_met": False,
+            })
+
+        # Pick the most actionable insight
+        insights = []
+        if digest.category_breakdown:
+            worst = min(digest.category_breakdown, key=lambda c: c.total_pnl)
+            if worst.total_pnl < 0:
+                insights.append(
+                    f"{worst.category} is losing money "
+                    f"(${worst.total_pnl:.2f}, {worst.win_rate:.0f}% WR). "
+                    f"Consider adding to restricted_types."
+                )
+        if digest.friction_analysis.friction_gap > 3.0:
+            insights.append(
+                f"Friction gap is {digest.friction_analysis.friction_gap:.1f}%. "
+                f"Consider raising min_edge threshold."
+            )
+        if digest.model_accuracy:
+            best = min(digest.model_accuracy, key=lambda m: m.brier_score)
+            insights.append(
+                f"{best.model_name} has best Brier score ({best.brier_score:.3f})."
+            )
+
+        top_insight = insights[0] if insights else "Bot is performing within normal parameters."
+
+        return jsonify({
+            "top_insight": top_insight,
+            "data_days": digest.data_days_available,
+            "min_data_met": True,
+        })
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+    finally:
+        conn.close()
+
+
+@app.route("/api/insights/export")
+def api_insights_export() -> Any:
+    """CSV export of insight data."""
+    import csv
+    import io
+
+    panel = request.args.get("panel", "pnl")
+    days = min(int(request.args.get("days", 30)), 90)
+    gen, conn = _get_digest_generator()
+    try:
+        digest = gen.generate(days=days)
+        output = io.StringIO()
+        writer = csv.writer(output)
+
+        if panel == "categories":
+            writer.writerow(["category", "trades", "wins", "win_rate", "total_pnl", "avg_edge"])
+            for c in digest.category_breakdown:
+                writer.writerow([c.category, c.trades, c.wins, c.win_rate, c.total_pnl, c.avg_edge_at_entry])
+        elif panel == "models":
+            writer.writerow(["model_name", "forecasts", "brier_score", "directional_accuracy", "avg_error"])
+            for m in digest.model_accuracy:
+                writer.writerow([m.model_name, m.forecasts, m.brier_score, m.directional_accuracy, m.avg_error])
+        else:
+            writer.writerow(["metric", "value"])
+            writer.writerow(["total_pnl", digest.total_pnl])
+            writer.writerow(["roi_pct", digest.roi_pct])
+            writer.writerow(["win_rate", digest.win_rate])
+            writer.writerow(["sharpe_7d", digest.sharpe_7d])
+            writer.writerow(["max_drawdown_pct", digest.max_drawdown_pct])
+
+        from flask import Response
+        return Response(
+            output.getvalue(),
+            mimetype="text/csv",
+            headers={"Content-Disposition": f"attachment; filename=insights_{panel}_{days}d.csv"},
+        )
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+    finally:
+        conn.close()
+
+
+# ── AI Analysis API Routes ───────────────────────────────────────────
+
+
+@app.route("/api/insights/ai-analysis", methods=["GET"])
+def api_insights_ai_analysis_get() -> Any:
+    """Return cached AI analysis result (if any)."""
+    conn = _get_conn()
+    try:
+        cfg = _get_config()
+        from src.analytics.ai_analyst import AIAnalyst
+        analyst = AIAnalyst(conn=conn, config=cfg.analyst)
+        result = analyst.get_cached_result()
+        if result:
+            return jsonify(result.to_dict())
+        return jsonify({"data_sufficient": False, "summary": "No analysis available yet."})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+    finally:
+        conn.close()
+
+
+@app.route("/api/insights/ai-analysis", methods=["POST"])
+def api_insights_ai_analysis_post() -> Any:
+    """Trigger a fresh AI analysis (rate-limited)."""
+    conn = _get_conn()
+    try:
+        cfg = _get_config()
+        if not cfg.analyst.enabled:
+            return jsonify({"error": "AI analyst is disabled"}), 400
+        from src.analytics.ai_analyst import AIAnalyst
+        analyst = AIAnalyst(conn=conn, config=cfg.analyst)
+        if not analyst._check_rate_limit():
+            return jsonify({"error": "Rate limited. Try again later."}), 429
+        import asyncio
+        loop = asyncio.new_event_loop()
+        try:
+            result = loop.run_until_complete(analyst.analyse(days=30))
+        finally:
+            loop.close()
+        return jsonify(result.to_dict())
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+    finally:
+        conn.close()
+
+
+# ── Backtest API Routes ──────────────────────────────────────────────
+
+
 def _get_backtest_db():
     """Get a connected BacktestDatabase using the config db_path."""
     from src.backtest.database import BacktestDatabase

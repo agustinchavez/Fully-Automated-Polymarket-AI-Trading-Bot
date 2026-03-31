@@ -156,3 +156,20 @@ engine:
   auto_start: true
   paper_mode: true
   cycle_interval_secs: 180
+digest:
+  enabled: true
+  schedule_day_of_week: mon
+  schedule_hour: 8
+  lookback_days: 7
+  min_data_days: 3
+analyst:
+  enabled: false
+  provider: anthropic
+  model: claude-sonnet-4-5-20250929
+  max_tokens: 1500
+  temperature: 0.3
+  timeout_secs: 45
+  min_resolved_trades: 50
+  min_data_days: 28
+  rate_limit_hours: 6
+  schedule_enabled: false

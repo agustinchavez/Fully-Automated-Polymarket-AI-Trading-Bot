@@ -5,6 +5,12 @@ Commands:
   /status  — engine running, kill state, drawdown, positions
   /pnl     — today's P&L
   /resume  — reset kill switch
+  /weekly  — send weekly performance digest
+  /report  — send digest for last N days (default 7)
+  /insights — one-line actionable insight
+  /models  — model accuracy table (30 days)
+  /analyze — run AI analysis of bot performance
+  /provider — show configured AI provider/model
   /help    — list commands
 """
 
@@ -34,12 +40,14 @@ class TelegramKillBot:
         self._running = False
         self._offset = 0
         self._base_url = f"https://api.telegram.org/bot{token}"
+        self._scheduler: Any = None
 
     # ── Public API ────────────────────────────────────────────────
 
     async def start(self) -> None:
         """Start long-polling loop."""
         self._running = True
+        self._start_scheduler()
         log.info("telegram_bot.started")
         while self._running:
             try:
@@ -55,7 +63,41 @@ class TelegramKillBot:
     def stop(self) -> None:
         """Stop the polling loop."""
         self._running = False
+        if self._scheduler:
+            try:
+                self._scheduler.shutdown(wait=False)
+            except Exception:
+                pass
         log.info("telegram_bot.stopped")
+
+    def _start_scheduler(self) -> None:
+        """Start APScheduler for weekly digest cron job."""
+        if not self._engine:
+            return
+        config = getattr(self._engine, "config", None)
+        digest_cfg = getattr(config, "digest", None)
+        if not digest_cfg or not digest_cfg.enabled:
+            return
+        try:
+            from apscheduler.schedulers.asyncio import AsyncIOScheduler
+            self._scheduler = AsyncIOScheduler(timezone="UTC")
+            self._scheduler.add_job(
+                self._send_weekly_digest,
+                trigger="cron",
+                day_of_week=digest_cfg.schedule_day_of_week,
+                hour=digest_cfg.schedule_hour,
+                minute=0,
+            )
+            self._scheduler.start()
+            log.info(
+                "telegram_bot.scheduler_started",
+                day=digest_cfg.schedule_day_of_week,
+                hour=digest_cfg.schedule_hour,
+            )
+        except ImportError:
+            log.warning("telegram_bot.apscheduler_not_installed")
+        except Exception as e:
+            log.warning("telegram_bot.scheduler_error", error=str(e))
 
     # ── Polling ───────────────────────────────────────────────────
 
@@ -111,11 +153,37 @@ class TelegramKillBot:
             "/status": self._cmd_status,
             "/pnl": self._cmd_pnl,
             "/resume": self._cmd_resume,
+            "/weekly": self._cmd_weekly,
+            "/report": self._cmd_report,
+            "/insights": self._cmd_insights,
+            "/models": self._cmd_models,
+            "/analyze": self._cmd_analyze,
+            "/provider": self._cmd_provider,
             "/help": self._cmd_help,
         }
 
         handler = handlers.get(command, self._cmd_unknown)
-        response = await handler()
+        # Commands that accept arguments
+        if command == "/report":
+            parts = text.split()
+            days = 7
+            if len(parts) > 1:
+                try:
+                    days = max(3, min(30, int(parts[1])))
+                except ValueError:
+                    pass
+            response = await self._cmd_report(days)
+        elif command == "/analyze":
+            parts = text.split()
+            days = 30
+            if len(parts) > 1:
+                try:
+                    days = max(7, min(90, int(parts[1])))
+                except ValueError:
+                    pass
+            response = await self._cmd_analyze(days)
+        else:
+            response = await handler()
         await self._send_message(response)
 
     async def _send_message(self, text: str) -> bool:
@@ -224,14 +292,178 @@ class TelegramKillBot:
         except Exception as e:
             return f"Resume failed: {e}"
 
+    # ── Digest Commands ───────────────────────────────────────────
+
+    def _get_digest_generator(self) -> Any:
+        """Create a WeeklyDigestGenerator from the engine's DB."""
+        from src.observability.reports import WeeklyDigestGenerator
+        if not self._engine or not self._engine._db:
+            return None
+        bankroll = self._engine.config.risk.bankroll
+        fee_pct = self._engine.config.risk.transaction_fee_pct
+        return WeeklyDigestGenerator(
+            conn=self._engine._db.conn,
+            bankroll=bankroll,
+            transaction_fee_pct=fee_pct,
+        )
+
+    async def _send_weekly_digest(self) -> None:
+        """Scheduled task: generate and send weekly digest."""
+        gen = self._get_digest_generator()
+        if not gen:
+            return
+        try:
+            days = 7
+            config = getattr(self._engine, "config", None)
+            digest_cfg = getattr(config, "digest", None)
+            if digest_cfg:
+                days = digest_cfg.lookback_days
+            digest = gen.generate(days=days)
+            message = gen.format_telegram(digest)
+            parts = gen.split_message(message)
+            for part in parts:
+                await self._send_message(part)
+            log.info("telegram_bot.weekly_digest_sent")
+        except Exception as e:
+            log.warning("telegram_bot.digest_error", error=str(e))
+
+    async def _cmd_weekly(self) -> str:
+        """Send the full weekly digest on demand."""
+        gen = self._get_digest_generator()
+        if not gen:
+            return "No engine/DB connected."
+        try:
+            digest = gen.generate(days=7)
+            message = gen.format_telegram(digest)
+            parts = gen.split_message(message)
+            if len(parts) > 1:
+                for part in parts[:-1]:
+                    await self._send_message(part)
+                return parts[-1]
+            return message
+        except Exception as e:
+            return f"Digest error: {e}"
+
+    async def _cmd_report(self, days: int = 7) -> str:
+        """Send digest for last N days."""
+        gen = self._get_digest_generator()
+        if not gen:
+            return "No engine/DB connected."
+        try:
+            digest = gen.generate(days=days)
+            message = gen.format_telegram(digest)
+            parts = gen.split_message(message)
+            if len(parts) > 1:
+                for part in parts[:-1]:
+                    await self._send_message(part)
+                return parts[-1]
+            return message
+        except Exception as e:
+            return f"Report error: {e}"
+
+    async def _cmd_insights(self) -> str:
+        """One-line summary of most actionable insight."""
+        gen = self._get_digest_generator()
+        if not gen:
+            return "No engine/DB connected."
+        try:
+            digest = gen.generate(days=7)
+            return gen.format_short(digest)
+        except Exception as e:
+            return f"Insights error: {e}"
+
+    async def _cmd_models(self) -> str:
+        """Model accuracy table for last 30 days."""
+        gen = self._get_digest_generator()
+        if not gen:
+            return "No engine/DB connected."
+        try:
+            digest = gen.generate(days=30)
+            if not digest.data_sufficient:
+                return "Not enough data for model accuracy report."
+            if not digest.model_accuracy:
+                return "No model accuracy data available (need 10+ resolved forecasts)."
+            lines = ["*Model Accuracy (30 days)*", ""]
+            for m in digest.model_accuracy:
+                lines.append(
+                    f"{m.model_name}\n"
+                    f"  Brier: {m.brier_score:.3f} | Dir: {m.directional_accuracy:.0f}% "
+                    f"| {m.forecasts} forecasts"
+                )
+            return "\n".join(lines)
+        except Exception as e:
+            return f"Models error: {e}"
+
+    # ── AI Analysis Commands ───────────────────────────────────────
+
+    async def _cmd_analyze(self, days: int = 30) -> str:
+        """Run AI analysis of bot performance."""
+        if not self._engine or not self._engine._db:
+            return "No engine/DB connected."
+        config = getattr(self._engine, "config", None)
+        analyst_cfg = getattr(config, "analyst", None)
+        if not analyst_cfg or not analyst_cfg.enabled:
+            return "AI analyst is disabled. Set analyst.enabled=true in config."
+        try:
+            from src.analytics.ai_analyst import AIAnalyst
+            analyst = AIAnalyst(
+                conn=self._engine._db.conn,
+                config=analyst_cfg,
+            )
+            result = await analyst.analyse(days=days)
+            if not result.data_sufficient:
+                return result.summary
+            badge = f"[{result.provider_used}/{result.model_used}]"
+            lines = [f"*AI Analysis* {badge}", ""]
+            if result.summary:
+                lines.append(result.summary)
+                lines.append("")
+            if result.what_is_working:
+                lines.append("*Working well:*")
+                for item in result.what_is_working[:3]:
+                    lines.append(f"  + {item}")
+                lines.append("")
+            if result.what_is_not_working:
+                lines.append("*Needs improvement:*")
+                for item in result.what_is_not_working[:3]:
+                    lines.append(f"  - {item}")
+                lines.append("")
+            if result.recommendations:
+                lines.append("*Recommendations:*")
+                for r in result.recommendations[:3]:
+                    lines.append(f"  {r.priority}. {r.action}")
+            return "\n".join(lines)
+        except Exception as e:
+            return f"Analysis error: {e}"
+
+    async def _cmd_provider(self) -> str:
+        """Show configured AI provider and model."""
+        config = getattr(self._engine, "config", None) if self._engine else None
+        analyst_cfg = getattr(config, "analyst", None)
+        if not analyst_cfg:
+            return "AI analyst not configured."
+        return (
+            f"*AI Analyst Config*\n"
+            f"Enabled: {analyst_cfg.enabled}\n"
+            f"Provider: {analyst_cfg.provider}\n"
+            f"Model: {analyst_cfg.model}\n"
+            f"Rate limit: {analyst_cfg.rate_limit_hours}h"
+        )
+
     async def _cmd_help(self) -> str:
         """List available commands."""
         return (
-            "TELEGRAM KILL BOT\n\n"
+            "TELEGRAM BOT\n\n"
             "/kill - Activate kill switch\n"
             "/status - Engine status\n"
             "/pnl - Today's P&L\n"
             "/resume - Reset kill switch\n"
+            "/weekly - Weekly performance digest\n"
+            "/report N - Digest for last N days\n"
+            "/insights - One-line insight\n"
+            "/models - Model accuracy (30d)\n"
+            "/analyze N - AI analysis (default 30d)\n"
+            "/provider - Show AI provider config\n"
             "/help - This message"
         )
 

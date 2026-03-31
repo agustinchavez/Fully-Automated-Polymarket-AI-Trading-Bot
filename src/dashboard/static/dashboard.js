@@ -50,6 +50,7 @@ const TAB_UPDATERS = {
     decisions: ['updateDecisionLog'],
     strategies: ['updateStrategiesTab'],
     journal:  ['updateVaR', 'updateWatchlist', 'updateJournal', 'updateEquitySnapshots'],
+    insights: ['updateInsightsTab'],
     admin:    ['updateAdminPanel', 'updateRisk', 'updateAlerts', 'updateAudit', 'updateConfig', 'updateSettingsTab'],
     backtest: ['updateBacktestTab'],
     docs:     [],
@@ -6691,6 +6692,368 @@ function filterDocs(query) {
 }
 
 // ─── Backtest Tab ───────────────────────────────────────────────────
+
+// ═══════════════════════════════════════════════════════════════
+// INSIGHTS TAB
+// ═══════════════════════════════════════════════════════════════
+
+let _insightCharts = {};
+
+async function updateInsightsTab() {
+    const days = parseInt($('#insights-days')?.value || '30', 10);
+    try {
+        const [pnl, cats, models, friction] = await Promise.all([
+            fetch(`/api/insights/pnl-overview?days=${days}`).then(r => r.json()),
+            fetch(`/api/insights/category-breakdown?days=${days}`).then(r => r.json()),
+            fetch(`/api/insights/model-accuracy?days=${days}`).then(r => r.json()),
+            fetch(`/api/insights/friction?days=${days}`).then(r => r.json()),
+        ]);
+        renderInsightPnlPanel(pnl);
+        renderInsightCategoryPanel(cats);
+        renderInsightModelPanel(models);
+        renderInsightFrictionPanel(friction);
+        // Load cached AI analysis (non-blocking)
+        fetch('/api/insights/ai-analysis').then(r => r.json()).then(renderInsightAiPanel).catch(() => {});
+    } catch (e) {
+        console.error('Insights tab error:', e);
+    }
+}
+
+function renderInsightPnlPanel(data) {
+    if (data.insufficient_data) {
+        safeHTML($('#insight-kpi-cards'),
+            `<div class="card accent-muted"><div class="card-label">Insufficient Data</div>
+             <div class="card-value">${data.days_available || 0} days</div>
+             <div class="card-sub">Need at least 3 days of trading data</div></div>`);
+        return;
+    }
+    const k = data.kpis || {};
+    const pnlClass = k.total_pnl >= 0 ? 'accent-green' : 'accent-red';
+    safeHTML($('#insight-kpi-cards'), `
+        <div class="card ${pnlClass}">
+            <div class="card-label">Total P&L</div>
+            <div class="card-value">$${fmt(k.total_pnl)}</div>
+            <div class="card-sub">ROI: ${fmt(k.roi_pct, 1)}%</div>
+        </div>
+        <div class="card accent-blue">
+            <div class="card-label">Win Rate</div>
+            <div class="card-value">${fmt(k.win_rate, 1)}%</div>
+            <div class="card-sub">${k.trades_resolved || 0} resolved</div>
+        </div>
+        <div class="card accent-purple">
+            <div class="card-label">Sharpe (7d)</div>
+            <div class="card-value">${fmt(k.sharpe_7d)}</div>
+        </div>
+        <div class="card accent-orange">
+            <div class="card-label">Max Drawdown</div>
+            <div class="card-value">${(k.max_drawdown_pct * 100).toFixed(1)}%</div>
+        </div>
+    `);
+
+    // Daily P&L bar chart
+    const bars = data.daily_bars || [];
+    if (bars.length > 0) {
+        if (_insightCharts.dailyPnl) _insightCharts.dailyPnl.destroy();
+        const ctx = document.getElementById('insight-daily-pnl-chart');
+        if (ctx) {
+            _insightCharts.dailyPnl = new Chart(ctx, {
+                type: 'bar',
+                data: {
+                    labels: bars.map(b => b.date),
+                    datasets: [{
+                        label: 'Daily P&L',
+                        data: bars.map(b => b.pnl),
+                        backgroundColor: bars.map(b => b.pnl >= 0 ? 'rgba(0, 200, 83, 0.7)' : 'rgba(255, 82, 82, 0.7)'),
+                        borderWidth: 0,
+                    }]
+                },
+                options: { responsive: true, plugins: { legend: { display: false } },
+                    scales: { y: { grid: { color: 'rgba(255,255,255,0.05)' } },
+                              x: { grid: { display: false } } } }
+            });
+        }
+    }
+
+    // Equity curve
+    const eq = data.equity_curve || [];
+    if (eq.length > 0) {
+        if (_insightCharts.equity) _insightCharts.equity.destroy();
+        const ctx = document.getElementById('insight-equity-chart');
+        if (ctx) {
+            _insightCharts.equity = new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: eq.map(e => new Date(e.timestamp * 1000).toLocaleDateString()),
+                    datasets: [{
+                        label: 'Equity',
+                        data: eq.map(e => e.equity),
+                        borderColor: 'rgba(0, 200, 83, 0.8)',
+                        backgroundColor: 'rgba(0, 200, 83, 0.1)',
+                        fill: true, tension: 0.3, pointRadius: 0,
+                    }]
+                },
+                options: { responsive: true, plugins: { legend: { display: false } },
+                    scales: { y: { grid: { color: 'rgba(255,255,255,0.05)' } },
+                              x: { grid: { display: false } } } }
+            });
+        }
+    }
+
+    // Rolling windows table
+    const rw = data.rolling_windows || [];
+    if (rw.length > 0) {
+        let html = '<table class="data-table"><thead><tr><th>Window</th><th>P&L</th><th>ROI</th><th>Win Rate</th><th>Sharpe</th></tr></thead><tbody>';
+        rw.forEach(w => {
+            html += `<tr><td>${w.window}d</td><td>$${fmt(w.pnl)}</td><td>${fmt(w.roi_pct, 1)}%</td><td>${fmt(w.win_rate, 1)}%</td><td>${fmt(w.sharpe)}</td></tr>`;
+        });
+        html += '</tbody></table>';
+        safeHTML($('#insight-rolling-windows'), html);
+    }
+}
+
+function renderInsightCategoryPanel(data) {
+    if (data.insufficient_data) return;
+    const cats = data.categories || [];
+
+    // Category table
+    if (cats.length > 0) {
+        let html = '<table class="data-table"><thead><tr><th>Category</th><th>Trades</th><th>Win%</th><th>P&L</th><th>Avg Edge</th></tr></thead><tbody>';
+        cats.forEach(c => {
+            const pnlClass = c.total_pnl >= 0 ? 'positive' : 'negative';
+            html += `<tr><td>${c.category}</td><td>${c.trades}</td><td>${fmt(c.win_rate, 1)}%</td><td class="${pnlClass}">$${fmt(c.total_pnl)}</td><td>${(c.avg_edge_at_entry * 100).toFixed(1)}%</td></tr>`;
+        });
+        html += '</tbody></table>';
+        safeHTML($('#insight-category-table'), html);
+    }
+
+    // Horizontal bar chart
+    if (cats.length > 0) {
+        if (_insightCharts.category) _insightCharts.category.destroy();
+        const ctx = document.getElementById('insight-category-chart');
+        if (ctx) {
+            _insightCharts.category = new Chart(ctx, {
+                type: 'bar',
+                data: {
+                    labels: cats.map(c => c.category),
+                    datasets: [{
+                        label: 'P&L',
+                        data: cats.map(c => c.total_pnl),
+                        backgroundColor: cats.map(c => c.total_pnl >= 0 ? 'rgba(0, 200, 83, 0.7)' : 'rgba(255, 82, 82, 0.7)'),
+                    }]
+                },
+                options: { indexAxis: 'y', responsive: true, plugins: { legend: { display: false } } }
+            });
+        }
+    }
+
+    // Scatter: edge vs ROI
+    const scatter = data.scatter_points || [];
+    if (scatter.length > 0) {
+        if (_insightCharts.scatter) _insightCharts.scatter.destroy();
+        const ctx = document.getElementById('insight-scatter-chart');
+        if (ctx) {
+            const colorMap = {};
+            const colors = ['#00c853', '#2979ff', '#ff6d00', '#aa00ff', '#ff5252', '#00bcd4'];
+            let ci = 0;
+            scatter.forEach(s => { if (!colorMap[s.category]) colorMap[s.category] = colors[ci++ % colors.length]; });
+            _insightCharts.scatter = new Chart(ctx, {
+                type: 'scatter',
+                data: {
+                    datasets: Object.keys(colorMap).map(cat => ({
+                        label: cat,
+                        data: scatter.filter(s => s.category === cat).map(s => ({ x: s.edge * 100, y: s.roi * 100 })),
+                        backgroundColor: colorMap[cat],
+                    }))
+                },
+                options: { responsive: true, scales: {
+                    x: { title: { display: true, text: 'Edge at Entry (%)' } },
+                    y: { title: { display: true, text: 'Actual ROI (%)' } }
+                } }
+            });
+        }
+    }
+}
+
+function renderInsightModelPanel(data) {
+    if (data.insufficient_data) return;
+    const models = data.models || [];
+
+    // Model table
+    if (models.length > 0) {
+        let html = '<table class="data-table"><thead><tr><th>Model</th><th>Forecasts</th><th>Brier</th><th>Dir. Accuracy</th><th>Avg Error</th></tr></thead><tbody>';
+        models.forEach(m => {
+            html += `<tr><td>${m.model_name}</td><td>${m.forecasts}</td><td>${m.brier_score.toFixed(3)}</td><td>${m.directional_accuracy.toFixed(1)}%</td><td>${m.avg_error.toFixed(3)}</td></tr>`;
+        });
+        html += '</tbody></table>';
+        safeHTML($('#insight-model-table'), html);
+    }
+
+    // Calibration chart
+    const buckets = data.calibration_buckets || [];
+    if (buckets.length > 0) {
+        if (_insightCharts.calibration) _insightCharts.calibration.destroy();
+        const ctx = document.getElementById('insight-calibration-chart');
+        if (ctx) {
+            const modelNames = [...new Set(buckets.map(b => b.model))];
+            const colors = ['rgba(0, 200, 83, 0.7)', 'rgba(41, 121, 255, 0.7)', 'rgba(255, 109, 0, 0.7)', 'rgba(170, 0, 255, 0.7)'];
+            const datasets = modelNames.map((model, i) => {
+                const modelBuckets = buckets.filter(b => b.model === model);
+                return {
+                    label: model,
+                    data: modelBuckets.map(b => ({ x: b.avg_predicted * 100, y: b.avg_actual * 100 })),
+                    backgroundColor: colors[i % colors.length],
+                    pointRadius: 5,
+                };
+            });
+            // Add perfect calibration line
+            datasets.push({
+                label: 'Perfect',
+                data: [{x: 0, y: 0}, {x: 100, y: 100}],
+                type: 'line', borderColor: 'rgba(255,255,255,0.3)', borderDash: [5, 5],
+                pointRadius: 0, fill: false,
+            });
+            _insightCharts.calibration = new Chart(ctx, {
+                type: 'scatter', data: { datasets },
+                options: { responsive: true, scales: {
+                    x: { title: { display: true, text: 'Predicted (%)' }, min: 0, max: 100 },
+                    y: { title: { display: true, text: 'Actual (%)' }, min: 0, max: 100 }
+                } }
+            });
+        }
+    }
+}
+
+function renderInsightFrictionPanel(data) {
+    if (data.insufficient_data) return;
+    const wf = data.waterfall || {};
+    const dist = data.edge_distribution || [];
+    const fees = data.fee_summary || {};
+
+    // Waterfall chart
+    if (wf.gross_edge) {
+        if (_insightCharts.waterfall) _insightCharts.waterfall.destroy();
+        const ctx = document.getElementById('insight-waterfall-chart');
+        if (ctx) {
+            _insightCharts.waterfall = new Chart(ctx, {
+                type: 'bar',
+                data: {
+                    labels: ['Gross Edge', 'Fees', 'Model Error', 'Net Realized'],
+                    datasets: [{
+                        data: [wf.gross_edge, -wf.fees, -wf.model_error, wf.net_realized],
+                        backgroundColor: ['rgba(0, 200, 83, 0.7)', 'rgba(255, 82, 82, 0.7)', 'rgba(255, 152, 0, 0.7)', wf.net_realized >= 0 ? 'rgba(0, 200, 83, 0.7)' : 'rgba(255, 82, 82, 0.7)'],
+                    }]
+                },
+                options: { responsive: true, plugins: { legend: { display: false } },
+                    scales: { y: { title: { display: true, text: '%' } } } }
+            });
+        }
+    }
+
+    // Edge distribution histogram
+    if (dist.length > 0) {
+        if (_insightCharts.edgeDist) _insightCharts.edgeDist.destroy();
+        const ctx = document.getElementById('insight-edge-dist-chart');
+        if (ctx) {
+            _insightCharts.edgeDist = new Chart(ctx, {
+                type: 'bar',
+                data: {
+                    labels: dist.map(d => `${d.bin_start}-${d.bin_end}%`),
+                    datasets: [{ label: 'Trades', data: dist.map(d => d.count),
+                        backgroundColor: 'rgba(41, 121, 255, 0.6)' }]
+                },
+                options: { responsive: true, plugins: { legend: { display: false } },
+                    scales: { x: { title: { display: true, text: 'Edge (%)' } },
+                              y: { title: { display: true, text: 'Trades' } } } }
+            });
+        }
+    }
+
+    // Fee summary
+    safeHTML($('#insight-fee-summary'), `
+        <table class="data-table">
+            <tr><td>Transaction Fee</td><td>${(fees.transaction_fee_pct * 100).toFixed(1)}%</td></tr>
+            <tr><td>Exit Fee</td><td>${(fees.exit_fee_pct * 100).toFixed(1)}%</td></tr>
+            <tr><td>Total Fees Paid</td><td>$${fmt(fees.total_fees_paid)}</td></tr>
+            <tr><td>Friction Gap</td><td>${fmt(fees.friction_gap_pct, 1)}%</td></tr>
+        </table>
+    `);
+}
+
+
+function renderInsightAiPanel(data) {
+    const badge = $('#insight-ai-badge');
+    const content = $('#insight-ai-content');
+    const status = $('#insight-ai-status');
+    if (!content) return;
+
+    if (!data || !data.data_sufficient) {
+        safeHTML(content, `<p style="color:var(--text-muted)">${data?.summary || 'No analysis available. Click "Run Analysis" to generate one.'}</p>`);
+        if (badge) badge.style.display = 'none';
+        return;
+    }
+
+    if (badge && data.provider_used) {
+        badge.textContent = `${data.provider_used}/${data.model_used || ''}`;
+        badge.style.display = 'inline';
+    }
+    if (status && data.generated_at) {
+        const d = new Date(data.generated_at);
+        status.textContent = `Generated: ${d.toLocaleString()}`;
+    }
+
+    let html = '';
+    if (data.summary) html += `<p style="margin-bottom:12px;">${data.summary}</p>`;
+
+    if (data.what_is_working?.length) {
+        html += '<h3 style="color:var(--success);margin:8px 0 4px;">Working Well</h3><ul>';
+        data.what_is_working.forEach(item => { html += `<li>${item}</li>`; });
+        html += '</ul>';
+    }
+    if (data.what_is_not_working?.length) {
+        html += '<h3 style="color:var(--danger);margin:8px 0 4px;">Needs Improvement</h3><ul>';
+        data.what_is_not_working.forEach(item => { html += `<li>${item}</li>`; });
+        html += '</ul>';
+    }
+    if (data.recommendations?.length) {
+        html += '<h3 style="margin:8px 0 4px;">Recommendations</h3><table class="data-table"><thead><tr><th>#</th><th>Action</th><th>Rationale</th><th>Config Change</th><th>Impact</th></tr></thead><tbody>';
+        data.recommendations.forEach(r => {
+            html += `<tr><td>${r.priority}</td><td>${r.action}</td><td>${r.rationale}</td><td>${r.config_change || '—'}</td><td>${r.expected_impact}</td></tr>`;
+        });
+        html += '</tbody></table>';
+    }
+
+    safeHTML(content, html);
+}
+
+async function triggerAiAnalysis() {
+    const btn = $('#insight-ai-run-btn');
+    const status = $('#insight-ai-status');
+    if (btn) btn.disabled = true;
+    if (status) status.textContent = 'Running analysis...';
+    try {
+        const resp = await fetch('/api/insights/ai-analysis', { method: 'POST' });
+        if (resp.status === 429) {
+            if (status) status.textContent = 'Rate limited. Try again later.';
+            return;
+        }
+        if (resp.status === 400) {
+            const err = await resp.json();
+            if (status) status.textContent = err.error || 'Analyst disabled.';
+            return;
+        }
+        const data = await resp.json();
+        renderInsightAiPanel(data);
+    } catch (e) {
+        if (status) status.textContent = `Error: ${e.message}`;
+    } finally {
+        if (btn) btn.disabled = false;
+    }
+}
+
+
+// ═══════════════════════════════════════════════════════════════
+// BACKTEST TAB
+// ═══════════════════════════════════════════════════════════════
 
 let _btEquityChart = null;
 let _btCalibrationChart = null;

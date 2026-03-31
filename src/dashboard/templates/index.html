@@ -97,14 +97,17 @@
         <button class="tab-btn" data-tab="journal" onclick="switchTab('journal')">
             <span class="tab-label">F7 JOURNAL</span>
         </button>
+        <button class="tab-btn" data-tab="insights" onclick="switchTab('insights')">
+            <span class="tab-label">F8 INSIGHTS</span>
+        </button>
         <button class="tab-btn" data-tab="admin" onclick="switchTab('admin')">
-            <span class="tab-label">F8 ADMIN</span>
+            <span class="tab-label">F9 ADMIN</span>
         </button>
         <button class="tab-btn" data-tab="backtest" onclick="switchTab('backtest')">
-            <span class="tab-label">F9 BACKTEST</span>
+            <span class="tab-label">F10 BACKTEST</span>
         </button>
         <button class="tab-btn" data-tab="docs" onclick="switchTab('docs')">
-            <span class="tab-label">F10 DOCS</span>
+            <span class="tab-label">F11 DOCS</span>
         </button>
     </nav>
 
@@ -1405,6 +1408,86 @@
             <h2>TRADE JOURNAL</h2>
             <div id="journal-entries">
                 <p style="text-align:center;color:var(--text-muted);padding:24px 0;">No journal entries yet. Entries are auto-created when trades close.</p>
+            </div>
+        </section>
+
+    </div>
+    <!-- TAB: INSIGHTS                                           -->
+    <!-- ════════════════════════════════════════════════════════ -->
+    <div class="tab-content" id="tab-insights" data-tab="insights">
+
+        <!-- ─── Insights Time Range Selector ──────────────────── -->
+        <section class="insight-toolbar">
+            <span class="insight-toolbar-label">Period:</span>
+            <select id="insights-days" onchange="updateInsightsTab()">
+                <option value="7">7 Days</option>
+                <option value="14">14 Days</option>
+                <option value="30" selected>30 Days</option>
+                <option value="60">60 Days</option>
+            </select>
+        </section>
+
+        <!-- ─── Panel 1: P&L Overview ─────────────────────────── -->
+        <section class="insight-panel" id="insight-pnl">
+            <h2 class="section-title">P&L Overview</h2>
+            <div class="insight-kpi-grid" id="insight-kpi-cards"></div>
+            <div class="insight-chart-row">
+                <div class="insight-chart-box">
+                    <canvas id="insight-equity-chart"></canvas>
+                </div>
+                <div class="insight-chart-box">
+                    <canvas id="insight-daily-pnl-chart"></canvas>
+                </div>
+            </div>
+            <div id="insight-rolling-windows"></div>
+        </section>
+
+        <!-- ─── Panel 2: Category Performance ─────────────────── -->
+        <section class="insight-panel" id="insight-categories">
+            <h2 class="section-title">Category Performance</h2>
+            <div class="insight-chart-row">
+                <div class="insight-chart-box">
+                    <canvas id="insight-category-chart"></canvas>
+                </div>
+                <div class="insight-chart-box">
+                    <canvas id="insight-scatter-chart"></canvas>
+                </div>
+            </div>
+            <div id="insight-category-table"></div>
+        </section>
+
+        <!-- ─── Panel 3: Model Accuracy ───────────────────────── -->
+        <section class="insight-panel" id="insight-models">
+            <h2 class="section-title">Model Accuracy</h2>
+            <div id="insight-model-table"></div>
+            <div class="insight-chart-box">
+                <canvas id="insight-calibration-chart"></canvas>
+            </div>
+        </section>
+
+        <!-- ─── Panel 4: Friction Analysis ────────────────────── -->
+        <section class="insight-panel" id="insight-friction">
+            <h2 class="section-title">Friction Analysis</h2>
+            <div class="insight-chart-row">
+                <div class="insight-chart-box">
+                    <canvas id="insight-waterfall-chart"></canvas>
+                </div>
+                <div class="insight-chart-box">
+                    <canvas id="insight-edge-dist-chart"></canvas>
+                </div>
+            </div>
+            <div id="insight-fee-summary"></div>
+        </section>
+
+        <!-- ─── Panel 5: AI Analysis ── -->
+        <section class="insight-panel" id="insight-ai-analysis">
+            <h2 class="section-title">AI Analysis <span id="insight-ai-badge" class="badge" style="font-size:0.75em;margin-left:8px;display:none;"></span></h2>
+            <div id="insight-ai-content">
+                <p style="color:var(--text-muted)">No analysis available. Click "Run Analysis" to generate one.</p>
+            </div>
+            <div style="margin-top:12px;">
+                <button class="btn btn-primary" id="insight-ai-run-btn" onclick="triggerAiAnalysis()">Run Analysis</button>
+                <span id="insight-ai-status" style="margin-left:12px;color:var(--text-muted);font-size:0.85em;"></span>
             </div>
         </section>
 

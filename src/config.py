@@ -491,6 +491,40 @@ class ContinuousLearningConfig(BaseModel):
     auto_disable_bad_calibration: bool = False
 
 
+class DigestConfig(BaseModel):
+    """Weekly digest report configuration."""
+    enabled: bool = True
+    schedule_day_of_week: str = "mon"
+    schedule_hour: int = 8
+    lookback_days: int = 7
+    min_data_days: int = 3
+    split_long_messages: bool = True
+
+
+class AnalystConfig(BaseModel):
+    """AI analyst configuration (Phase 3 — multi-provider)."""
+    enabled: bool = False
+    provider: str = "anthropic"
+    model: str = "claude-sonnet-4-5-20250929"
+    max_tokens: int = 1500
+    temperature: float = 0.3
+    timeout_secs: int = 45
+    min_resolved_trades: int = 50
+    min_data_days: int = 28
+    rate_limit_hours: int = 6
+    schedule_enabled: bool = False
+    schedule_day_of_week: str = "mon"
+    schedule_hour: int = 9
+
+    @field_validator("provider")
+    @classmethod
+    def _validate_provider(cls, v: str) -> str:
+        valid = {"anthropic", "openai", "google", "deepseek"}
+        if v.lower() not in valid:
+            raise ValueError(f"analyst.provider must be one of {valid}, got {v!r}")
+        return v.lower()
+
+
 class ProductionConfig(BaseModel):
     """Production deployment & live trading (Phase 9)."""
     enabled: bool = False
@@ -594,6 +628,8 @@ class BotConfig(BaseModel):
     arbitrage: ArbitrageConfig = Field(default_factory=ArbitrageConfig)
     continuous_learning: ContinuousLearningConfig = Field(default_factory=ContinuousLearningConfig)
     production: ProductionConfig = Field(default_factory=ProductionConfig)
+    digest: DigestConfig = Field(default_factory=DigestConfig)
+    analyst: AnalystConfig = Field(default_factory=AnalystConfig)
 
     def redacted_dict(self) -> dict[str, Any]:
         """Return config dict with secret values masked."""
