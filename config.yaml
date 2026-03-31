@@ -75,7 +75,7 @@ risk:
     MACRO: 1.0
     CORPORATE: 0.75
     ELECTION: 0.5
-  kill_switch: true
+  kill_switch: false
 drawdown:
   enabled: true
   max_drawdown_pct: 0.2
