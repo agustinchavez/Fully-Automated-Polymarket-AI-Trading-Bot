@@ -337,6 +337,14 @@ class AIAnalyst:
         except sqlite3.OperationalError:
             pass
 
+        # Config snapshot
+        ctx.config_snapshot = (
+            f"Config: provider={self._config.provider}, "
+            f"model={self._config.model}, "
+            f"min_resolved_trades={self._config.min_resolved_trades}, "
+            f"min_data_days={self._config.min_data_days}"
+        )
+
         return ctx
 
     def _build_prompt(self, ctx: AnalystContext) -> str:

@@ -139,7 +139,7 @@ def _insert_deltas(
     entries: list[tuple[str, str, float]],
 ) -> None:
     """Insert wallet_deltas rows: [(action, title, value_change_usd), ...]."""
-    now = dt.datetime.utcnow().isoformat() + "Z"
+    now = dt.datetime.now(dt.timezone.utc).isoformat() + "Z"
     for action, title, value in entries:
         conn.execute(
             """INSERT INTO wallet_deltas
@@ -158,7 +158,7 @@ def _insert_snapshots(
     snapshots: list[tuple[float, float, str, int]],
 ) -> None:
     """Insert whale_price_snapshots: [(entry_price, price_24h, direction, favorable), ...]."""
-    past = (dt.datetime.utcnow() - dt.timedelta(hours=48)).isoformat() + "Z"
+    past = (dt.datetime.now(dt.timezone.utc) - dt.timedelta(hours=48)).isoformat() + "Z"
     for entry_price, price_24h, direction, favorable in snapshots:
         conn.execute(
             """INSERT INTO whale_price_snapshots
@@ -641,7 +641,7 @@ class TestDBPersistence:
         conn = _create_test_db()
         scorer = WhaleScorer(conn, timing_favorable_threshold=0.02)
         # Insert a snapshot from 25 hours ago (past 24h cutoff)
-        past = (dt.datetime.utcnow() - dt.timedelta(hours=25)).isoformat() + "Z"
+        past = (dt.datetime.now(dt.timezone.utc) - dt.timedelta(hours=25)).isoformat() + "Z"
         conn.execute(
             """INSERT INTO whale_price_snapshots
                (wallet_address, market_slug, outcome, entry_price, entry_time,
@@ -663,7 +663,7 @@ class TestDBPersistence:
     def test_update_pending_unfavorable(self):
         conn = _create_test_db()
         scorer = WhaleScorer(conn, timing_favorable_threshold=0.02)
-        past = (dt.datetime.utcnow() - dt.timedelta(hours=25)).isoformat() + "Z"
+        past = (dt.datetime.now(dt.timezone.utc) - dt.timedelta(hours=25)).isoformat() + "Z"
         conn.execute(
             """INSERT INTO whale_price_snapshots
                (wallet_address, market_slug, outcome, entry_price, entry_time,
@@ -683,7 +683,7 @@ class TestDBPersistence:
         conn = _create_test_db()
         scorer = WhaleScorer(conn)
         # Insert a snapshot from 1 hour ago (within 24h → should be skipped)
-        recent = (dt.datetime.utcnow() - dt.timedelta(hours=1)).isoformat() + "Z"
+        recent = (dt.datetime.now(dt.timezone.utc) - dt.timedelta(hours=1)).isoformat() + "Z"
         conn.execute(
             """INSERT INTO whale_price_snapshots
                (wallet_address, market_slug, outcome, entry_price, entry_time,
@@ -698,7 +698,7 @@ class TestDBPersistence:
     def test_update_skips_already_recorded(self):
         conn = _create_test_db()
         scorer = WhaleScorer(conn)
-        past = (dt.datetime.utcnow() - dt.timedelta(hours=25)).isoformat() + "Z"
+        past = (dt.datetime.now(dt.timezone.utc) - dt.timedelta(hours=25)).isoformat() + "Z"
         conn.execute(
             """INSERT INTO whale_price_snapshots
                (wallet_address, market_slug, outcome, entry_price, entry_time,
@@ -1293,7 +1293,7 @@ def _create_dashboard_test_db():
 
 def _seed_whale_data(conn: sqlite3.Connection) -> None:
     """Seed whale wallets + quality scores for dashboard tests."""
-    now = dt.datetime.utcnow().isoformat() + "Z"
+    now = dt.datetime.now(dt.timezone.utc).isoformat() + "Z"
     # Tracked wallets
     for i, (addr, name, pnl) in enumerate([
         ("0xA1", "AlphaWhale", 3_000_000),
@@ -1369,7 +1369,7 @@ class TestDashboardQualityEnrichment:
         from src.dashboard.app import app
         conn = _create_dashboard_test_db()
         # Insert wallets but NO quality scores
-        now = dt.datetime.utcnow().isoformat() + "Z"
+        now = dt.datetime.now(dt.timezone.utc).isoformat() + "Z"
         conn.execute(
             """INSERT INTO tracked_wallets (address, name, total_pnl, win_rate,
                active_positions, total_volume, score, last_scanned)
@@ -1441,7 +1441,7 @@ class TestDashboardQualityVisualization:
         """When no quality scores exist, weighted conviction = raw conviction."""
         from src.dashboard.app import app
         conn = _create_dashboard_test_db()
-        now = dt.datetime.utcnow().isoformat() + "Z"
+        now = dt.datetime.now(dt.timezone.utc).isoformat() + "Z"
         # Insert wallet + signal but no quality scores
         conn.execute(
             """INSERT INTO tracked_wallets (address, name, total_pnl, win_rate,
@@ -1469,7 +1469,7 @@ class TestDashboardQualityVisualization:
     def test_distribution_empty_when_no_scores(self):
         from src.dashboard.app import app
         conn = _create_dashboard_test_db()
-        now = dt.datetime.utcnow().isoformat() + "Z"
+        now = dt.datetime.now(dt.timezone.utc).isoformat() + "Z"
         conn.execute(
             """INSERT INTO tracked_wallets (address, name, total_pnl, win_rate,
                active_positions, total_volume, score, last_scanned)

@@ -40,7 +40,7 @@ ensemble:
   enabled: true
   models:
   - gpt-4o
-  - claude-sonnet-4-5-20250929
+  - claude-sonnet-4-6
   - gemini-2.0-flash
   aggregation: trimmed_mean
   min_models_required: 1
@@ -140,7 +140,7 @@ model_tiers:
   - gpt-4o
   premium_models:
   - gpt-4o
-  - claude-sonnet-4-5-20250929
+  - claude-sonnet-4-6
   - gemini-2.0-flash
   premium_min_volume_usd: 10000.0
   premium_min_edge: 0.06
@@ -165,7 +165,7 @@ digest:
 analyst:
   enabled: false
   provider: anthropic
-  model: claude-sonnet-4-5-20250929
+  model: claude-sonnet-4-6
   max_tokens: 1500
   temperature: 0.3
   timeout_secs: 45

@@ -133,6 +133,19 @@ def _populate_test_db(conn: sqlite3.Connection, days: int = 30) -> None:
                 (model, f"market_{i}", prob, outcome, d),
             )
 
+    # Equity snapshots for equity curve tests
+    import time as _time
+    base_ts = _time.time() - days * 86400
+    equity = 5000.0
+    for i in range(days):
+        pnl = 5.0 if i % 3 != 0 else -3.0
+        equity += pnl
+        conn.execute(
+            "INSERT INTO equity_snapshots "
+            "(timestamp, equity, pnl_cumulative, drawdown_pct) VALUES (?,?,?,?)",
+            (base_ts + i * 86400, equity, equity - 5000.0, 0.02 + i * 0.001),
+        )
+
     conn.commit()
 
 
@@ -315,3 +328,90 @@ class TestExportCSV:
             assert hasattr(cat, "category")
             assert hasattr(cat, "trades")
             assert hasattr(cat, "total_pnl")
+
+
+# ── 8. API Route Tests ────────────────────────────────────────────────
+
+
+class TestApiPnlOverview:
+    def test_pnl_api_returns_kpis(self, app_client) -> None:
+        """GET /api/insights/pnl-overview returns KPI data with daily bars."""
+        resp = app_client.get("/api/insights/pnl-overview?days=30")
+        assert resp.status_code == 200
+        data = resp.get_json()
+        assert "kpis" in data or "insufficient_data" in data
+
+    def test_pnl_api_has_daily_bars(self, app_client) -> None:
+        """Response includes daily_bars array."""
+        resp = app_client.get("/api/insights/pnl-overview?days=30")
+        data = resp.get_json()
+        if not data.get("insufficient_data"):
+            assert "daily_bars" in data
+            assert len(data["daily_bars"]) > 0
+
+    def test_pnl_api_has_equity_curve(self, app_client) -> None:
+        """Response includes equity_curve from equity_snapshots."""
+        resp = app_client.get("/api/insights/pnl-overview?days=30")
+        data = resp.get_json()
+        if not data.get("insufficient_data"):
+            assert "equity_curve" in data
+            assert len(data["equity_curve"]) > 0
+            assert "timestamp" in data["equity_curve"][0]
+            assert "equity" in data["equity_curve"][0]
+
+    def test_pnl_api_has_rolling_windows(self, app_client) -> None:
+        """Response includes rolling_windows array."""
+        resp = app_client.get("/api/insights/pnl-overview?days=30")
+        data = resp.get_json()
+        if not data.get("insufficient_data"):
+            assert "rolling_windows" in data
+
+
+class TestApiCategoryBreakdown:
+    def test_category_api_returns_list(self, app_client) -> None:
+        """GET /api/insights/category-breakdown returns categories with P&L."""
+        resp = app_client.get("/api/insights/category-breakdown?days=30")
+        assert resp.status_code == 200
+        data = resp.get_json()
+        cats = data.get("categories", [])
+        if cats:
+            assert cats[0].get("category") is not None
+            assert "total_pnl" in cats[0]
+            assert "win_rate" in cats[0]
+
+
+class TestApiModelAccuracy:
+    def test_model_api_returns_leaderboard(self, app_client) -> None:
+        """GET /api/insights/model-accuracy returns model leaderboard."""
+        resp = app_client.get("/api/insights/model-accuracy?days=30")
+        assert resp.status_code == 200
+        data = resp.get_json()
+        models = data.get("models", [])
+        if models:
+            assert "model_name" in models[0]
+            assert "brier_score" in models[0]
+
+    def test_model_api_has_calibration(self, app_client) -> None:
+        """Response includes calibration_buckets."""
+        resp = app_client.get("/api/insights/model-accuracy?days=30")
+        data = resp.get_json()
+        assert "calibration_buckets" in data
+
+
+class TestApiFriction:
+    def test_friction_api_returns_waterfall(self, app_client) -> None:
+        """GET /api/insights/friction returns waterfall data."""
+        resp = app_client.get("/api/insights/friction?days=30")
+        assert resp.status_code == 200
+        data = resp.get_json()
+        if not data.get("insufficient_data"):
+            assert "waterfall" in data
+            wf = data["waterfall"]
+            assert "gross_edge" in wf
+
+    def test_friction_api_has_edge_distribution(self, app_client) -> None:
+        """Response includes edge_distribution histogram."""
+        resp = app_client.get("/api/insights/friction?days=30")
+        data = resp.get_json()
+        if not data.get("insufficient_data"):
+            assert "edge_distribution" in data

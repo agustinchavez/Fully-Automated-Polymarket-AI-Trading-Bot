@@ -8,7 +8,7 @@ from src.observability.logger import get_logger
 
 log = get_logger(__name__)
 
-SCHEMA_VERSION = 18
+SCHEMA_VERSION = 19
 
 _MIGRATIONS: dict[int, list[str]] = {
     1: [
@@ -1171,6 +1171,9 @@ _MIGRATIONS: dict[int, list[str]] = {
         "ALTER TABLE open_orders ADD COLUMN parent_plan_id TEXT DEFAULT '';",
         "ALTER TABLE open_orders ADD COLUMN child_index INTEGER DEFAULT 0;",
         "CREATE INDEX IF NOT EXISTS idx_open_orders_parent_plan ON open_orders(parent_plan_id);",
+    ],
+    19: [
+        "ALTER TABLE model_forecast_log ADD COLUMN resolved_at TEXT;",
     ],
 }
 

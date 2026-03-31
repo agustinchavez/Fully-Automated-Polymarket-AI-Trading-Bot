@@ -35,7 +35,8 @@ def _create_test_db() -> sqlite3.Connection:
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             model_name TEXT, market_id TEXT, category TEXT,
             forecast_prob REAL, actual_outcome REAL,
-            recorded_at TEXT DEFAULT (datetime('now'))
+            recorded_at TEXT DEFAULT (datetime('now')),
+            resolved_at TEXT
         );
         CREATE TABLE regime_history (
             id INTEGER PRIMARY KEY AUTOINCREMENT,

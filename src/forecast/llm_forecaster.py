@@ -52,6 +52,7 @@ class ForecastResult:
     evidence_quality: float = 0.0
     num_sources: int = 0
     raw_llm_response: dict[str, Any] = field(default_factory=dict)
+    model_forecasts: dict[str, float] = field(default_factory=dict)
 
     def to_dict(self) -> dict[str, Any]:
         return {

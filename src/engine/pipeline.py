@@ -375,6 +375,10 @@ class PipelineRunner:
                     "agreement": ens_result.agreement_score,
                     "aggregation": ens_result.aggregation_method,
                 },
+                model_forecasts={
+                    f.model_name: f.model_probability
+                    for f in ens_result.individual_forecasts
+                },
             )
             # Apply low-evidence penalty
             if ctx.evidence.quality_score < self.config.forecasting.min_evidence_quality:

@@ -152,11 +152,11 @@ class TestConfigDefault:
         assert config.plan_orchestration_enabled is False
 
 
-class TestMigration18:
-    def test_schema_version_is_18(self):
+class TestMigration19:
+    def test_schema_version_is_19(self):
         conn = _make_conn()
         row = conn.execute("SELECT MAX(version) FROM schema_version").fetchone()
-        assert row[0] == 18
+        assert row[0] == 19
 
     def test_execution_plans_table_exists(self):
         conn = _make_conn()

@@ -71,10 +71,13 @@ class TelegramKillBot:
         log.info("telegram_bot.stopped")
 
     def _start_scheduler(self) -> None:
-        """Start APScheduler for weekly digest cron job."""
-        if not self._engine:
-            return
-        config = getattr(self._engine, "config", None)
+        """Start APScheduler for weekly digest cron job.
+
+        Works with or without an engine reference. When no engine is
+        present the scheduled digest job is skipped (it needs DB access)
+        but the scheduler still starts so it can be used for other jobs.
+        """
+        config = getattr(self._engine, "config", None) if self._engine else None
         digest_cfg = getattr(config, "digest", None)
         if not digest_cfg or not digest_cfg.enabled:
             return

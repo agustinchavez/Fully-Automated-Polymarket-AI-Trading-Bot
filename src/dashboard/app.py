@@ -8337,7 +8337,20 @@ def api_insights_ai_analysis_post() -> Any:
         from src.analytics.ai_analyst import AIAnalyst
         analyst = AIAnalyst(conn=conn, config=cfg.analyst)
         if not analyst._check_rate_limit():
-            return jsonify({"error": "Rate limited. Try again later."}), 429
+            remaining = 0
+            try:
+                row = conn.execute(
+                    "SELECT value FROM engine_state WHERE key='ai_analysis_last_call'"
+                ).fetchone()
+                if row:
+                    import time as _time
+                    elapsed = (_time.time() - float(row["value"])) / 3600
+                    remaining = max(0, int((cfg.analyst.rate_limit_hours - elapsed) * 3600))
+            except Exception:
+                pass
+            resp = jsonify({"error": "Rate limited. Try again later.", "retry_after_secs": remaining})
+            resp.headers["Retry-After"] = str(remaining)
+            return resp, 429
         import asyncio
         loop = asyncio.new_event_loop()
         try:

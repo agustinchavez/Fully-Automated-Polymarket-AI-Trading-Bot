@@ -257,11 +257,11 @@ class CalibrationFeedbackLoop:
                 conn.execute("""
                     INSERT INTO model_forecast_log
                         (model_name, market_id, category, forecast_prob,
-                         actual_outcome, recorded_at)
-                    VALUES (?, ?, ?, ?, ?, ?)
+                         actual_outcome, recorded_at, resolved_at)
+                    VALUES (?, ?, ?, ?, ?, ?, ?)
                 """, (
                     model_name, record.market_id, record.category,
-                    prob, record.actual_outcome, ts,
+                    prob, record.actual_outcome, ts, ts,
                 ))
             conn.commit()
         except sqlite3.OperationalError:
