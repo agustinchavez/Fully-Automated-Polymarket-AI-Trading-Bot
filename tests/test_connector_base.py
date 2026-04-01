@@ -148,6 +148,50 @@ class TestKeywordMatching:
         assert c.is_relevant("random question", "MACRO")
 
 
+class TestCircuitBreaker:
+    def test_failure_records_on_circuit_breaker(self) -> None:
+        from src.observability.circuit_breaker import circuit_breakers
+
+        c = _StubConnector(fail=True)
+        cb = circuit_breakers.get("research_stub")
+        # Reset to clean state
+        cb.reset()
+
+        asyncio.run(c.fetch("some question", "TEST_CAT"))
+        # Should have recorded a failure
+        assert len(cb._failures) == 1
+
+    def test_success_records_on_circuit_breaker(self) -> None:
+        from src.observability.circuit_breaker import circuit_breakers
+
+        c = _StubConnector(fail=False)
+        cb = circuit_breakers.get("research_stub")
+        cb.reset()
+
+        result = asyncio.run(c.fetch("some question", "TEST_CAT"))
+        assert len(result) == 1
+        # Circuit should still be closed after success
+        assert cb.allow_request()
+
+    def test_open_circuit_returns_empty(self) -> None:
+        from src.observability.circuit_breaker import circuit_breakers
+
+        c = _StubConnector(fail=False)
+        cb = circuit_breakers.get("research_stub")
+        cb.reset()
+
+        # Force circuit open by recording enough failures
+        for _ in range(cb._config.failure_threshold):
+            cb.record_failure()
+
+        assert not cb.allow_request()
+        result = asyncio.run(c.fetch("some question", "TEST_CAT"))
+        assert result == []
+
+        # Clean up
+        cb.reset()
+
+
 class TestClose:
     def test_close_with_no_client(self) -> None:
         c = _StubConnector()

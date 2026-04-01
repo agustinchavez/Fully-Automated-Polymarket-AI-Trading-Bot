@@ -13,6 +13,7 @@ from typing import Any
 
 import httpx
 
+from src.observability.circuit_breaker import circuit_breakers
 from src.observability.logger import get_logger
 from src.research.source_fetcher import FetchedSource
 
@@ -52,10 +53,19 @@ class BaseResearchConnector(abc.ABC):
         question: str,
         market_type: str,
     ) -> list[FetchedSource]:
-        """Safe wrapper — catches all exceptions, returns [] on failure."""
+        """Safe wrapper — circuit breaker + exception catch, returns [] on failure."""
+        cb = circuit_breakers.get(f"research_{self.name}")
+        if not cb.allow_request():
+            log.debug(
+                f"research_connector.{self.name}.circuit_open",
+            )
+            return []
         try:
-            return await self._fetch_impl(question, market_type)
+            result = await self._fetch_impl(question, market_type)
+            cb.record_success()
+            return result
         except Exception as e:
+            cb.record_failure()
             log.warning(
                 f"research_connector.{self.name}.failed",
                 error=str(e),

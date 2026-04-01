@@ -4,7 +4,7 @@
 
 ```bash
 # 1. Clone and install
-git clone https://github.com/dylanpersonguy/Fully-Autonomous-Polymarket-AI-Trading-Bot.git
+git clone https://github.com/agustinchavez/Fully-Autonomous-Polymarket-AI-Trading-Bot.git
 cd Fully-Autonomous-Polymarket-AI-Trading-Bot
 make dev
 
@@ -23,10 +23,19 @@ make dashboard
 
 | Variable | Required | Description |
 |----------|----------|-------------|
-| `OPENAI_API_KEY` | ✅ | GPT-4o for forecasting |
-| `SERPAPI_KEY` | ✅ | Web search for research |
-| `ANTHROPIC_API_KEY` | Optional | Claude for ensemble |
-| `GOOGLE_API_KEY` | Optional | Gemini for ensemble |
+| `OPENAI_API_KEY` | Yes | GPT-4o for forecasting |
+| `SERPAPI_KEY` | Yes* | Web search for research |
+| `TAVILY_API_KEY` | Alt* | Alternative search provider |
+| `BING_API_KEY` | Alt* | Alternative search provider |
+| `ANTHROPIC_API_KEY` | Optional | Claude Sonnet 4.6 for ensemble |
+| `GOOGLE_API_KEY` | Optional | Gemini 2.0 Flash for ensemble |
+| `FRED_API_KEY` | Optional | FRED economic data (free, instant signup) |
+| `COINGECKO_API_KEY` | Optional | CoinGecko crypto prices (free demo) |
+| `CONGRESS_API_KEY` | Optional | Congress.gov legislative data (free) |
+| `COURTLISTENER_API_KEY` | Optional | CourtListener legal cases (free) |
+| `DEEPSEEK_API_KEY` | Optional | DeepSeek AI analyst provider |
+| `TELEGRAM_BOT_TOKEN` | Optional | Weekly digest and kill bot alerts |
+| `TELEGRAM_CHAT_ID` | Optional | Telegram chat for alerts |
 | `POLYMARKET_API_KEY` | Live only | Polymarket CLOB API |
 | `POLYMARKET_API_SECRET` | Live only | CLOB API secret |
 | `POLYMARKET_API_PASSPHRASE` | Live only | CLOB passphrase |
@@ -34,6 +43,8 @@ make dashboard
 | `ENABLE_LIVE_TRADING` | Live only | Set `true` for real trades |
 | `DASHBOARD_API_KEY` | Optional | Protect dashboard |
 | `SENTRY_DSN` | Optional | Error tracking |
+
+\* At least one search provider is required.
 
 ### Runtime Config (`config.yaml`)
 
@@ -43,8 +54,8 @@ every cycle — changes take effect without restarting.
 Key settings to tune:
 - `risk.bankroll` — your total capital
 - `risk.max_stake_per_market` — max bet size
-- `risk.min_edge` — minimum edge to trade (default 5%)
-- `engine.cycle_interval_secs` — how often to scan (default 300s)
+- `risk.min_edge` — minimum edge to trade (default 4%)
+- `engine.cycle_interval_secs` — how often to scan (default 180s)
 - `ensemble.enabled` — use multi-model forecasting
 
 ---
@@ -104,19 +115,53 @@ sudo systemctl start polymarket-bot
 
 ---
 
-## Going Live — Testnet First
+## Going Live — Staged Deployment
 
-### Step 1: Get Testnet Credentials
+### Step 0: Run Preflight Check
 
-1. Create a Polygon Mumbai wallet (use MetaMask, testnet mode)
-2. Get test MATIC from [Mumbai Faucet](https://faucet.polygon.technology/)
-3. Generate Polymarket API credentials at [polymarket.com](https://polymarket.com)
+Before any live trading, run the built-in 7-check preflight gate:
 
-### Step 2: Configure for Testnet
+```bash
+bot production preflight
+```
+
+All checks must pass:
+- Backtest Sharpe >= 1.0
+- Paper trading >= 30 days
+- Backtest-paper agreement (Sharpe delta < 1.0)
+- Chaos tests passed
+- DB backup exists and recent
+- Budget caps configured
+- Alert channel configured (Telegram)
+
+### Step 1: Paper Trading (Required First)
+
+Paper trading runs by default. No configuration changes needed:
+
+```bash
+make dashboard
+# Monitor via http://localhost:2345
+# Review weekly digest each Monday
+# Aim for 50+ resolved trades before proceeding
+```
+
+### Step 2: Graduated Live Deployment
+
+The bot enforces a 5-stage graduated deployment system:
+
+| Stage | Duration | Max Bankroll | Max Stake | Kelly Fraction |
+|-------|----------|-------------|-----------|---------------|
+| Paper | 30+ days | Unlimited (simulated) | Unlimited | 0.25 |
+| Week 1 | 7 days | $100 | $5 | 0.10 |
+| Week 2 | 7 days | $500 | $25 | 0.15 |
+| Weeks 3-4 | 14 days | $2,000 | $50 | 0.20 |
+| Month 2+ | Ongoing | Config value | Config value | 0.25 |
+
+### Step 3: Configure for Live Trading
 
 ```bash
 # In .env:
-POLYMARKET_CHAIN_ID=80001          # Mumbai testnet
+POLYMARKET_CHAIN_ID=137           # Polygon mainnet
 ENABLE_LIVE_TRADING=true
 ```
 
@@ -127,42 +172,25 @@ execution:
 engine:
   paper_mode: false
 risk:
-  bankroll: 100.0                  # Small testnet amount
-  max_stake_per_market: 5.0        # Tiny bets
+  bankroll: 100.0                 # Start with week1 limits
+  max_stake_per_market: 5.0
+  kelly_fraction: 0.10            # Conservative Kelly for week1
+drawdown:
+  max_drawdown_pct: 0.10          # Tight 10% drawdown for week1
 ```
 
-### Step 3: Install CLOB Client
+### Step 4: Install CLOB Client
 
 ```bash
 pip install py-clob-client
 ```
 
-### Step 4: Run and Validate
+### Step 5: Run and Monitor
 
 ```bash
 make dashboard
-# Monitor trades on Mumbai testnet
-# Verify order placement, fills, P&L tracking
-```
-
-### Step 5: Switch to Mainnet
-
-Once validated on testnet:
-
-```bash
-# In .env:
-POLYMARKET_CHAIN_ID=137            # Polygon mainnet
-# Fund wallet with real USDC on Polygon
-```
-
-```yaml
-# In config.yaml — start conservative:
-risk:
-  bankroll: 500.0
-  max_stake_per_market: 25.0
-  kelly_fraction: 0.15             # Conservative Kelly
-drawdown:
-  max_drawdown_pct: 0.10           # Tight 10% drawdown limit
+# Send /status to Telegram to confirm running
+# Review P&L daily during week1
 ```
 
 ---
@@ -196,12 +224,14 @@ Set `SENTRY_DSN` in `.env` for automatic exception reporting.
 
 ## API Cost Estimates
 
-| Component | Cost per cycle | Notes |
-|-----------|---------------|-------|
-| SerpAPI | ~$0.05-0.15 | 5-15 queries × $0.01/query |
-| GPT-4o | ~$0.05-0.10 | Per market forecast |
-| Claude/Gemini | ~$0.03-0.05 | If ensemble enabled |
-| **Total** | **~$0.15-0.30** | Per 5-minute cycle |
+| Component | Cost per market | Notes |
+|-----------|----------------|-------|
+| Scout tier (gpt-4o-mini) | ~$0.001 | Low-value markets, quick filter |
+| Standard tier (gpt-4o) | ~$0.01 | Most markets |
+| Premium tier (ensemble) | ~$0.05 | High-value markets, 3 models |
+| Web search (SerpAPI/Tavily) | ~$0.01-0.03 | Per query, cached 2hr |
+| Research connectors | Free | FRED, CoinGecko, Congress, etc. |
+| **Typical cycle (10 markets)** | **~$0.10-0.50** | Depends on tier distribution |
 
-Rate limiter prevents API bans. Search cache (2hr TTL) reduces
-redundant queries by ~60%.
+Model tier router automatically assigns markets to cost-appropriate tiers.
+Research connectors reduce web search costs by providing structured data first.

@@ -9,7 +9,7 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow?style=for-the-badge)](LICENSE)
 [![Docker](https://img.shields.io/badge/Docker-Ready-2496ED?style=for-the-badge&logo=docker&logoColor=white)](docker-compose.yml)
 
-**A production-grade autonomous Polymarket trading bot that discovers prediction markets, researches evidence with web search, forecasts probabilities using a multi-model AI ensemble (GPT-4o, Claude, Gemini), and executes trades with 15+ independent risk checks and fractional Kelly position sizing.**
+**A production-grade autonomous Polymarket trading bot that discovers prediction markets, researches evidence with web search, forecasts probabilities using a multi-model AI ensemble (GPT-4o, Claude Sonnet 4.6, Gemini 2.0 Flash), and executes trades with 15+ independent risk checks and fractional Kelly position sizing.**
 
 Paper trading by default. Three independent safety gates must be unlocked for live orders.
 
@@ -23,7 +23,7 @@ Paper trading by default. Three independent safety gates must be unlocked for li
 
 ## 🖥️ Real-Time Dashboard
 
-A 9-tab glassmorphism dark-themed web dashboard provides complete visibility into every aspect of the trading system — from portfolio health to individual whale movements.
+A 10-tab dark-themed web dashboard provides complete visibility into every aspect of the trading system — from portfolio health to individual whale movements.
 
 ### Overview — Portfolio Health & Engine Status
 
@@ -155,7 +155,7 @@ A complete **28-section reference guide** is embedded directly in the dashboard 
 ### Installation
 
 ```bash
-git clone https://github.com/dylanpersonguy/Fully-Autonomous-Polymarket-AI-Trading-Bot.git
+git clone https://github.com/agustinchavez/Fully-Autonomous-Polymarket-AI-Trading-Bot.git
 cd Fully-Autonomous-Polymarket-AI-Trading-Bot
 python3 -m venv .venv && source .venv/bin/activate
 pip install -e ".[dev]"
@@ -175,8 +175,15 @@ Add your API keys to `.env`:
 | `TAVILY_API_KEY` | **Yes**\* | Web search for evidence gathering |
 | `SERPAPI_KEY` | Alt\* | Alternative search provider |
 | `BING_API_KEY` | Alt\* | Alternative search provider |
-| `ANTHROPIC_API_KEY` | No | Claude 3.5 Sonnet for ensemble |
-| `GOOGLE_API_KEY` | No | Gemini 1.5 Pro for ensemble |
+| `ANTHROPIC_API_KEY` | No | Claude Sonnet 4.6 for ensemble |
+| `GOOGLE_API_KEY` | No | Gemini 2.0 Flash for ensemble |
+| `FRED_API_KEY` | No | FRED economic data connector (free) |
+| `COINGECKO_API_KEY` | No | CoinGecko crypto data (free demo) |
+| `CONGRESS_API_KEY` | No | Congress.gov legislative data (free) |
+| `COURTLISTENER_API_KEY` | No | CourtListener legal case data (free) |
+| `DEEPSEEK_API_KEY` | No | DeepSeek AI analyst provider |
+| `TELEGRAM_BOT_TOKEN` | No | Weekly digest and kill bot alerts |
+| `TELEGRAM_CHAT_ID` | No | Telegram chat for alerts |
 | `DASHBOARD_API_KEY` | No | Protect the dashboard with auth |
 | `SENTRY_DSN` | No | Error tracking via Sentry |
 
@@ -196,16 +203,17 @@ Open **http://localhost:2345** — the trading engine auto-starts in the backgro
 
 ```
 src/
-├── analytics/          # Adaptive weights, calibration feedback, regime detection, smart entry
-├── connectors/         # Polymarket CLOB, Gamma API, web search, WebSocket feed, rate limiter
+├── analytics/          # Adaptive weights, calibration, regime detection, smart entry, post-mortem
+├── connectors/         # Polymarket CLOB, Gamma API, web search, WebSocket feed, rate limiter, Kalshi
 ├── dashboard/          # Flask app, templates, static assets (CSS/JS)
 ├── engine/             # Trading loop, market classifier, market filter, position manager
-├── execution/          # Order builder, order router, fill tracker, cancel handler
-├── forecast/           # LLM forecaster, multi-model ensemble, feature builder, calibrator
-├── observability/      # Structured logging, metrics, alerts (Telegram/Discord/Slack), Sentry
+├── execution/          # Order builder, order router, fill tracker, strategy selector
+├── forecast/           # LLM ensemble, feature builder, calibrator, specialists, base rates, decomposer
+├── observability/      # Structured logging, metrics, circuit breakers, alerts, Telegram bot, chaos testing
 ├── policy/             # Risk limits, edge calc, position sizer, drawdown, portfolio risk, arbitrage
 ├── research/           # Evidence extractor, query builder, source fetcher
-└── storage/            # SQLite with WAL, migrations, cache, audit trail, backup
+│   └── connectors/     # FRED, CoinGecko, Congress, CourtListener, Open-Meteo, GDELT API connectors
+└── storage/            # SQLite with WAL, 19 migrations, cache, audit trail, backup
 ```
 
 ### Trading Pipeline
@@ -221,7 +229,7 @@ Each cycle, the engine:
 2. **Classifies** markets into 11 categories using 100+ regex rules (zero LLM cost)
 3. **Filters** with a pre-research quality score — blocks junk markets before any API calls (~90% cost savings)
 4. **Researches** via site-restricted searches per category (`site:bls.gov` for macro, `site:sec.gov` for corporate) with contrarian queries to avoid confirmation bias
-5. **Forecasts** with a 3-model ensemble (GPT-4o 40%, Claude 3.5 Sonnet 35%, Gemini 1.5 Pro 25%) running in parallel
+5. **Forecasts** with a 3-model ensemble (GPT-4o 40%, Claude Sonnet 4.6 35%, Gemini 2.0 Flash 25%) running in parallel
 6. **Calibrates** using Platt scaling, historical calibration, evidence quality penalty, and ensemble spread penalty
 7. **Validates** through 15+ independent risk checks — any failure blocks the trade
 8. **Sizes** positions using fractional Kelly with 7 multipliers (confidence, drawdown, timeline, volatility, regime, category, liquidity)
@@ -239,8 +247,8 @@ Three frontier LLMs run in parallel, each producing an independent probability f
 | Model | Default Weight | Role |
 |-------|---------------|------|
 | GPT-4o | 40% | Primary forecaster |
-| Claude 3.5 Sonnet | 35% | Second opinion |
-| Gemini 1.5 Pro | 25% | Third opinion |
+| Claude Sonnet 4.6 | 35% | Second opinion |
+| Gemini 2.0 Flash | 25% | Third opinion |
 
 - **3 aggregation methods** — trimmed mean, median, or weighted average
 - **Models forecast independently** — explicitly told not to anchor to market price
@@ -255,6 +263,24 @@ Three frontier LLMs run in parallel, each producing an independent probability f
 - **Full HTML extraction** via BeautifulSoup, not just search snippets
 - **Domain authority scoring** — primary sources (1.0) > secondary (0.6) > unknown (0.3)
 - **Auto-filters** low-quality domains (Wikipedia, Reddit, Medium, Twitter, TikTok)
+
+### Direct API Research Connectors
+
+Six free structured API connectors provide authoritative data before web search runs:
+
+| Connector | Categories | API Key Required | Data Provided |
+|-----------|-----------|-----------------|---------------|
+| **Open-Meteo** | WEATHER | No | 7-day forecast, precipitation, temperature, wind |
+| **GDELT** | MACRO, ELECTION, LEGAL, CORPORATE | No | News volume timeline, spike detection |
+| **FRED** | MACRO | Yes (free) | Federal funds rate, CPI, GDP, unemployment, treasury yields |
+| **CoinGecko** | CRYPTO | Yes (free demo) | Real-time prices, 24h change, market cap, volume |
+| **Congress.gov** | ELECTION, LEGAL | Yes (free) | Bill status, vote records, nominations |
+| **CourtListener** | LEGAL | Yes (free) | Court opinions, docket entries, case search |
+
+- API sources are prepended before web search results with `extraction_method='api'`
+- Each connector is config-gated (`research.fred_enabled`, etc.) and disabled by default for key-required connectors
+- Circuit breakers prevent repeated failures from degrading the pipeline
+- GDELT uses `authority_score=0.4` (aggregator); all others use `1.0` (primary source)
 
 ### Calibration & Self-Improvement
 
@@ -343,10 +369,19 @@ ENABLE_LIVE_TRADING = true        ← environment variable
 - **Sentry integration** — optional error tracking with data scrubbing
 - **API cost tracking** — per-call cost estimation for LLM and search usage
 
+### Analysis Layer
+
+- **Weekly Telegram Digest** — automated Monday summary with P&L, category breakdown, model accuracy, friction analysis
+- **Dashboard Insights Tab** — 5 interactive panels: P&L Overview, Category Performance, Model Accuracy, Friction Analysis, AI Analysis
+- **Multi-Provider AI Analyst** — generates strategy recommendations using OpenAI, Anthropic, Google, or DeepSeek (configurable)
+- **Post-Mortem Analysis** — automatic trade-by-trade review after market resolution
+- **Evidence Quality Tracking** — domain-level accuracy scoring with effective weight adjustment (0.5x to 1.5x)
+- **Parameter Optimizer** — random perturbation search over 6 tunable parameters with paired t-test validation
+
 ### Storage & Audit
 
 - **SQLite with WAL mode** for concurrent reads and writes
-- **10 automatic schema migrations** — zero-downtime upgrades
+- **Automatic schema migrations** — zero-downtime upgrades
 - **Immutable audit trail** — every decision recorded with SHA-256 integrity checksums
 - **TTL cache** — search results (1hr), orderbook (30s), LLM responses (30min), market list (5min)
 - **Automated backups** with rotation (max 10)
@@ -420,7 +455,7 @@ forecasting:
 
 ensemble:
   enabled: true
-  models: [gpt-4o, claude-3-5-sonnet-20241022, gemini-1.5-pro]
+  models: [gpt-4o, claude-sonnet-4-6, gemini-2.0-flash]
   aggregation: trimmed_mean
   min_models_required: 1
   timeout_per_model_secs: 30
@@ -493,6 +528,42 @@ wallet_scanner:
 
 </details>
 
+<details>
+<summary><strong>Research Connectors</strong></summary>
+
+```yaml
+research:
+  fred_enabled: false          # Enable after adding FRED_API_KEY
+  congress_enabled: false
+  courtlistener_enabled: false
+  coingecko_enabled: false
+  openmeteo_enabled: true      # No key needed
+  gdelt_enabled: true          # No key needed
+  fred_max_series: 3
+  congress_max_bills: 5
+  coingecko_max_coins: 3
+  gdelt_timespan_days: 7
+```
+
+</details>
+
+<details>
+<summary><strong>Analysis & Digest</strong></summary>
+
+```yaml
+analyst:
+  enabled: false               # Enable after 50+ resolved trades
+  provider: anthropic
+  model: claude-sonnet-4-6
+
+digest:
+  enabled: false
+  schedule_day: monday
+  schedule_hour: 9
+```
+
+</details>
+
 ---
 
 ## 🚀 Deployment
@@ -522,7 +593,7 @@ The Docker setup includes:
 - **Non-root user** (`botuser`) for security
 - **Persistent volumes** for database, logs, and reports
 - **Health checks** with 30s intervals
-- **Resource limits** (1 GB memory, 1.0 CPU)
+- **Resource limits** (4 GB memory, 2.0 CPU)
 - **Auto-restart** policy (`unless-stopped`)
 
 ### Health Endpoints
@@ -583,24 +654,6 @@ make typecheck       # mypy type checking
 
 ---
 
-## 📬 Custom Bot Development
-
-**Want a custom trading bot tailored to your strategy?**
-
-I build custom automated trading bots for prediction markets, crypto, and forex. Whether you need modifications to this platform or an entirely new system, I can help.
-
-**📱 Contact: [@DylanForexia](https://t.me/DylanForexia) on Telegram**
-
-Services include:
-
-- **Custom strategy development & backtesting** — Build and validate strategies against historical data
-- **Live trading integration with exchange APIs** — Polymarket, Binance, dYdX, forex brokers, and more
-- **Risk management system design** — Position sizing, drawdown protection, portfolio risk controls
-- **Dashboard & monitoring tools** — Real-time web dashboards with alerting and audit trails
-- **Performance optimization & scaling** — Low-latency execution, concurrent processing, cloud deployment
-
----
-
 ## ❓ FAQ
 
 <details>
@@ -627,7 +680,7 @@ Yes. The bot supports both paper trading (simulated) and live trading. Paper mod
 <details>
 <summary><strong>What AI models does the Polymarket bot use?</strong></summary>
 
-The bot runs a multi-model ensemble with GPT-4o (40% weight), Claude 3.5 Sonnet (35%), and Gemini 1.5 Pro (25%). Models forecast independently and the results are aggregated using trimmed mean, median, or weighted average.
+The bot runs a multi-model ensemble with GPT-4o (40% weight), Claude Sonnet 4.6 (35%), and Gemini 2.0 Flash (25%). Models forecast independently and the results are aggregated using trimmed mean, median, or weighted average.
 
 </details>
 
