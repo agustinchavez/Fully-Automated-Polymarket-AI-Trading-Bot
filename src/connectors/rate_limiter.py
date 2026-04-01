@@ -40,6 +40,8 @@ DEFAULT_LIMITS: dict[str, BucketConfig] = {
     "congress": BucketConfig(tokens_per_second=1.4, max_burst=3, name="Congress.gov"),
     "gdelt": BucketConfig(tokens_per_second=1.0, max_burst=3, name="GDELT"),
     "courtlistener": BucketConfig(tokens_per_second=1.0, max_burst=3, name="CourtListener"),
+    "duckduckgo": BucketConfig(tokens_per_second=1.0, max_burst=3, name="DuckDuckGo"),
+    "searxng": BucketConfig(tokens_per_second=5.0, max_burst=10, name="SearXNG"),
 }
 
 

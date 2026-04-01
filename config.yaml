@@ -21,7 +21,7 @@ scanning:
 research:
   max_sources: 10
   source_timeout_secs: 15
-  search_provider: fallback
+  search_provider: fallback  # fallback chain: duckduckgo → tavily → serpapi
   fetch_full_content: true
   max_content_length: 15000
   content_fetch_top_n: 5

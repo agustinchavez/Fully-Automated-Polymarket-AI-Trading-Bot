@@ -1,9 +1,11 @@
 """Web search connector with pluggable backends.
 
 Supported providers:
-  - serpapi  (default, requires SERPAPI_KEY)
-  - bing     (requires BING_API_KEY)
-  - tavily   (requires TAVILY_API_KEY)
+  - duckduckgo (free, no key, unlimited — pip install duckduckgo-search)
+  - searxng    (self-hosted, no key, unlimited — see docker-compose.yml)
+  - serpapi    (requires SERPAPI_KEY)
+  - bing       (requires BING_API_KEY)
+  - tavily     (requires TAVILY_API_KEY)
 
 Includes domain whitelisting/blocking per the research agent spec.
 """
@@ -279,9 +281,115 @@ class TavilyProvider(SearchProvider):
         return results
 
 
+# ── DuckDuckGo Provider ─────────────────────────────────────────────
+
+class DuckDuckGoProvider(SearchProvider):
+    """Free web search via DuckDuckGo (no API key needed).
+
+    Uses the duckduckgo-search library (pip install duckduckgo-search).
+    No rate limits enforced by DDG, but we self-rate-limit to be polite.
+    """
+
+    async def close(self) -> None:
+        pass  # No persistent client
+
+    @retry(stop=stop_after_attempt(3), wait=wait_exponential(min=1, max=8))
+    async def search(self, query: str, num_results: int = 10) -> list[SearchResult]:
+        try:
+            from duckduckgo_search import DDGS
+        except ImportError:
+            raise RuntimeError(
+                "duckduckgo-search not installed. Run: pip install duckduckgo-search"
+            )
+
+        await rate_limiter.get("duckduckgo").acquire()
+        with track_latency("duckduckgo"):
+            # DDGS is sync — run in thread pool to avoid blocking
+            import asyncio
+            loop = asyncio.get_running_loop()
+            raw_results = await loop.run_in_executor(
+                None,
+                lambda: list(DDGS().text(query, max_results=num_results)),
+            )
+
+        results: list[SearchResult] = []
+        for i, item in enumerate(raw_results):
+            results.append(
+                SearchResult(
+                    title=item.get("title", ""),
+                    url=item.get("href", item.get("link", "")),
+                    snippet=item.get("body", item.get("snippet", "")),
+                    source=(
+                        item.get("href", "").split("/")[2]
+                        if "/" in item.get("href", "") else ""
+                    ),
+                    date="",
+                    position=i + 1,
+                    raw=item,
+                )
+            )
+        log.info("duckduckgo.search", query=query[:80], results=len(results))
+        return results
+
+
+# ── SearXNG Provider ────────────────────────────────────────────────
+
+class SearXNGProvider(SearchProvider):
+    """Self-hosted SearXNG meta-search engine (no API key, unlimited).
+
+    Expects a SearXNG instance at SEARXNG_URL (default: http://localhost:8080).
+    Add to docker-compose.yml to run alongside the bot.
+    """
+
+    def __init__(self, base_url: str | None = None):
+        self._base_url = (
+            base_url
+            or os.environ.get("SEARXNG_URL", "http://localhost:8080")
+        ).rstrip("/")
+        self._client = httpx.AsyncClient(timeout=20.0)
+
+    async def close(self) -> None:
+        await self._client.aclose()
+
+    @retry(stop=stop_after_attempt(3), wait=wait_exponential(min=1, max=8))
+    async def search(self, query: str, num_results: int = 10) -> list[SearchResult]:
+        await rate_limiter.get("searxng").acquire()
+        with track_latency("searxng"):
+            resp = await self._client.get(
+                f"{self._base_url}/search",
+                params={
+                    "q": query,
+                    "format": "json",
+                    "categories": "general",
+                    "language": "en",
+                    "pageno": 1,
+                },
+            )
+            resp.raise_for_status()
+
+        data = resp.json()
+        results: list[SearchResult] = []
+        for i, item in enumerate(data.get("results", [])[:num_results]):
+            results.append(
+                SearchResult(
+                    title=item.get("title", ""),
+                    url=item.get("url", ""),
+                    snippet=item.get("content", ""),
+                    source=item.get("engine", item.get("engines", [""])[0] if item.get("engines") else ""),
+                    date=item.get("publishedDate", ""),
+                    position=i + 1,
+                    raw=item,
+                )
+            )
+        log.info("searxng.search", query=query[:80], results=len(results))
+        return results
+
+
 # ── Factory ──────────────────────────────────────────────────────────
 
 _PROVIDERS: dict[str, type[SearchProvider]] = {
+    "duckduckgo": DuckDuckGoProvider,
+    "searxng": SearXNGProvider,
     "serpapi": SerpAPIProvider,
     "bing": BingProvider,
     "tavily": TavilyProvider,
@@ -293,12 +401,12 @@ class FallbackSearchProvider(SearchProvider):
 
     If the primary provider fails (429, timeout, auth error), it
     automatically falls through to the next available provider.
-    Default chain: serpapi → tavily.
+    Default chain: duckduckgo → tavily → serpapi.
     """
 
     def __init__(self, chain: list[str] | None = None):
         if chain is None:
-            chain = ["serpapi", "tavily"]
+            chain = ["duckduckgo", "tavily", "serpapi"]
         self._chain: list[SearchProvider] = []
         for name in chain:
             cls = _PROVIDERS.get(name.lower())
@@ -339,7 +447,7 @@ class FallbackSearchProvider(SearchProvider):
 def create_search_provider(name: str = "serpapi") -> SearchProvider:
     """Create a search provider by name.
 
-    Use "fallback" for automatic fallback chain (serpapi → bing → tavily).
+    Use "fallback" for automatic fallback chain (duckduckgo → tavily → serpapi).
     """
     if name.lower() == "fallback":
         return FallbackSearchProvider()

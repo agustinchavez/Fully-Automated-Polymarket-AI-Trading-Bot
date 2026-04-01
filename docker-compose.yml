@@ -32,3 +32,21 @@ services:
     # Override CMD for other commands:
     #   docker compose run bot scan --limit 20
     #   docker compose run bot forecast <CONDITION_ID>
+
+  # SearXNG — self-hosted meta-search engine (free, unlimited, no API key)
+  # Uncomment to enable SearXNG as a search provider
+  # searxng:
+  #   image: searxng/searxng:latest
+  #   container_name: polymarket-searxng
+  #   ports:
+  #     - "8080:8080"
+  #   volumes:
+  #     - ./searxng:/etc/searxng
+  #   environment:
+  #     - SEARXNG_BASE_URL=http://localhost:8080/
+  #   restart: unless-stopped
+  #   deploy:
+  #     resources:
+  #       limits:
+  #         memory: 512M
+  #         cpus: "0.5"
