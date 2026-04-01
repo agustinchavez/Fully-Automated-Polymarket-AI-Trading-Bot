@@ -559,10 +559,19 @@ class ProductionConfig(BaseModel):
     preflight_min_sharpe: float = 1.0
     preflight_min_paper_days: int = 30
     preflight_backtest_paper_tolerance: float = 0.25
-    # Telegram kill
+    # Telegram kill bot
     telegram_kill_enabled: bool = False
     telegram_kill_token: str = ""
     telegram_kill_chat_id: str = ""
+    # Discord kill bot
+    discord_kill_enabled: bool = False
+    discord_kill_token: str = ""
+    discord_kill_channel_id: str = ""
+    # Slack kill bot
+    slack_kill_enabled: bool = False
+    slack_kill_bot_token: str = ""     # xoxb-...
+    slack_kill_app_token: str = ""     # xapp-...
+    slack_kill_channel_id: str = ""
     # Sentry
     sentry_dsn: str = ""
 
@@ -611,7 +620,9 @@ class ArbitrageConfig(BaseModel):
 _SECRET_FIELDS = frozenset({
     "telegram_bot_token", "discord_webhook_url", "slack_webhook_url",
     "email_smtp_password", "kalshi_api_key_id", "kalshi_private_key_path",
-    "telegram_kill_token", "sentry_dsn",
+    "telegram_kill_token", "discord_kill_token",
+    "slack_kill_bot_token", "slack_kill_app_token",
+    "sentry_dsn",
     "fred_api_key", "coingecko_api_key", "congress_api_key",
     "courtlistener_api_key",
 })

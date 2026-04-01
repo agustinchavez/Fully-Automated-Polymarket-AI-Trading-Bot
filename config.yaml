@@ -28,10 +28,10 @@ research:
   min_corroborating_sources: 2
   stale_days_penalty_threshold: 7
   stale_days_heavy_penalty: 30
-  fred_enabled: false
-  congress_enabled: false
-  courtlistener_enabled: false
-  coingecko_enabled: false
+  fred_enabled: true
+  congress_enabled: true
+  courtlistener_enabled: true
+  coingecko_enabled: true
   openmeteo_enabled: true
   gdelt_enabled: true
   fred_max_series: 3

@@ -176,11 +176,16 @@ class TradingEngine:
 
         # Phase 9: Daily summary tracking
         self._last_daily_summary_date: str = ""
+        self._last_weekly_digest_week: str = ""
 
-        # Phase 9: Graduated deployment + Telegram bot (optional deps — keep Any)
+        # Phase 9: Graduated deployment + bots (optional deps — keep Any)
         self._deployment_manager: Any = None
         self._telegram_bot: Any = None
         self._telegram_task: asyncio.Task[None] | None = None
+        self._discord_bot: Any = None
+        self._discord_task: asyncio.Task[None] | None = None
+        self._slack_bot: Any = None
+        self._slack_task: asyncio.Task[None] | None = None
 
         # Phase 10: Reconciliation loop
         self._reconciliation_task: asyncio.Task[None] | None = None
@@ -408,6 +413,41 @@ class TradingEngine:
             except Exception as e:
                 log.warning("engine.telegram_bot_start_error", error=str(e))
 
+        # Discord kill bot
+        if prod.discord_kill_enabled and prod.discord_kill_token:
+            try:
+                from src.observability.discord_bot import DiscordKillBot
+
+                self._discord_bot = DiscordKillBot(
+                    token=prod.discord_kill_token,
+                    channel_id=prod.discord_kill_channel_id,
+                    engine=self,
+                )
+                self._discord_task = asyncio.create_task(
+                    self._discord_bot.start()
+                )
+                log.info("engine.discord_bot_started")
+            except Exception as e:
+                log.warning("engine.discord_bot_start_error", error=str(e))
+
+        # Slack kill bot
+        if prod.slack_kill_enabled and prod.slack_kill_bot_token:
+            try:
+                from src.observability.slack_bot import SlackKillBot
+
+                self._slack_bot = SlackKillBot(
+                    bot_token=prod.slack_kill_bot_token,
+                    app_token=prod.slack_kill_app_token,
+                    channel_id=prod.slack_kill_channel_id,
+                    engine=self,
+                )
+                self._slack_task = asyncio.create_task(
+                    self._slack_bot.start()
+                )
+                log.info("engine.slack_bot_started")
+            except Exception as e:
+                log.warning("engine.slack_bot_start_error", error=str(e))
+
         # Phase 10: Start reconciliation loop in background
         if (
             self.config.execution.reconciliation_enabled
@@ -461,11 +501,19 @@ class TradingEngine:
         # Stop WebSocket feed
         if self._ws_task and not self._ws_task.done():
             asyncio.ensure_future(self._ws_feed.stop())
-        # Stop Telegram bot
+        # Stop bots
         if self._telegram_bot:
             self._telegram_bot.stop()
         if self._telegram_task and not self._telegram_task.done():
             self._telegram_task.cancel()
+        if self._discord_bot:
+            self._discord_bot.stop()
+        if self._discord_task and not self._discord_task.done():
+            self._discord_task.cancel()
+        if self._slack_bot:
+            self._slack_bot.stop()
+        if self._slack_task and not self._slack_task.done():
+            self._slack_task.cancel()
         # Stop reconciliation loop
         if self._reconciliation_stop:
             self._reconciliation_stop.set()
@@ -588,6 +636,50 @@ class TradingEngine:
             log.info("engine.daily_summary_generated", date=today)
         except Exception as e:
             log.warning("engine.daily_summary_error", error=str(e))
+
+    async def _maybe_send_weekly_digest(self) -> None:
+        """Send weekly digest at the configured day/hour via AlertManager."""
+        if not self._db:
+            return
+        digest_cfg = getattr(self.config, "digest", None)
+        if not digest_cfg or not digest_cfg.enabled:
+            return
+
+        import datetime as _dt
+
+        now = _dt.datetime.now(_dt.timezone.utc)
+
+        # Check day of week
+        day_map = {
+            "mon": 0, "tue": 1, "wed": 2, "thu": 3,
+            "fri": 4, "sat": 5, "sun": 6,
+        }
+        target_day = day_map.get(digest_cfg.schedule_day_of_week, 0)
+        if now.weekday() != target_day:
+            return
+        if now.hour != digest_cfg.schedule_hour:
+            return
+
+        # Already sent this week
+        week_key = now.strftime("%Y-W%W")
+        if self._last_weekly_digest_week == week_key:
+            return
+
+        try:
+            from src.observability.reports import WeeklyDigestGenerator
+
+            gen = WeeklyDigestGenerator(
+                conn=self._db.conn,
+                bankroll=self.config.risk.bankroll,
+                transaction_fee_pct=self.config.risk.transaction_fee_pct,
+            )
+            digest = gen.generate(days=digest_cfg.lookback_days)
+            if self._alert_manager:
+                await gen.send_via_alert_manager(digest, self._alert_manager)
+            self._last_weekly_digest_week = week_key
+            log.info("engine.weekly_digest_sent", week=week_key)
+        except Exception as e:
+            log.warning("engine.weekly_digest_error", error=str(e))
 
     def _maybe_check_invariants(self) -> None:
         """Run invariant checks every N cycles when enabled."""
@@ -781,6 +873,9 @@ class TradingEngine:
 
             # ── Daily Summary ────────────────────────────────────────
             await self._maybe_send_daily_summary()
+
+            # ── Weekly Digest via AlertManager ─────────────────────
+            await self._maybe_send_weekly_digest()
 
             # ── Invariant Checks ───────────────────────────────────
             self._maybe_check_invariants()

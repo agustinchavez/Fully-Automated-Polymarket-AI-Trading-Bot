@@ -363,8 +363,9 @@ class TestWeeklyCommand:
         engine.config.risk.bankroll = 5000.0
         engine.config.risk.transaction_fee_pct = 0.02
         bot._engine = engine
+        bot._commands._engine = engine
 
-        result = await bot._cmd_weekly()
+        result = await bot._commands.cmd_weekly()
         assert "Weekly Digest" in result or "Not enough data" in result
 
 
@@ -384,8 +385,9 @@ class TestReportCommand:
         engine.config.risk.bankroll = 5000.0
         engine.config.risk.transaction_fee_pct = 0.02
         bot._engine = engine
+        bot._commands._engine = engine
 
-        result = await bot._cmd_report(days=14)
+        result = await bot._commands.cmd_report(days=14)
         assert isinstance(result, str)
         assert len(result) > 0
 

@@ -1,4 +1,4 @@
-"""Tests for Phase 9 Batch C: Telegram kill-switch bot."""
+"""Tests for Telegram kill-switch bot (refactored to use BotCommandHandler)."""
 
 from __future__ import annotations
 
@@ -7,7 +7,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from src.observability.telegram_bot import TelegramKillBot
+from src.observability.telegram_bot import TelegramKillBot, _split_message
 
 
 # ── Helpers ──────────────────────────────────────────────────────
@@ -63,6 +63,12 @@ class TestTelegramBotInit:
         bot = _make_bot()
         assert "test-token-123" in bot._base_url
 
+    def test_has_command_handler(self):
+        engine = _make_engine()
+        bot = _make_bot(engine)
+        assert bot._commands is not None
+        assert bot._commands._engine is engine
+
 
 # ── Security ─────────────────────────────────────────────────────
 
@@ -72,7 +78,6 @@ class TestTelegramSecurity:
     async def test_rejects_unauthorized_chat(self):
         bot = _make_bot()
         update = _make_update("/status", chat_id="99999")
-        # Should not crash and should not send a response
         with patch.object(bot, "_send_message", new_callable=AsyncMock) as mock_send:
             await bot._handle_update(update)
             mock_send.assert_not_called()
@@ -103,7 +108,7 @@ class TestTelegramKillCommand:
     async def test_kill_activates(self):
         engine = _make_engine()
         bot = _make_bot(engine)
-        response = await bot._cmd_kill()
+        response = await bot._commands.cmd_kill()
         assert "KILL SWITCH ACTIVATED" in response
         engine.drawdown.kill.assert_called_once()
         engine._persist_kill_switch.assert_called_once()
@@ -111,7 +116,7 @@ class TestTelegramKillCommand:
     @pytest.mark.asyncio
     async def test_kill_no_engine(self):
         bot = _make_bot()
-        response = await bot._cmd_kill()
+        response = await bot._commands.cmd_kill()
         assert "No engine" in response
 
 
@@ -123,7 +128,7 @@ class TestTelegramStatusCommand:
     async def test_status_returns_info(self):
         engine = _make_engine()
         bot = _make_bot(engine)
-        response = await bot._cmd_status()
+        response = await bot._commands.cmd_status()
         assert "ENGINE STATUS" in response
         assert "Running: True" in response
         assert "Cycles: 42" in response
@@ -131,7 +136,7 @@ class TestTelegramStatusCommand:
     @pytest.mark.asyncio
     async def test_status_no_engine(self):
         bot = _make_bot()
-        response = await bot._cmd_status()
+        response = await bot._commands.cmd_status()
         assert "No engine" in response
 
 
@@ -144,7 +149,7 @@ class TestTelegramPnlCommand:
         engine = _make_engine()
         engine._db.get_daily_pnl.return_value = 150.0
         bot = _make_bot(engine)
-        response = await bot._cmd_pnl()
+        response = await bot._commands.cmd_pnl()
         assert "+$150.00" in response
 
     @pytest.mark.asyncio
@@ -152,13 +157,13 @@ class TestTelegramPnlCommand:
         engine = _make_engine()
         engine._db.get_daily_pnl.return_value = -200.0
         bot = _make_bot(engine)
-        response = await bot._cmd_pnl()
+        response = await bot._commands.cmd_pnl()
         assert "-$200.00" in response
 
     @pytest.mark.asyncio
     async def test_pnl_no_engine(self):
         bot = _make_bot()
-        response = await bot._cmd_pnl()
+        response = await bot._commands.cmd_pnl()
         assert "No engine" in response
 
 
@@ -171,7 +176,7 @@ class TestTelegramResumeCommand:
         engine = _make_engine()
         engine.drawdown.state.is_killed = True
         bot = _make_bot(engine)
-        response = await bot._cmd_resume()
+        response = await bot._commands.cmd_resume()
         assert "KILL SWITCH RESET" in response
         assert engine.drawdown.state.is_killed is False
         engine._db.reset_kill_switch.assert_called_once()
@@ -179,7 +184,7 @@ class TestTelegramResumeCommand:
     @pytest.mark.asyncio
     async def test_resume_no_engine(self):
         bot = _make_bot()
-        response = await bot._cmd_resume()
+        response = await bot._commands.cmd_resume()
         assert "No engine" in response
 
 
@@ -190,11 +195,11 @@ class TestTelegramHelpCommand:
     @pytest.mark.asyncio
     async def test_help_lists_commands(self):
         bot = _make_bot()
-        response = await bot._cmd_help()
-        assert "/kill" in response
-        assert "/status" in response
-        assert "/pnl" in response
-        assert "/resume" in response
+        response = await bot._commands.cmd_help()
+        assert "kill" in response
+        assert "status" in response
+        assert "pnl" in response
+        assert "resume" in response
 
 
 # ── Unknown Command ──────────────────────────────────────────────
@@ -204,7 +209,7 @@ class TestTelegramUnknownCommand:
     @pytest.mark.asyncio
     async def test_unknown(self):
         bot = _make_bot()
-        response = await bot._cmd_unknown()
+        response = await bot._commands.cmd_unknown()
         assert "Unknown command" in response
 
 
@@ -227,7 +232,7 @@ class TestTelegramBotLifecycle:
             await bot._handle_update(update)
             mock_send.assert_called_once()
             msg = mock_send.call_args[0][0]
-            assert "/kill" in msg
+            assert "kill" in msg
 
     @pytest.mark.asyncio
     async def test_handles_bot_suffix(self):
@@ -239,4 +244,25 @@ class TestTelegramBotLifecycle:
             await bot._handle_update(update)
             mock_send.assert_called_once()
             msg = mock_send.call_args[0][0]
-            assert "/kill" in msg
+            assert "kill" in msg
+
+
+# ── Message Splitting ────────────────────────────────────────────
+
+
+class TestSplitMessage:
+    def test_short_message_no_split(self):
+        result = _split_message("hello", 100)
+        assert result == ["hello"]
+
+    def test_long_message_splits_at_newline(self):
+        msg = "line1\nline2\nline3"
+        result = _split_message(msg, 10)
+        assert len(result) >= 2
+        assert "line1" in result[0]
+
+    def test_no_newline_splits_at_limit(self):
+        msg = "a" * 20
+        result = _split_message(msg, 10)
+        assert len(result) == 2
+        assert len(result[0]) == 10

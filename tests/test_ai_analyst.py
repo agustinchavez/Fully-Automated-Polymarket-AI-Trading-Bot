@@ -581,14 +581,14 @@ class TestTelegramCommands:
         engine = MagicMock()
         engine.config.analyst.enabled = False
         bot = TelegramKillBot(token="t", chat_id="1", engine=engine)
-        result = asyncio.get_event_loop().run_until_complete(bot._cmd_analyze(30))
+        result = asyncio.get_event_loop().run_until_complete(bot._commands.cmd_analyze(30))
         assert "disabled" in result.lower()
 
     def test_analyze_no_engine(self) -> None:
         """Returns error when no engine connected."""
         from src.observability.telegram_bot import TelegramKillBot
         bot = TelegramKillBot(token="t", chat_id="1", engine=None)
-        result = asyncio.get_event_loop().run_until_complete(bot._cmd_analyze(30))
+        result = asyncio.get_event_loop().run_until_complete(bot._commands.cmd_analyze(30))
         assert "No engine" in result
 
     def test_analyze_success(self) -> None:
@@ -613,7 +613,7 @@ class TestTelegramCommands:
         with patch("src.analytics.ai_analyst.AIAnalyst.analyse", new_callable=AsyncMock) as mock_analyse:
             mock_analyse.return_value = mock_result
             bot = TelegramKillBot(token="t", chat_id="1", engine=engine)
-            result = asyncio.get_event_loop().run_until_complete(bot._cmd_analyze(30))
+            result = asyncio.get_event_loop().run_until_complete(bot._commands.cmd_analyze(30))
             assert "AI Analysis" in result
             assert "anthropic" in result
             assert "Performance is strong" in result
@@ -629,7 +629,7 @@ class TestTelegramCommands:
         engine.config.analyst.model = "claude-sonnet-4-5-20250929"
         engine.config.analyst.rate_limit_hours = 6
         bot = TelegramKillBot(token="t", chat_id="1", engine=engine)
-        result = asyncio.get_event_loop().run_until_complete(bot._cmd_provider())
+        result = asyncio.get_event_loop().run_until_complete(bot._commands.cmd_provider())
         assert "anthropic" in result
         assert "claude-sonnet" in result
         assert "6h" in result
@@ -638,9 +638,9 @@ class TestTelegramCommands:
         """Help command includes /analyze and /provider."""
         from src.observability.telegram_bot import TelegramKillBot
         bot = TelegramKillBot(token="t", chat_id="1")
-        result = asyncio.get_event_loop().run_until_complete(bot._cmd_help())
-        assert "/analyze" in result
-        assert "/provider" in result
+        result = asyncio.get_event_loop().run_until_complete(bot._commands.cmd_help())
+        assert "analyze" in result
+        assert "provider" in result
 
 
 # ═══════════════════════════════════════════════════════════════

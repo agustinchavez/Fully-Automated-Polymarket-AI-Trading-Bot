@@ -63,6 +63,8 @@ dependencies = [
 [project.optional-dependencies]
 clob = ["py-clob-client>=0.1"]
 kalshi = ["cryptography>=42.0"]
+discord = ["discord.py>=2.3"]
+slack = ["slack-bolt>=1.18", "slack-sdk>=3.27"]
 prod = ["gunicorn>=21.2"]
 dev = [
     "pytest>=8.0",

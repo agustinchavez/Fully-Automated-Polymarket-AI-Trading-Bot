@@ -519,6 +519,27 @@ class WeeklyDigestGenerator:
 
         return parts
 
+    def format_plain(self, digest: WeeklyDigest) -> str:
+        """Format digest as plain text (no Markdown), for AlertManager."""
+        import re
+        text = self.format_telegram(digest)
+        # Strip Telegram bold markers: *text* -> text
+        return re.sub(r"\*([^*]+)\*", r"\1", text)
+
+    async def send_via_alert_manager(
+        self, digest: Any, alert_manager: Any
+    ) -> None:
+        """Send weekly digest through AlertManager to all configured channels."""
+        message = self.format_plain(digest)
+        title = f"Weekly Digest -- {digest.period_start} to {digest.period_end}"
+        await alert_manager.send(
+            level="info",
+            title=title,
+            message=message,
+            cooldown_key="weekly_digest",
+            cooldown_secs=3600,
+        )
+
     def format_short(self, digest: WeeklyDigest) -> str:
         """One-line summary for /insights command."""
         if not digest.data_sufficient:
