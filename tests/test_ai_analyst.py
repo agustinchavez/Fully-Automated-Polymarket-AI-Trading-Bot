@@ -134,7 +134,7 @@ def _make_config(**overrides):
     defaults = {
         "enabled": True,
         "provider": "anthropic",
-        "model": "claude-sonnet-4-5-20250929",
+        "model": "claude-sonnet-4-6",
         "max_tokens": 1500,
         "temperature": 0.3,
         "timeout_secs": 45,
@@ -626,7 +626,7 @@ class TestTelegramCommands:
         engine = MagicMock()
         engine.config.analyst.enabled = True
         engine.config.analyst.provider = "anthropic"
-        engine.config.analyst.model = "claude-sonnet-4-5-20250929"
+        engine.config.analyst.model = "claude-sonnet-4-6"
         engine.config.analyst.rate_limit_hours = 6
         bot = TelegramKillBot(token="t", chat_id="1", engine=engine)
         result = asyncio.get_event_loop().run_until_complete(bot._commands.cmd_provider())

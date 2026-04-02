@@ -4,8 +4,8 @@
 
 ```bash
 # 1. Clone and install
-git clone https://github.com/agustinchavez/Fully-Autonomous-Polymarket-AI-Trading-Bot.git
-cd Fully-Autonomous-Polymarket-AI-Trading-Bot
+git clone https://github.com/agustinchavez/Fully-Automated-Polymarket-AI-Trading-Bot.git
+cd Fully-Automated-Polymarket-AI-Trading-Bot
 make dev
 
 # 2. Configure

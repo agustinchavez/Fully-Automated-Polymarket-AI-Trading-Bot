@@ -116,7 +116,7 @@ observability:
   log_file: logs/bot.log
   enable_metrics: true
 alerts:
-  enabled: false
+  enabled: true
   min_alert_level: info
   alert_on_trade: true
   alert_on_risk_breach: true

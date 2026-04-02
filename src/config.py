@@ -125,7 +125,7 @@ class ModelTierConfig(BaseModel):
     scout_models: list[str] = Field(default_factory=lambda: ["gpt-4o-mini"])
     standard_models: list[str] = Field(default_factory=lambda: ["gpt-4o"])
     premium_models: list[str] = Field(default_factory=lambda: [
-        "gpt-4o", "claude-sonnet-4-5-20250929", "gemini-2.0-flash",
+        "gpt-4o", "claude-sonnet-4-6", "gemini-2.0-flash",
     ])
     premium_min_volume_usd: float = 10000.0
     premium_min_edge: float = 0.06
@@ -517,7 +517,7 @@ class AnalystConfig(BaseModel):
     """AI analyst configuration (Phase 3 — multi-provider)."""
     enabled: bool = False
     provider: str = "anthropic"
-    model: str = "claude-sonnet-4-5-20250929"
+    model: str = "claude-sonnet-4-6"
     max_tokens: int = 1500
     temperature: float = 0.3
     timeout_secs: int = 45

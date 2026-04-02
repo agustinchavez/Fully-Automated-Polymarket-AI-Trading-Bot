@@ -264,7 +264,7 @@ class WeeklyDigestGenerator:
             if len(rows) >= MIN_DAYS_FOR_DIGEST:
                 pnls = [float(r["total_pnl"]) for r in rows]
                 mean_pnl = sum(pnls) / len(pnls)
-                variance = sum((p - mean_pnl) ** 2 for p in pnls) / len(pnls)
+                variance = sum((p - mean_pnl) ** 2 for p in pnls) / max(len(pnls) - 1, 1)
                 std = math.sqrt(variance) if variance > 0 else 0.0
                 d.sharpe_7d = round(mean_pnl / std, 2) if std > 0 else 0.0
         except sqlite3.OperationalError:
@@ -299,14 +299,18 @@ class WeeklyDigestGenerator:
             pass
 
     def _fill_model_accuracy(self, d: WeeklyDigest, start: str, end: str) -> None:
-        """Query model_forecast_log -- uses recorded_at (no resolved_at column)."""
+        """Query model_forecast_log -- single GROUP BY with directional accuracy."""
         try:
             rows = self._conn.execute(
                 "SELECT model_name, "
                 "COUNT(*) as forecasts, "
                 "AVG((forecast_prob - actual_outcome) "
                 "   * (forecast_prob - actual_outcome)) as brier, "
-                "AVG(ABS(forecast_prob - actual_outcome)) as avg_error "
+                "AVG(ABS(forecast_prob - actual_outcome)) as avg_error, "
+                "SUM(CASE WHEN "
+                "  (forecast_prob >= 0.5 AND actual_outcome = 1) OR "
+                "  (forecast_prob < 0.5 AND actual_outcome = 0) "
+                "  THEN 1 ELSE 0 END) as correct "
                 "FROM model_forecast_log "
                 "WHERE actual_outcome IS NOT NULL "
                 "AND date(recorded_at) BETWEEN ? AND ? "
@@ -317,28 +321,14 @@ class WeeklyDigestGenerator:
                 count = int(row["forecasts"])
                 if count < MIN_TRADES_FOR_MODEL_ACCURACY:
                     continue
+                correct = int(row["correct"] or 0)
                 md = ModelDigest(
                     model_name=row["model_name"],
                     forecasts=count,
                     brier_score=round(float(row["brier"] or 0), 4),
                     avg_error=round(float(row["avg_error"] or 0), 4),
+                    directional_accuracy=round(correct / count * 100, 1),
                 )
-                # Directional accuracy
-                dir_row = self._conn.execute(
-                    "SELECT SUM(CASE WHEN "
-                    "(forecast_prob >= 0.5 AND actual_outcome = 1) OR "
-                    "(forecast_prob < 0.5 AND actual_outcome = 0) "
-                    "THEN 1 ELSE 0 END) as correct, COUNT(*) as total "
-                    "FROM model_forecast_log "
-                    "WHERE actual_outcome IS NOT NULL "
-                    "AND date(recorded_at) BETWEEN ? AND ? "
-                    "AND model_name = ?",
-                    (start, end, row["model_name"]),
-                ).fetchone()
-                if dir_row and int(dir_row["total"]) > 0:
-                    md.directional_accuracy = round(
-                        int(dir_row["correct"]) / int(dir_row["total"]) * 100, 1
-                    )
                 d.model_accuracy.append(md)
         except sqlite3.OperationalError:
             pass
