@@ -150,7 +150,7 @@ A complete **28-section reference guide** is embedded directly in the dashboard 
 ### Prerequisites
 
 - Python 3.9+
-- At minimum: `OPENAI_API_KEY` and one search API key (`TAVILY_API_KEY`, `SERPAPI_KEY`, or `BING_API_KEY`)
+- At minimum: `OPENAI_API_KEY` (web search uses DuckDuckGo by default — free, no key needed)
 
 ### Installation
 
@@ -172,22 +172,29 @@ Add your API keys to `.env`:
 | Variable | Required | Purpose |
 |----------|----------|---------|
 | `OPENAI_API_KEY` | **Yes** | GPT-4o for primary forecasting |
-| `TAVILY_API_KEY` | **Yes**\* | Web search for evidence gathering |
-| `SERPAPI_KEY` | Alt\* | Alternative search provider |
-| `BING_API_KEY` | Alt\* | Alternative search provider |
 | `ANTHROPIC_API_KEY` | No | Claude Sonnet 4.6 for ensemble |
 | `GOOGLE_API_KEY` | No | Gemini 2.0 Flash for ensemble |
+| `TAVILY_API_KEY` | No | Paid search fallback (1,000/mo free tier) |
+| `SERPAPI_KEY` | No | Paid search fallback (250/mo free tier) |
+| `BING_API_KEY` | No | Paid search fallback |
+| `SEARXNG_URL` | No | Self-hosted SearXNG instance URL |
 | `FRED_API_KEY` | No | FRED economic data connector (free) |
 | `COINGECKO_API_KEY` | No | CoinGecko crypto data (free demo) |
 | `CONGRESS_API_KEY` | No | Congress.gov legislative data (free) |
 | `COURTLISTENER_API_KEY` | No | CourtListener legal case data (free) |
 | `DEEPSEEK_API_KEY` | No | DeepSeek AI analyst provider |
-| `TELEGRAM_BOT_TOKEN` | No | Weekly digest and kill bot alerts |
-| `TELEGRAM_CHAT_ID` | No | Telegram chat for alerts |
+| `DISCORD_BOT_TOKEN` | No | Discord interactive kill bot |
+| `DISCORD_CHANNEL_ID` | No | Discord channel for bot commands |
+| `SLACK_BOT_TOKEN` | No | Slack interactive kill bot |
+| `SLACK_APP_TOKEN` | No | Slack app-level token (Socket Mode) |
+| `SLACK_CHANNEL_ID` | No | Slack channel for bot commands |
+| `TELEGRAM_BOT_TOKEN` | No | Telegram interactive kill bot |
+| `TELEGRAM_CHAT_ID` | No | Telegram chat for bot commands |
+| `DISCORD_WEBHOOK_URL` | No | Discord webhook for alert notifications |
 | `DASHBOARD_API_KEY` | No | Protect the dashboard with auth |
 | `SENTRY_DSN` | No | Error tracking via Sentry |
 
-\* At least one search provider is required. The system supports automatic fallback across all three.
+Web search uses **DuckDuckGo by default** (free, unlimited, no API key). Paid providers (Tavily, SerpAPI, Bing) and self-hosted SearXNG are available as optional fallbacks.
 
 ### Launch
 
@@ -259,7 +266,7 @@ Three frontier LLMs run in parallel, each producing an independent probability f
 
 - **Query builder** generates site-restricted searches per category — `site:bls.gov` for macro, `site:sec.gov` for corporate, `site:fec.gov` for elections
 - **Contrarian queries** to actively seek disconfirming evidence
-- **3 pluggable search backends** — SerpAPI, Bing, Tavily — with automatic fallback
+- **5 pluggable search backends** — DuckDuckGo (free default), SearXNG (self-hosted), SerpAPI, Bing, Tavily — with automatic fallback chain
 - **Full HTML extraction** via BeautifulSoup, not just search snippets
 - **Domain authority scoring** — primary sources (1.0) > secondary (0.6) > unknown (0.3)
 - **Auto-filters** low-quality domains (Wikipedia, Reddit, Medium, Twitter, TikTok)
@@ -371,7 +378,7 @@ ENABLE_LIVE_TRADING = true        ← environment variable
 
 ### Analysis Layer
 
-- **Weekly Telegram Digest** — automated Monday summary with P&L, category breakdown, model accuracy, friction analysis
+- **Weekly Digest** — automated Monday summary with P&L, category breakdown, model accuracy, friction analysis (delivered via all configured channels)
 - **Dashboard Insights Tab** — 5 interactive panels: P&L Overview, Category Performance, Model Accuracy, Friction Analysis, AI Analysis
 - **Multi-Provider AI Analyst** — generates strategy recommendations using OpenAI, Anthropic, Google, or DeepSeek (configurable)
 - **Post-Mortem Analysis** — automatic trade-by-trade review after market resolution
@@ -666,7 +673,7 @@ This is an open-source automated trading bot for [Polymarket](https://polymarket
 <details>
 <summary><strong>Is this Polymarket bot free?</strong></summary>
 
-Yes, the bot is fully open source under the MIT license. You will need API keys for OpenAI and a search provider (Tavily, SerpAPI, or Bing) which have their own costs.
+Yes, the bot is fully open source under the MIT license. You only need an OpenAI API key to get started. Web search uses DuckDuckGo by default (free, unlimited, no API key). Additional LLM providers and paid search backends are optional.
 
 </details>
 

@@ -10,7 +10,7 @@ make dev
 
 # 2. Configure
 cp .env.example .env
-# Edit .env with your API keys (at minimum: OPENAI_API_KEY, SERPAPI_KEY)
+# Edit .env with your API keys (at minimum: OPENAI_API_KEY)
 
 # 3. Run
 make dashboard
@@ -24,18 +24,25 @@ make dashboard
 | Variable | Required | Description |
 |----------|----------|-------------|
 | `OPENAI_API_KEY` | Yes | GPT-4o for forecasting |
-| `SERPAPI_KEY` | Yes* | Web search for research |
-| `TAVILY_API_KEY` | Alt* | Alternative search provider |
-| `BING_API_KEY` | Alt* | Alternative search provider |
 | `ANTHROPIC_API_KEY` | Optional | Claude Sonnet 4.6 for ensemble |
 | `GOOGLE_API_KEY` | Optional | Gemini 2.0 Flash for ensemble |
+| `TAVILY_API_KEY` | Optional | Paid search fallback (1,000/mo free tier) |
+| `SERPAPI_KEY` | Optional | Paid search fallback (250/mo free tier) |
+| `BING_API_KEY` | Optional | Paid search fallback |
+| `SEARXNG_URL` | Optional | Self-hosted SearXNG URL (default: http://localhost:8080) |
 | `FRED_API_KEY` | Optional | FRED economic data (free, instant signup) |
 | `COINGECKO_API_KEY` | Optional | CoinGecko crypto prices (free demo) |
 | `CONGRESS_API_KEY` | Optional | Congress.gov legislative data (free) |
 | `COURTLISTENER_API_KEY` | Optional | CourtListener legal cases (free) |
 | `DEEPSEEK_API_KEY` | Optional | DeepSeek AI analyst provider |
-| `TELEGRAM_BOT_TOKEN` | Optional | Weekly digest and kill bot alerts |
-| `TELEGRAM_CHAT_ID` | Optional | Telegram chat for alerts |
+| `DISCORD_BOT_TOKEN` | Optional | Discord interactive kill bot |
+| `DISCORD_CHANNEL_ID` | Optional | Discord channel for bot commands |
+| `SLACK_BOT_TOKEN` | Optional | Slack interactive kill bot |
+| `SLACK_APP_TOKEN` | Optional | Slack app-level token (Socket Mode) |
+| `SLACK_CHANNEL_ID` | Optional | Slack channel for bot commands |
+| `TELEGRAM_BOT_TOKEN` | Optional | Telegram interactive kill bot |
+| `TELEGRAM_CHAT_ID` | Optional | Telegram chat for bot commands |
+| `DISCORD_WEBHOOK_URL` | Optional | Discord webhook for alert notifications |
 | `POLYMARKET_API_KEY` | Live only | Polymarket CLOB API |
 | `POLYMARKET_API_SECRET` | Live only | CLOB API secret |
 | `POLYMARKET_API_PASSPHRASE` | Live only | CLOB passphrase |
@@ -44,7 +51,7 @@ make dashboard
 | `DASHBOARD_API_KEY` | Optional | Protect dashboard |
 | `SENTRY_DSN` | Optional | Error tracking |
 
-\* At least one search provider is required.
+Web search uses **DuckDuckGo by default** (free, unlimited, no API key). Paid providers and self-hosted SearXNG are optional fallbacks.
 
 ### Runtime Config (`config.yaml`)
 
@@ -132,7 +139,7 @@ All checks must pass:
 - Chaos tests passed
 - DB backup exists and recent
 - Budget caps configured
-- Alert channel configured (Telegram)
+- Alert channel configured (Telegram, Discord, or Slack)
 
 ### Step 1: Paper Trading (Required First)
 
@@ -189,7 +196,7 @@ pip install py-clob-client
 
 ```bash
 make dashboard
-# Send /status to Telegram to confirm running
+# Send !status to Discord/Slack or /status to Telegram to confirm running
 # Review P&L daily during week1
 ```
 
@@ -229,7 +236,8 @@ Set `SENTRY_DSN` in `.env` for automatic exception reporting.
 | Scout tier (gpt-4o-mini) | ~$0.001 | Low-value markets, quick filter |
 | Standard tier (gpt-4o) | ~$0.01 | Most markets |
 | Premium tier (ensemble) | ~$0.05 | High-value markets, 3 models |
-| Web search (SerpAPI/Tavily) | ~$0.01-0.03 | Per query, cached 2hr |
+| Web search (DuckDuckGo) | Free | Default provider, no API key |
+| Web search (SerpAPI/Tavily) | ~$0.01-0.03 | Optional paid fallback, cached 2hr |
 | Research connectors | Free | FRED, CoinGecko, Congress, etc. |
 | **Typical cycle (10 markets)** | **~$0.10-0.50** | Depends on tier distribution |
 
