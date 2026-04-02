@@ -60,10 +60,18 @@ class ResearchConfig(BaseModel):
     coingecko_enabled: bool = False
     openmeteo_enabled: bool = True
     gdelt_enabled: bool = True
+    edgar_enabled: bool = True
+    arxiv_enabled: bool = True
+    openfda_enabled: bool = True
+    worldbank_enabled: bool = True
     fred_max_series: int = 3
     congress_max_bills: int = 5
     coingecko_max_coins: int = 3
     gdelt_timespan_days: int = 7
+    edgar_max_filings: int = 3
+    arxiv_max_results: int = 5
+    worldbank_mrv: int = 3
+    openfda_api_key: str = ""
 
 
 class ForecastingConfig(BaseModel):
@@ -624,7 +632,7 @@ _SECRET_FIELDS = frozenset({
     "slack_kill_bot_token", "slack_kill_app_token",
     "sentry_dsn",
     "fred_api_key", "coingecko_api_key", "congress_api_key",
-    "courtlistener_api_key",
+    "courtlistener_api_key", "openfda_api_key",
 })
 
 
@@ -690,6 +698,7 @@ _ENV_OVERRIDES: dict[str, tuple[str, str, type]] = {
     "SMTP_PASS": ("alerts", "email_smtp_password", str),
     "ALERT_EMAIL_FROM": ("alerts", "email_from", str),
     "ALERT_EMAIL_TO": ("alerts", "email_to", str),
+    "OPENFDA_API_KEY": ("research", "openfda_api_key", str),
 }
 
 

@@ -66,6 +66,34 @@ def get_enabled_connectors(config: Any) -> list[BaseResearchConnector]:
         except Exception as e:
             log.warning("registry.courtlistener_load_failed", error=str(e))
 
+    if getattr(config, "edgar_enabled", False):
+        try:
+            from src.research.connectors.edgar import EdgarConnector
+            connectors.append(EdgarConnector(config))
+        except Exception as e:
+            log.warning("registry.edgar_load_failed", error=str(e))
+
+    if getattr(config, "arxiv_enabled", False):
+        try:
+            from src.research.connectors.arxiv_connector import ArxivConnector
+            connectors.append(ArxivConnector(config))
+        except Exception as e:
+            log.warning("registry.arxiv_load_failed", error=str(e))
+
+    if getattr(config, "openfda_enabled", False):
+        try:
+            from src.research.connectors.openfda import OpenFDAConnector
+            connectors.append(OpenFDAConnector(config))
+        except Exception as e:
+            log.warning("registry.openfda_load_failed", error=str(e))
+
+    if getattr(config, "worldbank_enabled", False):
+        try:
+            from src.research.connectors.worldbank import WorldBankConnector
+            connectors.append(WorldBankConnector(config))
+        except Exception as e:
+            log.warning("registry.worldbank_load_failed", error=str(e))
+
     log.debug(
         "registry.connectors_loaded",
         count=len(connectors),

@@ -23,8 +23,8 @@ research:
   source_timeout_secs: 15
   search_provider: fallback  # fallback chain: duckduckgo → tavily → serpapi
   fetch_full_content: true
-  max_content_length: 15000
-  content_fetch_top_n: 5
+  max_content_length: 20000
+  content_fetch_top_n: 8
   min_corroborating_sources: 2
   stale_days_penalty_threshold: 7
   stale_days_heavy_penalty: 30
@@ -38,6 +38,85 @@ research:
   congress_max_bills: 5
   coingecko_max_coins: 3
   gdelt_timespan_days: 7
+  edgar_enabled: true
+  arxiv_enabled: true
+  openfda_enabled: true
+  worldbank_enabled: true
+  edgar_max_filings: 3
+  arxiv_max_results: 5
+  worldbank_mrv: 3
+  primary_domains:
+    MACRO:
+      - bls.gov
+      - bea.gov
+      - federalreserve.gov
+      - fred.stlouisfed.org
+      - treasury.gov
+      - imf.org
+    ELECTION:
+      - fec.gov
+      - ballotpedia.org
+      - 270towin.com
+      - fivethirtyeight.com
+      - realclearpolling.com
+    CORPORATE:
+      - sec.gov
+      - data.sec.gov
+      - investor.com
+      - nasdaq.com
+      - nyse.com
+    LEGAL:
+      - supremecourt.gov
+      - uscourts.gov
+      - courtlistener.com
+      - law.cornell.edu
+    SCIENCE:
+      - nature.com
+      - science.org
+      - arxiv.org
+      - pubmed.ncbi.nlm.nih.gov
+      - clinicaltrials.gov
+      - fda.gov
+    TECH:
+      - sec.gov
+      - arxiv.org
+      - github.com
+      - techcrunch.com
+    CRYPTO:
+      - coindesk.com
+      - defillama.com
+      - coingecko.com
+      - messari.io
+    GEOPOLITICS:
+      - un.org
+      - state.gov
+      - nato.int
+      - foreignaffairs.com
+    WEATHER:
+      - noaa.gov
+      - nhc.noaa.gov
+      - weather.gov
+  secondary_domains:
+    - reuters.com
+    - apnews.com
+    - bloomberg.com
+    - wsj.com
+    - ft.com
+    - nytimes.com
+    - bbc.com
+    - economist.com
+    - cnbc.com
+    - marketwatch.com
+  blocked_domains:
+    - reddit.com
+    - twitter.com
+    - x.com
+    - tiktok.com
+    - facebook.com
+    - wikipedia.org
+    - quora.com
+    - medium.com
+    - substack.com
 forecasting:
   llm_model: gpt-4o
   evidence_model: gpt-4o-mini

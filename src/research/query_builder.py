@@ -33,6 +33,12 @@ _SITE_RESTRICTED: dict[str, list[str]] = {
     ],
     "CORPORATE": [
         "site:sec.gov",
+        "site:data.sec.gov",
+    ],
+    "TECH": [
+        "site:sec.gov",
+        "site:arxiv.org",
+        "site:github.com",
     ],
     "WEATHER": [
         "site:noaa.gov",
@@ -43,6 +49,9 @@ _SITE_RESTRICTED: dict[str, list[str]] = {
         "site:nature.com",
         "site:science.org",
         "site:arxiv.org",
+        "site:pubmed.ncbi.nlm.nih.gov",
+        "site:clinicaltrials.gov",
+        "site:fda.gov",
     ],
     "REGULATION": [
         "site:sec.gov",
@@ -52,6 +61,9 @@ _SITE_RESTRICTED: dict[str, list[str]] = {
     "GEOPOLITICS": [
         "site:un.org",
         "site:state.gov",
+        "site:nato.int",
+        "site:reuters.com",
+        "site:apnews.com",
     ],
     "CRYPTO": [
         "site:coindesk.com",

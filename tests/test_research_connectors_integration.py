@@ -24,6 +24,10 @@ class TestRegistry:
         config.congress_enabled = False
         config.gdelt_enabled = False
         config.courtlistener_enabled = False
+        config.edgar_enabled = False
+        config.arxiv_enabled = False
+        config.openfda_enabled = False
+        config.worldbank_enabled = False
         connectors = get_enabled_connectors(config)
         assert connectors == []
 
@@ -35,6 +39,10 @@ class TestRegistry:
         config.congress_enabled = False
         config.gdelt_enabled = False
         config.courtlistener_enabled = False
+        config.edgar_enabled = False
+        config.arxiv_enabled = False
+        config.openfda_enabled = False
+        config.worldbank_enabled = False
         connectors = get_enabled_connectors(config)
         assert len(connectors) == 1
         assert connectors[0].name == "open_meteo"
@@ -47,6 +55,10 @@ class TestRegistry:
         config.congress_enabled = False
         config.gdelt_enabled = True
         config.courtlistener_enabled = False
+        config.edgar_enabled = False
+        config.arxiv_enabled = False
+        config.openfda_enabled = False
+        config.worldbank_enabled = False
         connectors = get_enabled_connectors(config)
         assert len(connectors) == 3
         names = {c.name for c in connectors}
@@ -62,8 +74,35 @@ class TestRegistry:
         config.congress_enabled = True
         config.gdelt_enabled = True
         config.courtlistener_enabled = True
+        config.edgar_enabled = True
+        config.arxiv_enabled = True
+        config.openfda_enabled = True
+        config.worldbank_enabled = True
         connectors = get_enabled_connectors(config)
-        assert len(connectors) == 6
+        assert len(connectors) == 10
+
+    def test_new_connectors_enabled_individually(self) -> None:
+        for connector_flag, expected_name in [
+            ("edgar_enabled", "edgar"),
+            ("arxiv_enabled", "arxiv"),
+            ("openfda_enabled", "openfda"),
+            ("worldbank_enabled", "worldbank"),
+        ]:
+            config = MagicMock()
+            config.openmeteo_enabled = False
+            config.fred_enabled = False
+            config.coingecko_enabled = False
+            config.congress_enabled = False
+            config.gdelt_enabled = False
+            config.courtlistener_enabled = False
+            config.edgar_enabled = False
+            config.arxiv_enabled = False
+            config.openfda_enabled = False
+            config.worldbank_enabled = False
+            setattr(config, connector_flag, True)
+            connectors = get_enabled_connectors(config)
+            assert len(connectors) == 1
+            assert connectors[0].name == expected_name
 
 
 # ── Connector Contracts ──────────────────────────────────────────────
@@ -80,6 +119,10 @@ class TestConnectorContracts:
         config.congress_enabled = True
         config.gdelt_enabled = True
         config.courtlistener_enabled = True
+        config.edgar_enabled = True
+        config.arxiv_enabled = True
+        config.openfda_enabled = True
+        config.worldbank_enabled = True
         return get_enabled_connectors(config)
 
     def test_all_have_name(self) -> None:
