@@ -683,6 +683,13 @@ _ENV_OVERRIDES: dict[str, tuple[str, str, type]] = {
     "BOT_LOG_LEVEL": ("observability", "log_level", str),
     "BOT_SCAN_INTERVAL": ("engine", "scan_interval_minutes", int),
     "BOT_CYCLE_INTERVAL": ("engine", "cycle_interval_secs", int),
+    # SMTP / email alerts
+    "SMTP_HOST": ("alerts", "email_smtp_host", str),
+    "SMTP_PORT": ("alerts", "email_smtp_port", int),
+    "SMTP_USER": ("alerts", "email_smtp_user", str),
+    "SMTP_PASS": ("alerts", "email_smtp_password", str),
+    "ALERT_EMAIL_FROM": ("alerts", "email_from", str),
+    "ALERT_EMAIL_TO": ("alerts", "email_to", str),
 }
 
 
