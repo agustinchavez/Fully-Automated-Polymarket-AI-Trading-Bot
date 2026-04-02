@@ -490,7 +490,7 @@ class TestEnsembleAdaptiveWeights:
         ens_cfg = EnsembleConfig(enabled=True)
         fc_cfg = ForecastingConfig()
         forecaster = EnsembleForecaster(ens_cfg, fc_cfg)
-        weights = {"gpt-4o": 0.6, "claude-3-5-sonnet-20241022": 0.4}
+        weights = {"gpt-4o": 0.6, "claude-sonnet-4-6": 0.4}
         forecaster.set_adaptive_weights(weights)
         assert forecaster._external_weights == weights
 

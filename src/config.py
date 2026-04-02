@@ -87,12 +87,12 @@ class EnsembleConfig(BaseModel):
     """Multi-model ensemble configuration."""
     enabled: bool = True
     models: list[str] = Field(default_factory=lambda: [
-        "gpt-4o", "claude-3-5-sonnet-20241022", "gemini-1.5-pro"
+        "gpt-4o", "claude-sonnet-4-6", "gemini-2.0-flash"
     ])
     aggregation: str = "trimmed_mean"  # trimmed_mean | median | weighted
     trim_fraction: float = 0.1
     weights: dict[str, float] = Field(default_factory=lambda: {
-        "gpt-4o": 0.40, "claude-3-5-sonnet-20241022": 0.35, "gemini-1.5-pro": 0.25
+        "gpt-4o": 0.40, "claude-sonnet-4-6": 0.35, "gemini-2.0-flash": 0.25
     })
     timeout_per_model_secs: int = 30
     min_models_required: int = 1

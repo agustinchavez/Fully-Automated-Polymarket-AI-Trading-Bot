@@ -101,7 +101,7 @@ def _seed_performance_data(conn: sqlite3.Connection, n: int = 20) -> None:
 
 def _seed_model_forecasts(conn: sqlite3.Connection, n: int = 30) -> None:
     """Insert model forecast log entries."""
-    models = ["gpt-4o", "claude-3-5-sonnet-20241022", "gemini-1.5-pro"]
+    models = ["gpt-4o", "claude-sonnet-4-6", "gemini-2.0-flash"]
     categories = ["POLITICS", "CRYPTO", "SPORTS"]
     for i in range(n):
         model = models[i % len(models)]
@@ -424,7 +424,7 @@ class TestCalibrationFeedback:
             evidence_quality=0.6, stake_usd=20.0,
             entry_price=0.50, exit_price=1.0, pnl=10.0,
             holding_hours=24.0,
-            model_forecasts={"gpt-4o": 0.7, "claude-3-5-sonnet-20241022": 0.6},
+            model_forecasts={"gpt-4o": 0.7, "claude-sonnet-4-6": 0.6},
         )
         loop.record_resolution(conn, record)
 

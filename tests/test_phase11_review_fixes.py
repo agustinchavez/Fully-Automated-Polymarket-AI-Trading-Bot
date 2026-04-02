@@ -392,7 +392,7 @@ class TestPerModelCircuitBreakers:
 
         from src.forecast.ensemble import _query_anthropic
         from src.config import ForecastingConfig
-        result = asyncio.run(_query_anthropic("claude-3-5-sonnet-20241022", "test", ForecastingConfig()))
+        result = asyncio.run(_query_anthropic("claude-sonnet-4-6", "test", ForecastingConfig()))
         assert result.model_probability == 0.5
         assert "Circuit breaker open" in result.error
         cb.reset()

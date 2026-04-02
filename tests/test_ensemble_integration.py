@@ -63,9 +63,9 @@ def _make_model_forecast(model: str, prob: float, **kwargs) -> ModelForecast:
 def _make_ensemble_config(**kwargs) -> EnsembleConfig:
     defaults = dict(
         enabled=True,
-        models=["gpt-4o", "claude-3-5-sonnet-20241022", "gemini-1.5-pro"],
+        models=["gpt-4o", "claude-sonnet-4-6", "gemini-2.0-flash"],
         aggregation="trimmed_mean",
-        weights={"gpt-4o": 0.40, "claude-3-5-sonnet-20241022": 0.35, "gemini-1.5-pro": 0.25},
+        weights={"gpt-4o": 0.40, "claude-sonnet-4-6": 0.35, "gemini-2.0-flash": 0.25},
         min_models_required=1,
     )
     defaults.update(kwargs)
@@ -90,10 +90,10 @@ class TestAdaptiveWeightsAutoSwitch:
         fc = _make_forecast_config()
         forecaster = EnsembleForecaster(ens_cfg, fc)
 
-        weights = {"gpt-4o": 0.5, "claude-3-5-sonnet-20241022": 0.3, "gemini-1.5-pro": 0.2}
+        weights = {"gpt-4o": 0.5, "claude-sonnet-4-6": 0.3, "gemini-2.0-flash": 0.2}
         forecaster.set_adaptive_weights(weights)
 
-        model_probs = [("gpt-4o", 0.8), ("claude-3-5-sonnet-20241022", 0.6), ("gemini-1.5-pro", 0.4)]
+        model_probs = [("gpt-4o", 0.8), ("claude-sonnet-4-6", 0.6), ("gemini-2.0-flash", 0.4)]
         prob, method = forecaster._aggregate(model_probs)
 
         assert method == "weighted"
@@ -106,10 +106,10 @@ class TestAdaptiveWeightsAutoSwitch:
         fc = _make_forecast_config()
         forecaster = EnsembleForecaster(ens_cfg, fc)
 
-        weights = {"gpt-4o": 0.5, "claude-3-5-sonnet-20241022": 0.3, "gemini-1.5-pro": 0.2}
+        weights = {"gpt-4o": 0.5, "claude-sonnet-4-6": 0.3, "gemini-2.0-flash": 0.2}
         forecaster.set_adaptive_weights(weights)
 
-        model_probs = [("gpt-4o", 0.8), ("claude-3-5-sonnet-20241022", 0.6), ("gemini-1.5-pro", 0.4)]
+        model_probs = [("gpt-4o", 0.8), ("claude-sonnet-4-6", 0.6), ("gemini-2.0-flash", 0.4)]
         prob, method = forecaster._aggregate(model_probs)
 
         assert method == "weighted"
@@ -120,10 +120,10 @@ class TestAdaptiveWeightsAutoSwitch:
         fc = _make_forecast_config()
         forecaster = EnsembleForecaster(ens_cfg, fc)
 
-        weights = {"gpt-4o": 0.5, "claude-3-5-sonnet-20241022": 0.3, "gemini-1.5-pro": 0.2}
+        weights = {"gpt-4o": 0.5, "claude-sonnet-4-6": 0.3, "gemini-2.0-flash": 0.2}
         forecaster.set_adaptive_weights(weights)
 
-        model_probs = [("gpt-4o", 0.8), ("claude-3-5-sonnet-20241022", 0.6), ("gemini-1.5-pro", 0.4)]
+        model_probs = [("gpt-4o", 0.8), ("claude-sonnet-4-6", 0.6), ("gemini-2.0-flash", 0.4)]
         prob, method = forecaster._aggregate(model_probs)
 
         assert method == "median"
@@ -135,7 +135,7 @@ class TestAdaptiveWeightsAutoSwitch:
         fc = _make_forecast_config()
         forecaster = EnsembleForecaster(ens_cfg, fc)
 
-        model_probs = [("gpt-4o", 0.8), ("claude-3-5-sonnet-20241022", 0.6), ("gemini-1.5-pro", 0.4)]
+        model_probs = [("gpt-4o", 0.8), ("claude-sonnet-4-6", 0.6), ("gemini-2.0-flash", 0.4)]
         prob, method = forecaster._aggregate(model_probs)
 
         assert method == "trimmed_mean"
@@ -144,13 +144,13 @@ class TestAdaptiveWeightsAutoSwitch:
         """Weighted aggregation produces correct weighted average."""
         ens_cfg = _make_ensemble_config(
             aggregation="weighted",
-            weights={"gpt-4o": 0.6, "claude-3-5-sonnet-20241022": 0.4},
-            models=["gpt-4o", "claude-3-5-sonnet-20241022"],
+            weights={"gpt-4o": 0.6, "claude-sonnet-4-6": 0.4},
+            models=["gpt-4o", "claude-sonnet-4-6"],
         )
         fc = _make_forecast_config()
         forecaster = EnsembleForecaster(ens_cfg, fc)
 
-        model_probs = [("gpt-4o", 0.9), ("claude-3-5-sonnet-20241022", 0.3)]
+        model_probs = [("gpt-4o", 0.9), ("claude-sonnet-4-6", 0.3)]
         prob, method = forecaster._aggregate(model_probs)
 
         # (0.9*0.6 + 0.3*0.4) / (0.6+0.4) = (0.54 + 0.12) / 1.0 = 0.66

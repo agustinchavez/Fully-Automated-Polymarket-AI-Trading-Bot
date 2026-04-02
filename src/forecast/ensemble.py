@@ -519,8 +519,8 @@ class EnsembleForecaster:
                 # Switch fallback to a provider that didn't fail
                 alt_models = {
                     "openai": "gpt-4o",
-                    "anthropic": "claude-3-5-sonnet-20241022",
-                    "google": "gemini-1.5-pro",
+                    "anthropic": "claude-sonnet-4-6",
+                    "google": "gemini-2.0-flash",
                 }
                 for prov, mdl in alt_models.items():
                     if prov not in failed_providers:
