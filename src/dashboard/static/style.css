@@ -6896,3 +6896,54 @@ footer {
     .insight-chart-row { grid-template-columns: 1fr; }
     .insight-kpi-grid { grid-template-columns: repeat(2, 1fr); }
 }
+
+/* ─── Model Intelligence Panel ──────────────────────────────── */
+.intel-chart-label {
+    font-size: 0.72rem;
+    color: var(--text-dim);
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    margin-bottom: 8px;
+    font-weight: 600;
+}
+.intel-chart-note {
+    font-size: 0.72rem;
+    color: var(--text-muted);
+    margin-top: 6px;
+}
+.intel-brier-bar-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 8px;
+}
+.intel-brier-bar-label {
+    font-size: 0.78rem;
+    color: var(--text-muted);
+    width: 160px;
+    flex-shrink: 0;
+    font-family: var(--font-mono);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+.intel-brier-bar-track {
+    flex: 1;
+    height: 14px;
+    background: rgba(255,255,255,0.06);
+    border-radius: 3px;
+    overflow: hidden;
+}
+.intel-brier-bar-fill {
+    height: 100%;
+    border-radius: 3px;
+    transition: width 0.4s ease;
+}
+.intel-brier-bar-value {
+    font-size: 0.78rem;
+    color: var(--text-muted);
+    font-family: var(--font-mono);
+    width: 50px;
+    text-align: right;
+    flex-shrink: 0;
+}

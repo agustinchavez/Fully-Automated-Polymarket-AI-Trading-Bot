@@ -6702,16 +6702,22 @@ let _insightCharts = {};
 async function updateInsightsTab() {
     const days = parseInt($('#insights-days')?.value || '30', 10);
     try {
-        const [pnl, cats, models, friction] = await Promise.all([
-            fetch(`/api/insights/pnl-overview?days=${days}`).then(r => r.json()),
-            fetch(`/api/insights/category-breakdown?days=${days}`).then(r => r.json()),
-            fetch(`/api/insights/model-accuracy?days=${days}`).then(r => r.json()),
-            fetch(`/api/insights/friction?days=${days}`).then(r => r.json()),
-        ]);
+        const [pnl, cats, models, friction,
+               adaptiveWeights, retrainHistory, modelAccuracy] =
+            await Promise.all([
+                fetch(`/api/insights/pnl-overview?days=${days}`).then(r => r.json()),
+                fetch(`/api/insights/category-breakdown?days=${days}`).then(r => r.json()),
+                fetch(`/api/insights/model-accuracy?days=${days}`).then(r => r.json()),
+                fetch(`/api/insights/friction?days=${days}`).then(r => r.json()),
+                fetch('/api/adaptive-weights').then(r => r.json()).catch(() => null),
+                fetch('/api/calibration/retrain-history').then(r => r.json()).catch(() => null),
+                fetch('/api/model-accuracy').then(r => r.json()).catch(() => null),
+            ]);
         renderInsightPnlPanel(pnl);
         renderInsightCategoryPanel(cats);
         renderInsightModelPanel(models);
         renderInsightFrictionPanel(friction);
+        renderModelIntelligencePanel(adaptiveWeights, retrainHistory, modelAccuracy);
         // Load cached AI analysis (non-blocking)
         fetch('/api/insights/ai-analysis').then(r => r.json()).then(renderInsightAiPanel).catch(() => {});
     } catch (e) {
@@ -6920,6 +6926,214 @@ function renderInsightModelPanel(data) {
                 } }
             });
         }
+    }
+}
+
+// ─── Panel 3b: Model Intelligence ────────────────────────────
+let _intelBrierChart = null;
+
+function renderModelIntelligencePanel(weights, history, accuracy) {
+    // -- KPI Cards --
+    const rollingBrier = history?.rolling_brier_7d ?? null;
+    const totalRetrains = history?.total ?? 0;
+
+    const allCats = weights && !weights.error ? Object.values(weights) : [];
+    const activeCats = allCats.filter(c => c.data_available).length;
+    const totalCats = allCats.length;
+    const modelsWithData = accuracy?.models?.length ?? 0;
+
+    // Status badge
+    const badge = $('#intel-status-badge');
+    if (badge) {
+        if (activeCats > 0) {
+            badge.textContent = `${activeCats} CATEGOR${activeCats > 1 ? 'IES' : 'Y'} LEARNING`;
+            badge.className = 'badge badge-ok';
+        } else {
+            badge.textContent = 'WARMING UP';
+            badge.className = 'badge badge-paper';
+        }
+        badge.style.display = '';
+    }
+
+    // KPI cards
+    const brierColor = !rollingBrier ? 'accent-muted'
+        : rollingBrier < 0.12 ? 'accent-green'
+        : rollingBrier < 0.18 ? 'accent-blue'
+        : 'accent-orange';
+    const brierText = rollingBrier != null ? rollingBrier.toFixed(4) : '---';
+    const brierSub = rollingBrier != null
+        ? (rollingBrier < 0.12 ? 'Excellent (near superforecaster)'
+          : rollingBrier < 0.18 ? 'Good (beats human crowd)'
+          : 'Building data')
+        : 'No resolved markets yet';
+
+    safeHTML($('#intel-kpi-cards'), `
+        <div class="card ${brierColor}">
+            <div class="card-label">7-Day Brier Score</div>
+            <div class="card-value">${brierText}</div>
+            <div class="card-sub">${brierSub}</div>
+        </div>
+        <div class="card accent-purple">
+            <div class="card-label">Learning Active</div>
+            <div class="card-value">${activeCats} / ${totalCats || 0}</div>
+            <div class="card-sub">Categories with learned weights</div>
+        </div>
+        <div class="card accent-blue">
+            <div class="card-label">Models w/ Data</div>
+            <div class="card-value">${modelsWithData} / 5</div>
+            <div class="card-sub">Have resolved market data</div>
+        </div>
+        <div class="card accent-teal">
+            <div class="card-label">Retrain Events</div>
+            <div class="card-value">${totalRetrains}</div>
+            <div class="card-sub">Calibration updates since start</div>
+        </div>
+    `);
+
+    // -- Rolling Brier Trend Chart --
+    const ctx = document.getElementById('intel-brier-trend-chart');
+    const tests = history?.ab_tests ?? [];
+    if (ctx && tests.length > 0) {
+        if (_intelBrierChart) _intelBrierChart.destroy();
+        const labels = tests.map((t, i) => `T${i + 1}`);
+        const calibrated = tests.map(t => t.calibrated_brier);
+        const uncalibrated = tests.map(t => t.uncalibrated_brier);
+        _intelBrierChart = new Chart(ctx, {
+            type: 'line',
+            data: {
+                labels,
+                datasets: [
+                    {
+                        label: 'Calibrated Brier',
+                        data: calibrated,
+                        borderColor: 'rgba(0, 200, 83, 0.8)',
+                        backgroundColor: 'rgba(0, 200, 83, 0.1)',
+                        fill: true, tension: 0.3, pointRadius: 3,
+                    },
+                    {
+                        label: 'Uncalibrated',
+                        data: uncalibrated,
+                        borderColor: 'rgba(255, 109, 0, 0.6)',
+                        borderDash: [4, 4],
+                        fill: false, tension: 0.3, pointRadius: 2,
+                    },
+                ],
+            },
+            options: {
+                responsive: true,
+                plugins: {
+                    legend: { labels: { color: '#8b8fa3', font: { size: 11 } } },
+                    tooltip: {
+                        callbacks: {
+                            afterBody: (items) => {
+                                const t = tests[items[0].dataIndex];
+                                const d = t.delta_brier;
+                                return d < 0
+                                    ? `Calibration helps by ${Math.abs(d).toFixed(4)}`
+                                    : `Calibration hurts by ${d.toFixed(4)}`;
+                            }
+                        }
+                    }
+                },
+                scales: {
+                    y: {
+                        title: { display: true, text: 'Brier Score', color: '#8b8fa3' },
+                        ticks: { color: '#8b8fa3' },
+                        grid: { color: 'rgba(42,45,58,0.5)' },
+                    },
+                    x: { ticks: { color: '#8b8fa3' }, grid: { display: false } },
+                },
+            },
+        });
+    } else if (ctx) {
+        ctx.parentElement.querySelector('canvas')?.remove();
+        const placeholder = document.createElement('div');
+        placeholder.className = 'empty-state';
+        placeholder.style.padding = '40px 0';
+        placeholder.innerHTML = 'No calibration history yet.<br>'
+            + '<span style="font-size:0.8em;color:var(--text-dim);">'
+            + 'Populates after markets resolve and calibrator retrains.</span>';
+        ctx.parentElement.prepend(placeholder);
+    }
+
+    // -- Adaptive Weights Table --
+    const weightsEl = $('#intel-weights-table');
+    if (weightsEl && allCats.length > 0) {
+        const modelNames = Object.keys(allCats[0]?.weights ?? {});
+        let html = '<table class="data-table"><thead><tr>';
+        html += '<th>Category</th><th>Status</th>';
+        modelNames.forEach(m => {
+            const short = m.split('-').slice(0, 2).join('-');
+            html += `<th title="${m}">${short}</th>`;
+        });
+        html += '<th>Blend</th></tr></thead><tbody>';
+        allCats.forEach(cat => {
+            const statusBadge = cat.data_available
+                ? '<span class="badge badge-ok" style="font-size:0.65em;">LEARNED</span>'
+                : '<span class="badge" style="background:#334155;font-size:0.65em;">DEFAULT</span>';
+            html += `<tr><td>${cat.category}</td><td>${statusBadge}</td>`;
+            modelNames.forEach(m => {
+                const w = cat.weights[m] ?? 0;
+                const pct = (w * 100).toFixed(0);
+                const color = w > 0.25 ? 'var(--accent-green)'
+                    : w < 0.15 ? 'var(--text-muted)'
+                    : 'var(--text)';
+                html += `<td style="color:${color};font-family:var(--font-mono);">${pct}%</td>`;
+            });
+            const blend = cat.blend_factor ?? 0;
+            html += `<td style="color:var(--text-muted);">${(blend * 100).toFixed(0)}%</td>`;
+            html += '</tr>';
+        });
+        html += '</tbody></table>';
+        html += '<p style="font-size:0.72rem;color:var(--text-muted);margin-top:8px;">';
+        html += 'Blend = % learned weights (0% = all defaults, 100% = fully learned). ';
+        html += 'LEARNED = 5+ resolved markets available for this category.</p>';
+        safeHTML(weightsEl, html);
+    } else if (weightsEl) {
+        safeHTML(weightsEl, '<p class="empty-state">Adaptive weights not available yet.</p>');
+    }
+
+    // -- Per-Model Brier Bars --
+    const barsEl = $('#intel-model-brier-bars');
+    const modelRows = accuracy?.models ?? [];
+    if (barsEl && modelRows.length > 0) {
+        const maxBrier = Math.max(...modelRows.map(m => m.brier_score), 0.001);
+        const MODEL_COLORS = {
+            'gpt-4o':               'rgba(41, 121, 255, 0.7)',
+            'claude-sonnet-4-6':    'rgba(168, 85, 247, 0.7)',
+            'gemini-2.0-flash':     'rgba(0, 200, 83, 0.7)',
+            'grok-4-fast-reasoning':'rgba(255, 109, 0, 0.7)',
+            'deepseek-chat':        'rgba(0, 188, 212, 0.7)',
+        };
+        const defaultColor = 'rgba(139, 143, 163, 0.7)';
+        let html = '';
+        modelRows.forEach(m => {
+            const pct = (m.brier_score / maxBrier * 100).toFixed(1);
+            const color = MODEL_COLORS[m.model_name] ?? defaultColor;
+            const label = m.model_name.split('-').slice(0, 2).join('-');
+            const forecasts = m.total_forecasts;
+            html += `
+                <div class="intel-brier-bar-row">
+                    <div class="intel-brier-bar-label" title="${m.model_name}">
+                        ${label}
+                    </div>
+                    <div class="intel-brier-bar-track">
+                        <div class="intel-brier-bar-fill"
+                             style="width:${pct}%;background:${color};"></div>
+                    </div>
+                    <div class="intel-brier-bar-value">
+                        ${m.brier_score.toFixed(3)}
+                    </div>
+                    <div style="font-size:0.7rem;color:var(--text-dim);
+                                width:60px;text-align:right;flex-shrink:0;">
+                        ${forecasts}\u202fmkt
+                    </div>
+                </div>`;
+        });
+        safeHTML(barsEl, html);
+    } else if (barsEl) {
+        safeHTML(barsEl,
+            '<p class="empty-state">No resolved markets yet \u2014 bars appear as markets resolve.</p>');
     }
 }
 

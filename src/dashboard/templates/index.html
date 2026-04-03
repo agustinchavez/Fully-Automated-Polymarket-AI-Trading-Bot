@@ -1465,6 +1465,40 @@
             </div>
         </section>
 
+        <!-- ─── Panel 3b: Model Intelligence ──────────────────── -->
+        <section class="insight-panel" id="insight-model-intelligence">
+            <h2 class="section-title">
+                Model Intelligence
+                <span id="intel-status-badge" class="badge"
+                      style="font-size:0.72em;margin-left:10px;"></span>
+            </h2>
+
+            <!-- Row 1: KPI Cards -->
+            <div class="insight-kpi-grid" id="intel-kpi-cards"></div>
+
+            <!-- Row 2: Trend chart + Weights table -->
+            <div class="insight-chart-row" style="margin-top:20px;">
+                <div class="insight-chart-box">
+                    <div class="intel-chart-label">Rolling 7-Day Brier Score</div>
+                    <canvas id="intel-brier-trend-chart"></canvas>
+                    <p class="intel-chart-note">
+                        Lower is better &bull; 0.25 = random &bull;
+                        0.10 = superforecaster level
+                    </p>
+                </div>
+                <div class="insight-chart-box">
+                    <div class="intel-chart-label">Adaptive Weights by Category</div>
+                    <div id="intel-weights-table"></div>
+                </div>
+            </div>
+
+            <!-- Row 3: Per-model Brier bars -->
+            <div style="margin-top:20px;">
+                <div class="intel-chart-label">Per-Model Brier Score</div>
+                <div id="intel-model-brier-bars"></div>
+            </div>
+        </section>
+
         <!-- ─── Panel 4: Friction Analysis ────────────────────── -->
         <section class="insight-panel" id="insight-friction">
             <h2 class="section-title">Friction Analysis</h2>
