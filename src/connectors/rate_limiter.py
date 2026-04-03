@@ -52,6 +52,8 @@ DEFAULT_LIMITS: dict[str, BucketConfig] = {
     "google_trends": BucketConfig(tokens_per_second=0.5, max_burst=1, name="Google Trends"),
     "reddit": BucketConfig(tokens_per_second=1.0, max_burst=3, name="Reddit"),
     "pubmed": BucketConfig(tokens_per_second=3.0, max_burst=5, name="PubMed"),
+    "xai": BucketConfig(tokens_per_second=2.0, max_burst=4, name="xAI Grok"),
+    "deepseek": BucketConfig(tokens_per_second=3.0, max_burst=5, name="DeepSeek"),
 }
 
 

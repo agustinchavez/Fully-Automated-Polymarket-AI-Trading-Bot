@@ -2,12 +2,14 @@
 
 Supports:
   - GPT-4o (OpenAI)
-  - Claude 3.5 Sonnet (Anthropic)
-  - Gemini 1.5 Pro (Google)
+  - Claude Sonnet (Anthropic)
+  - Gemini 2.0 Flash (Google)
+  - Grok (xAI) — via OpenAI-compatible API
+  - DeepSeek (DeepSeek) — via OpenAI-compatible API, auto-excluded from GEOPOLITICS/ELECTION
 
 Aggregation methods:
   - trimmed_mean: Remove highest and lowest, average the rest
-  - median: Take the median probability
+  - median: Take the median probability (default — robust to outliers with 5 models)
   - weighted: Use configurable per-model weights
 
 Gracefully degrades if some models fail — requires min_models_required
@@ -462,12 +464,128 @@ async def _query_google(model: str, prompt: str, config: ForecastingConfig, time
         )
 
 
+async def _query_xai(model: str, prompt: str, config: ForecastingConfig, timeout_secs: int = 30) -> ModelForecast:
+    """Query xAI Grok via OpenAI-compatible API. No new dependencies."""
+    import time
+    from openai import AsyncOpenAI
+
+    api_key = os.environ.get("XAI_API_KEY", "")
+    if not api_key:
+        return ModelForecast(
+            model_name=model, model_probability=0.5,
+            error="XAI_API_KEY not set",
+        )
+
+    provider_cb = circuit_breakers.get("xai")
+    if not provider_cb.allow_request():
+        return ModelForecast(
+            model_name=model, model_probability=0.5,
+            error=f"Circuit breaker open for xai (retry after {provider_cb.time_until_retry():.0f}s)",
+            latency_ms=0.0,
+        )
+    start = time.monotonic()
+    try:
+        await rate_limiter.get("xai").acquire()
+        client = AsyncOpenAI(api_key=api_key, base_url="https://api.x.ai/v1")
+        resp = await asyncio.wait_for(
+            client.chat.completions.create(
+                model=model,
+                temperature=config.llm_temperature,
+                max_tokens=config.llm_max_tokens,
+                messages=[
+                    {"role": "system", "content": "You are a calibrated probabilistic forecaster. Return only valid JSON."},
+                    {"role": "user", "content": prompt},
+                ],
+            ),
+            timeout=timeout_secs,
+        )
+        raw = resp.choices[0].message.content or "{}"
+        parsed = _parse_llm_json(raw)
+        usage = getattr(resp, "usage", None)
+        cost_tracker.record_call(
+            model,
+            input_tokens=getattr(usage, "prompt_tokens", 0) or 0,
+            output_tokens=getattr(usage, "completion_tokens", 0) or 0,
+        )
+        provider_cb.record_success()
+        return _build_model_forecast(model, parsed, (time.monotonic() - start) * 1000)
+    except Exception as e:
+        provider_cb.record_failure()
+        return ModelForecast(
+            model_name=model, model_probability=0.5, error=str(e),
+            latency_ms=(time.monotonic() - start) * 1000,
+        )
+
+
+async def _query_deepseek(model: str, prompt: str, config: ForecastingConfig, timeout_secs: int = 30) -> ModelForecast:
+    """Query DeepSeek via OpenAI-compatible API.
+
+    WARNING: DeepSeek exhibits documented pro-China bias on geopolitical
+    questions. The ensemble auto-excludes this model from GEOPOLITICS and
+    ELECTION categories. See EnsembleConfig.deepseek_excluded_categories.
+    """
+    import time
+    from openai import AsyncOpenAI
+
+    api_key = os.environ.get("DEEPSEEK_API_KEY", "")
+    if not api_key:
+        return ModelForecast(
+            model_name=model, model_probability=0.5,
+            error="DEEPSEEK_API_KEY not set",
+        )
+
+    provider_cb = circuit_breakers.get("deepseek")
+    if not provider_cb.allow_request():
+        return ModelForecast(
+            model_name=model, model_probability=0.5,
+            error=f"Circuit breaker open for deepseek (retry after {provider_cb.time_until_retry():.0f}s)",
+            latency_ms=0.0,
+        )
+    start = time.monotonic()
+    try:
+        await rate_limiter.get("deepseek").acquire()
+        client = AsyncOpenAI(api_key=api_key, base_url="https://api.deepseek.com")
+        resp = await asyncio.wait_for(
+            client.chat.completions.create(
+                model=model,
+                temperature=config.llm_temperature,
+                max_tokens=config.llm_max_tokens,
+                messages=[
+                    {"role": "system", "content": "You are a calibrated probabilistic forecaster. Return only valid JSON."},
+                    {"role": "user", "content": prompt},
+                ],
+            ),
+            timeout=timeout_secs,
+        )
+        raw = resp.choices[0].message.content or "{}"
+        parsed = _parse_llm_json(raw)
+        usage = getattr(resp, "usage", None)
+        cost_tracker.record_call(
+            model,
+            input_tokens=getattr(usage, "prompt_tokens", 0) or 0,
+            output_tokens=getattr(usage, "completion_tokens", 0) or 0,
+        )
+        provider_cb.record_success()
+        return _build_model_forecast(model, parsed, (time.monotonic() - start) * 1000)
+    except Exception as e:
+        provider_cb.record_failure()
+        return ModelForecast(
+            model_name=model, model_probability=0.5, error=str(e),
+            latency_ms=(time.monotonic() - start) * 1000,
+        )
+
+
 def _route_model(model: str) -> str:
     """Determine which provider a model name belongs to."""
-    if "claude" in model.lower():
+    m = model.lower()
+    if "claude" in m:
         return "anthropic"
-    elif "gemini" in model.lower():
+    elif "gemini" in m:
         return "google"
+    elif "grok" in m:
+        return "xai"
+    elif "deepseek" in m:
+        return "deepseek"
     else:
         return "openai"
 
@@ -481,6 +599,10 @@ async def _query_model(
         return await _query_anthropic(model, prompt, config, timeout_secs)
     elif provider == "google":
         return await _query_google(model, prompt, config, timeout_secs)
+    elif provider == "xai":
+        return await _query_xai(model, prompt, config, timeout_secs)
+    elif provider == "deepseek":
+        return await _query_deepseek(model, prompt, config, timeout_secs)
     else:
         return await _query_openai(model, prompt, config, timeout_secs)
 
@@ -508,11 +630,21 @@ class EnsembleForecaster:
         """Query all configured models in parallel and aggregate."""
         prompt = _build_prompt(features, evidence, base_rate_info, prompt_version, signal_stack=signal_stack)
 
+        # DeepSeek category gating — exclude from biased categories
+        deepseek_excluded = set(
+            getattr(self._ensemble, "deepseek_excluded_categories", ["GEOPOLITICS", "ELECTION"])
+        )
+        market_category = (getattr(features, "category", None) or "UNKNOWN").upper()
+        active_models = [
+            m for m in self._ensemble.models
+            if not (_route_model(m) == "deepseek" and market_category in deepseek_excluded)
+        ]
+
         # Query all models concurrently
         timeout = self._ensemble.timeout_per_model_secs
         tasks = [
             _query_model(model, prompt, self._forecast, timeout)
-            for model in self._ensemble.models
+            for model in active_models
         ]
         forecasts = await asyncio.gather(*tasks)
 
@@ -540,6 +672,8 @@ class EnsembleForecaster:
                     "openai": "gpt-4o",
                     "anthropic": "claude-sonnet-4-6",
                     "google": "gemini-2.0-flash",
+                    "xai": "grok-4-fast-reasoning",
+                    "deepseek": "deepseek-chat",
                 }
                 for prov, mdl in alt_models.items():
                     if prov not in failed_providers:

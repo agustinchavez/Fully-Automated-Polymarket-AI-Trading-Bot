@@ -28,7 +28,7 @@ def _tier_cfg(**overrides) -> ModelTierConfig:
         enabled=True,
         scout_models=["gpt-4o-mini"],
         standard_models=["gpt-4o"],
-        premium_models=["gpt-4o", "claude-sonnet-4-6", "gemini-2.0-flash"],
+        premium_models=["gpt-4o", "claude-sonnet-4-6", "gemini-2.0-flash", "grok-4-fast-reasoning", "deepseek-chat"],
         premium_min_volume_usd=10000.0,
         premium_min_edge=0.06,
         scout_max_evidence_quality=0.4,
@@ -46,7 +46,7 @@ class TestTierRouting:
             rough_edge=0.10,  # 10% edge
         )
         assert tier.tier == "premium"
-        assert len(tier.models) == 3
+        assert len(tier.models) == 5
 
     def test_scout_routing(self) -> None:
         """Low evidence quality → scout (cheap single model)."""
@@ -76,7 +76,7 @@ class TestTierRouting:
             rough_edge=0.01,
         )
         assert tier.tier == "premium"
-        assert len(tier.models) == 3
+        assert len(tier.models) == 5
 
     def test_premium_needs_both_conditions(self) -> None:
         """High volume alone isn't enough — also need edge."""

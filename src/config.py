@@ -121,6 +121,9 @@ class EnsembleConfig(BaseModel):
     timeout_per_model_secs: int = 30
     min_models_required: int = 1
     fallback_model: str = "gpt-4o"
+    deepseek_excluded_categories: list[str] = Field(
+        default_factory=lambda: ["GEOPOLITICS", "ELECTION"]
+    )
 
     @model_validator(mode="after")
     def _cross_field_checks(self) -> "EnsembleConfig":
