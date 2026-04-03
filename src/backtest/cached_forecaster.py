@@ -71,10 +71,12 @@ class CachedEnsembleForecaster:
         evidence: EvidencePackage,
         base_rate_info: Any = None,
         prompt_version: str = "v1",
+        signal_stack: Any | None = None,
     ) -> EnsembleResult:
         """Run ensemble forecast with cache layer."""
         question = features.question
-        prompt = _build_prompt(features, evidence, base_rate_info, prompt_version)
+        # signal_stack is NOT part of the cache key (volatile market data)
+        prompt = _build_prompt(features, evidence, base_rate_info, prompt_version, signal_stack=signal_stack)
         timeout = self._ensemble_config.timeout_per_model_secs
 
         forecasts: list[ModelForecast] = []

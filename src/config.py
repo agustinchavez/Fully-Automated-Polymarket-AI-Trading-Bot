@@ -73,6 +73,22 @@ class ResearchConfig(BaseModel):
     worldbank_mrv: int = 3
     openfda_api_key: str = ""
 
+    # Phase 2: Behavioral signal connectors
+    kalshi_prior_enabled: bool = False
+    metaculus_enabled: bool = False
+    wikipedia_pageviews_enabled: bool = False
+    google_trends_enabled: bool = False
+    reddit_sentiment_enabled: bool = False
+    pubmed_enabled: bool = False
+    metaculus_min_forecasters: int = 20
+    metaculus_min_jaccard: float = 0.60
+    wikipedia_cache_ttl_secs: int = 14400  # 4 hours
+    google_trends_volume_threshold_usd: float = 50000.0
+    reddit_client_id: str = ""
+    reddit_client_secret: str = ""
+    pubmed_api_key: str = ""  # optional NCBI key
+    pubmed_max_results: int = 5
+
 
 class ForecastingConfig(BaseModel):
     llm_model: str = "gpt-4o"
@@ -633,6 +649,7 @@ _SECRET_FIELDS = frozenset({
     "sentry_dsn",
     "fred_api_key", "coingecko_api_key", "congress_api_key",
     "courtlistener_api_key", "openfda_api_key",
+    "reddit_client_id", "reddit_client_secret", "pubmed_api_key",
 })
 
 
@@ -699,6 +716,9 @@ _ENV_OVERRIDES: dict[str, tuple[str, str, type]] = {
     "ALERT_EMAIL_FROM": ("alerts", "email_from", str),
     "ALERT_EMAIL_TO": ("alerts", "email_to", str),
     "OPENFDA_API_KEY": ("research", "openfda_api_key", str),
+    "REDDIT_CLIENT_ID": ("research", "reddit_client_id", str),
+    "REDDIT_CLIENT_SECRET": ("research", "reddit_client_secret", str),
+    "NCBI_API_KEY": ("research", "pubmed_api_key", str),
 }
 
 

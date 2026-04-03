@@ -114,8 +114,10 @@ Return valid JSON:
 
 RULES:
 - Your probability must be between 0.01 and 0.99.
-- Form your estimate independently from evidence — do NOT anchor to any
-  external price or implied probability.
+- If CONSENSUS SIGNALS are present above, consider them as reference points.
+  Explain why you agree or disagree with each. If signals diverge by >10pp,
+  increase your uncertainty.
+- If no consensus signals are present, form your estimate independently.
 - If evidence is weak (quality < 0.3), bias toward 0.50.
 - If evidence contradicts itself, widen uncertainty toward 0.50.
 - confidence_level:
@@ -200,8 +202,9 @@ Return valid JSON:
 RULES:
 - Your probability must be between 0.01 and 0.99.
 - START from the base rate and adjust — do not ignore the anchor.
-- Form your estimate independently from evidence — do NOT anchor to any
-  external price or implied probability.
+- If CONSENSUS SIGNALS are present above, consider them as reference points.
+  Explain why you agree or disagree with each. If signals diverge by >10pp,
+  increase your uncertainty.
 - If evidence is weak (quality < 0.3), stay closer to the base rate.
 - If evidence contradicts itself, widen uncertainty toward the base rate.
 - confidence_level:
@@ -220,6 +223,7 @@ def _build_prompt(
     evidence: EvidencePackage,
     base_rate_info: Any | None = None,
     prompt_version: str = "v1",
+    signal_stack: Any | None = None,
 ) -> str:
     """Build the forecast prompt from features and evidence.
 
@@ -228,6 +232,7 @@ def _build_prompt(
         evidence: Evidence package from research.
         base_rate_info: Optional BaseRateMatch with historical base rate.
         prompt_version: "v1" (legacy) or "v2" (structured reasoning chain).
+        signal_stack: Optional SignalStack with consensus/behavioral signals.
     """
     evidence_bullets = "\n".join(
         f"- {b}" for b in features.top_bullets
@@ -243,10 +248,23 @@ def _build_prompt(
             )
         contradictions_block = "\n".join(lines)
 
+    # Render signal block if present
+    signal_block = ""
+    if signal_stack is not None:
+        try:
+            from src.research.signal_aggregator import render_signal_stack
+            signal_block = render_signal_stack(signal_stack)
+        except Exception:
+            pass
+
+    evidence_summary_text = evidence.summary or "No summary available."
+    if signal_block:
+        evidence_summary_text = signal_block + "\n" + evidence_summary_text
+
     format_kwargs = dict(
         question=features.question,
         market_type=features.market_type,
-        evidence_summary=evidence.summary or "No summary available.",
+        evidence_summary=evidence_summary_text,
         evidence_bullets=evidence_bullets,
         contradictions_block=contradictions_block,
         volume_usd=features.volume_usd,
@@ -485,9 +503,10 @@ class EnsembleForecaster:
         evidence: EvidencePackage,
         base_rate_info: Any | None = None,
         prompt_version: str = "v1",
+        signal_stack: Any | None = None,
     ) -> EnsembleResult:
         """Query all configured models in parallel and aggregate."""
-        prompt = _build_prompt(features, evidence, base_rate_info, prompt_version)
+        prompt = _build_prompt(features, evidence, base_rate_info, prompt_version, signal_stack=signal_stack)
 
         # Query all models concurrently
         timeout = self._ensemble.timeout_per_model_secs

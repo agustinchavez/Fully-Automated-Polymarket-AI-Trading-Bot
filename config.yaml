@@ -45,6 +45,12 @@ research:
   edgar_max_filings: 3
   arxiv_max_results: 5
   worldbank_mrv: 3
+  kalshi_prior_enabled: false
+  metaculus_enabled: false
+  wikipedia_pageviews_enabled: false
+  google_trends_enabled: false
+  reddit_sentiment_enabled: false
+  pubmed_enabled: false
   primary_domains:
     MACRO:
       - bls.gov

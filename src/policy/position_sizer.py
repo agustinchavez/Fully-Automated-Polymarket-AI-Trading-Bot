@@ -39,6 +39,7 @@ class PositionSize:
     timeline_mult: float = 1.0
     volatility_mult: float = 1.0
     uncertainty_mult: float = 1.0
+    confluence_mult: float = 1.0
     portfolio_gate: str = "ok"  # "ok" or reason for rejection
 
     def to_dict(self) -> dict:
@@ -58,6 +59,7 @@ def calculate_position_size(
     liquidity_usd: float = 0.0,
     max_liquidity_pct: float = 0.05,
     uncertainty_multiplier: float = 1.0,
+    confluence_multiplier: float = 1.0,
 ) -> PositionSize:
     """Calculate position size using fractional Kelly with drawdown + timeline adjustments.
 
@@ -132,7 +134,7 @@ def calculate_position_size(
         )
 
     # Apply all multipliers
-    combined_mult = kelly_mult * drawdown_multiplier * timeline_multiplier * vol_mult * regime_multiplier * category_multiplier * uncertainty_multiplier
+    combined_mult = kelly_mult * drawdown_multiplier * timeline_multiplier * vol_mult * regime_multiplier * category_multiplier * uncertainty_multiplier * confluence_multiplier
     adj_kelly = full_kelly_frac * combined_mult
     full_kelly_stake = adj_kelly * risk_config.bankroll
 
@@ -182,6 +184,7 @@ def calculate_position_size(
         timeline_mult=round(timeline_multiplier, 2),
         volatility_mult=round(vol_mult, 2),
         uncertainty_mult=round(uncertainty_multiplier, 2),
+        confluence_mult=round(confluence_multiplier, 2),
         portfolio_gate=gate_reason,
     )
 
@@ -198,5 +201,6 @@ def calculate_position_size(
         regime_mult=round(regime_multiplier, 2),
         category_mult=round(category_multiplier, 2),
         uncertainty_mult=round(uncertainty_multiplier, 2),
+        confluence_mult=round(confluence_multiplier, 2),
     )
     return result

@@ -94,6 +94,48 @@ def get_enabled_connectors(config: Any) -> list[BaseResearchConnector]:
         except Exception as e:
             log.warning("registry.worldbank_load_failed", error=str(e))
 
+    if getattr(config, "kalshi_prior_enabled", False):
+        try:
+            from src.research.connectors.kalshi_prior import KalshiPriorConnector
+            connectors.append(KalshiPriorConnector(config))
+        except Exception as e:
+            log.warning("registry.kalshi_prior_load_failed", error=str(e))
+
+    if getattr(config, "metaculus_enabled", False):
+        try:
+            from src.research.connectors.metaculus import MetaculusConnector
+            connectors.append(MetaculusConnector(config))
+        except Exception as e:
+            log.warning("registry.metaculus_load_failed", error=str(e))
+
+    if getattr(config, "wikipedia_pageviews_enabled", False):
+        try:
+            from src.research.connectors.wikipedia_pageviews import WikipediaPageviewsConnector
+            connectors.append(WikipediaPageviewsConnector(config))
+        except Exception as e:
+            log.warning("registry.wikipedia_pageviews_load_failed", error=str(e))
+
+    if getattr(config, "google_trends_enabled", False):
+        try:
+            from src.research.connectors.google_trends import GoogleTrendsConnector
+            connectors.append(GoogleTrendsConnector(config))
+        except Exception as e:
+            log.warning("registry.google_trends_load_failed", error=str(e))
+
+    if getattr(config, "pubmed_enabled", False):
+        try:
+            from src.research.connectors.pubmed import PubMedConnector
+            connectors.append(PubMedConnector(config))
+        except Exception as e:
+            log.warning("registry.pubmed_load_failed", error=str(e))
+
+    if getattr(config, "reddit_sentiment_enabled", False):
+        try:
+            from src.research.connectors.reddit_sentiment import RedditSentimentConnector
+            connectors.append(RedditSentimentConnector(config))
+        except Exception as e:
+            log.warning("registry.reddit_sentiment_load_failed", error=str(e))
+
     log.debug(
         "registry.connectors_loaded",
         count=len(connectors),

@@ -151,6 +151,17 @@ class PipelineRunner:
             except Exception:
                 log.warning("engine.search_provider_close_error", exc_info=True)
 
+        # Build signal stack from research sources
+        try:
+            from src.research.signal_aggregator import build_signal_stack
+            poly_price = (
+                ctx.features.implied_probability
+                if ctx.features else 0.5
+            )
+            ctx._signal_stack = build_signal_stack(ctx.sources, poly_price)
+        except Exception:
+            log.debug("engine.signal_stack_build_skipped", market_id=ctx.market_id)
+
         log.info(
             "engine.research_done", market_id=ctx.market_id,
             sources=len(ctx.sources), bullets=len(ctx.evidence.bullets),
@@ -352,6 +363,7 @@ class PipelineRunner:
                 evidence=ctx.evidence,
                 base_rate_info=base_rate_info,
                 prompt_version=self.config.forecasting.prompt_version,
+                signal_stack=getattr(ctx, "_signal_stack", None),
             )
             from src.forecast.llm_forecaster import ForecastResult
             ctx.forecast = ForecastResult(
@@ -759,6 +771,11 @@ class PipelineRunner:
         unc_result = getattr(ctx, "_uncertainty_result", None)
         if unc_result is not None:
             unc_mult = max(0.5, 1.0 - unc_result.uncertainty_score * 0.5)
+        # Phase 2 signal confluence: reduce sizing when signals diverge
+        conf_mult = 1.0
+        signal_stack = getattr(ctx, "_signal_stack", None)
+        if signal_stack is not None:
+            conf_mult = getattr(signal_stack, "recommended_kelly_multiplier", 1.0)
         ctx.position = calculate_position_size(
             edge=ctx.edge_result, risk_config=self.config.risk,
             confidence_level=ctx.forecast.confidence_level,
@@ -768,6 +785,7 @@ class PipelineRunner:
             regime_multiplier=regime_kelly * regime_size,
             category_multiplier=cat_mult,
             uncertainty_multiplier=unc_mult,
+            confluence_multiplier=conf_mult,
         )
         if ctx.position.stake_usd < 1.0:
             log.info("engine.stake_too_small", market_id=ctx.market_id,

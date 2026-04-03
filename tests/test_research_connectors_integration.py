@@ -28,6 +28,12 @@ class TestRegistry:
         config.arxiv_enabled = False
         config.openfda_enabled = False
         config.worldbank_enabled = False
+        config.kalshi_prior_enabled = False
+        config.metaculus_enabled = False
+        config.wikipedia_pageviews_enabled = False
+        config.google_trends_enabled = False
+        config.reddit_sentiment_enabled = False
+        config.pubmed_enabled = False
         connectors = get_enabled_connectors(config)
         assert connectors == []
 
@@ -43,6 +49,12 @@ class TestRegistry:
         config.arxiv_enabled = False
         config.openfda_enabled = False
         config.worldbank_enabled = False
+        config.kalshi_prior_enabled = False
+        config.metaculus_enabled = False
+        config.wikipedia_pageviews_enabled = False
+        config.google_trends_enabled = False
+        config.reddit_sentiment_enabled = False
+        config.pubmed_enabled = False
         connectors = get_enabled_connectors(config)
         assert len(connectors) == 1
         assert connectors[0].name == "open_meteo"
@@ -59,6 +71,12 @@ class TestRegistry:
         config.arxiv_enabled = False
         config.openfda_enabled = False
         config.worldbank_enabled = False
+        config.kalshi_prior_enabled = False
+        config.metaculus_enabled = False
+        config.wikipedia_pageviews_enabled = False
+        config.google_trends_enabled = False
+        config.reddit_sentiment_enabled = False
+        config.pubmed_enabled = False
         connectors = get_enabled_connectors(config)
         assert len(connectors) == 3
         names = {c.name for c in connectors}
@@ -78,8 +96,14 @@ class TestRegistry:
         config.arxiv_enabled = True
         config.openfda_enabled = True
         config.worldbank_enabled = True
+        config.kalshi_prior_enabled = True
+        config.metaculus_enabled = True
+        config.wikipedia_pageviews_enabled = True
+        config.google_trends_enabled = True
+        config.pubmed_enabled = True
+        config.reddit_sentiment_enabled = True
         connectors = get_enabled_connectors(config)
-        assert len(connectors) == 10
+        assert len(connectors) == 16
 
     def test_new_connectors_enabled_individually(self) -> None:
         for connector_flag, expected_name in [
@@ -87,6 +111,12 @@ class TestRegistry:
             ("arxiv_enabled", "arxiv"),
             ("openfda_enabled", "openfda"),
             ("worldbank_enabled", "worldbank"),
+            ("kalshi_prior_enabled", "kalshi_prior"),
+            ("metaculus_enabled", "metaculus"),
+            ("wikipedia_pageviews_enabled", "wikipedia_pageviews"),
+            ("google_trends_enabled", "google_trends"),
+            ("pubmed_enabled", "pubmed"),
+            ("reddit_sentiment_enabled", "reddit_sentiment"),
         ]:
             config = MagicMock()
             config.openmeteo_enabled = False
@@ -99,6 +129,12 @@ class TestRegistry:
             config.arxiv_enabled = False
             config.openfda_enabled = False
             config.worldbank_enabled = False
+            config.kalshi_prior_enabled = False
+            config.metaculus_enabled = False
+            config.wikipedia_pageviews_enabled = False
+            config.google_trends_enabled = False
+            config.reddit_sentiment_enabled = False
+            config.pubmed_enabled = False
             setattr(config, connector_flag, True)
             connectors = get_enabled_connectors(config)
             assert len(connectors) == 1
@@ -123,6 +159,12 @@ class TestConnectorContracts:
         config.arxiv_enabled = True
         config.openfda_enabled = True
         config.worldbank_enabled = True
+        config.kalshi_prior_enabled = True
+        config.metaculus_enabled = True
+        config.wikipedia_pageviews_enabled = True
+        config.google_trends_enabled = True
+        config.pubmed_enabled = True
+        config.reddit_sentiment_enabled = True
         return get_enabled_connectors(config)
 
     def test_all_have_name(self) -> None:

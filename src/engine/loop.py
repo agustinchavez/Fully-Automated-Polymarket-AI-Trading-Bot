@@ -102,6 +102,7 @@ class PipelineContext:
     risk_result: RiskCheckResult | None = None
     position: PositionSize | None = None
     whale_converged: bool = False   # True when whale signal agrees with model edge
+    _signal_stack: Any = None       # Phase 2 SignalStack from signal_aggregator
     result: dict[str, Any] = field(default_factory=lambda: {
         "has_edge": False, "trade_attempted": False, "trade_executed": False,
     })
