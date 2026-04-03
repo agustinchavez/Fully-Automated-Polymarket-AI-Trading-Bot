@@ -6705,13 +6705,13 @@ async function updateInsightsTab() {
         const [pnl, cats, models, friction,
                adaptiveWeights, retrainHistory, modelAccuracy] =
             await Promise.all([
-                fetch(`/api/insights/pnl-overview?days=${days}`).then(r => r.json()),
-                fetch(`/api/insights/category-breakdown?days=${days}`).then(r => r.json()),
-                fetch(`/api/insights/model-accuracy?days=${days}`).then(r => r.json()),
-                fetch(`/api/insights/friction?days=${days}`).then(r => r.json()),
-                fetch('/api/adaptive-weights').then(r => r.json()).catch(() => null),
-                fetch('/api/calibration/retrain-history').then(r => r.json()).catch(() => null),
-                fetch('/api/model-accuracy').then(r => r.json()).catch(() => null),
+                authFetch(`/api/insights/pnl-overview?days=${days}`).then(r => r.json()),
+                authFetch(`/api/insights/category-breakdown?days=${days}`).then(r => r.json()),
+                authFetch(`/api/insights/model-accuracy?days=${days}`).then(r => r.json()),
+                authFetch(`/api/insights/friction?days=${days}`).then(r => r.json()),
+                authFetch('/api/adaptive-weights').then(r => r.json()).catch(() => null),
+                authFetch('/api/calibration/retrain-history').then(r => r.json()).catch(() => null),
+                authFetch('/api/model-accuracy').then(r => r.json()).catch(() => null),
             ]);
         renderInsightPnlPanel(pnl);
         renderInsightCategoryPanel(cats);
@@ -6719,7 +6719,7 @@ async function updateInsightsTab() {
         renderInsightFrictionPanel(friction);
         renderModelIntelligencePanel(adaptiveWeights, retrainHistory, modelAccuracy);
         // Load cached AI analysis (non-blocking)
-        fetch('/api/insights/ai-analysis').then(r => r.json()).then(renderInsightAiPanel).catch(() => {});
+        authFetch('/api/insights/ai-analysis').then(r => r.json()).then(renderInsightAiPanel).catch(() => {});
     } catch (e) {
         console.error('Insights tab error:', e);
     }
