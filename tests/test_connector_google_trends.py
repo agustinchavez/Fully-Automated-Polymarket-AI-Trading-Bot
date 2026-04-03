@@ -359,6 +359,34 @@ class TestMetadata:
         assert signal["signal_type"] == "search_trend"
         assert "value" in signal
         assert "current_index" in signal
+        assert "narrative" in signal
+
+    def test_narrative_in_behavioral_signal(self) -> None:
+        """Narrative context is included in behavioral_signal raw dict."""
+        c = _make_connector()
+        sources = c._build_source(
+            keyword="Bitcoin",
+            spike_ratio=2.0,
+            current_index=80,
+            narrative_context="Rising interest in Bitcoin ETF approvals",
+            serpapi_ok=True,
+        )
+        signal = sources[0].raw["behavioral_signal"]
+        assert signal["narrative"] == "Rising interest in Bitcoin ETF approvals"
+
+    def test_narrative_truncated_to_300_chars(self) -> None:
+        """Narrative is truncated to 300 characters in raw dict."""
+        c = _make_connector()
+        long_narrative = "x" * 500
+        sources = c._build_source(
+            keyword="Test",
+            spike_ratio=1.5,
+            current_index=60,
+            narrative_context=long_narrative,
+            serpapi_ok=True,
+        )
+        signal = sources[0].raw["behavioral_signal"]
+        assert len(signal["narrative"]) == 300
 
     def test_authority_score_is_0_6(self) -> None:
         c = _make_connector()

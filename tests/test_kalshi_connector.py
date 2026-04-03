@@ -76,7 +76,7 @@ class TestKalshiMarketModel:
         assert "spread" in d
 
     def test_parse_kalshi_market_cents_to_dollars(self) -> None:
-        """API returns prices in cents; parser converts to dollars."""
+        """Legacy API returns prices in cents; parser converts to dollars."""
         raw = {
             "ticker": "KXTEST",
             "title": "Test",
@@ -85,6 +85,43 @@ class TestKalshiMarketModel:
             "no_bid": 32,
             "no_ask": 35,
             "volume": 100,
+        }
+        m = _parse_kalshi_market(raw)
+        assert m.yes_bid == pytest.approx(0.65)
+        assert m.yes_ask == pytest.approx(0.68)
+        assert m.no_bid == pytest.approx(0.32)
+        assert m.no_ask == pytest.approx(0.35)
+
+    def test_parse_kalshi_market_dollars_format(self) -> None:
+        """Post March 2026 API returns prices as *_dollars fields (decimal)."""
+        raw = {
+            "ticker": "KXTEST",
+            "title": "Test",
+            "yes_bid_dollars": 0.65,
+            "yes_ask_dollars": 0.68,
+            "no_bid_dollars": 0.32,
+            "no_ask_dollars": 0.35,
+            "volume": 200,
+        }
+        m = _parse_kalshi_market(raw)
+        assert m.yes_bid == pytest.approx(0.65)
+        assert m.yes_ask == pytest.approx(0.68)
+        assert m.no_bid == pytest.approx(0.32)
+        assert m.no_ask == pytest.approx(0.35)
+
+    def test_parse_kalshi_market_dollars_takes_priority(self) -> None:
+        """When both dollars and cents fields present, dollars wins."""
+        raw = {
+            "ticker": "KXTEST",
+            "title": "Test",
+            "yes_bid": 50,           # Legacy cents: 0.50
+            "yes_bid_dollars": 0.65, # New dollars: 0.65
+            "yes_ask": 55,
+            "yes_ask_dollars": 0.68,
+            "no_bid": 45,
+            "no_bid_dollars": 0.32,
+            "no_ask": 50,
+            "no_ask_dollars": 0.35,
         }
         m = _parse_kalshi_market(raw)
         assert m.yes_bid == pytest.approx(0.65)

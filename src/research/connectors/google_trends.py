@@ -309,6 +309,7 @@ class GoogleTrendsConnector(BaseResearchConnector):
                     "signal_type": "search_trend",
                     "value": spike_ratio,
                     "current_index": current_index,
+                    "narrative": narrative_context[:300] if narrative_context else "",
                 },
             },
         )]

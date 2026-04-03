@@ -62,7 +62,7 @@ class KalshiPriorConnector(BaseResearchConnector):
         question: str,
         market_type: str,
     ) -> list[FetchedSource]:
-        await rate_limiter.get("kalshi").acquire()
+        await rate_limiter.get("kalshi_prior").acquire()
 
         client = self._get_kalshi_client()
         matcher = self._get_matcher()

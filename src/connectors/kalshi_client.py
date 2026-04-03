@@ -103,6 +103,20 @@ class KalshiPosition:
 # ── Client ───────────────────────────────────────────────────────────
 
 
+def _kalshi_price(raw: dict, dollars_key: str, cents_key: str, default: float) -> float:
+    """Extract price from Kalshi API response, handling both dollar and cent formats.
+
+    Post March 2026 API returns ``*_dollars`` fields (decimal 0.0-1.0).
+    Legacy API returned integer cents (0-100).
+    """
+    if dollars_key in raw:
+        return float(raw[dollars_key])
+    cents_val = raw.get(cents_key)
+    if cents_val is not None:
+        return float(cents_val) / 100
+    return default
+
+
 def _parse_kalshi_market(raw: dict[str, Any]) -> KalshiMarket:
     """Parse a raw API response dict into a KalshiMarket."""
     return KalshiMarket(
@@ -110,10 +124,10 @@ def _parse_kalshi_market(raw: dict[str, Any]) -> KalshiMarket:
         title=raw.get("title", ""),
         category=raw.get("category", ""),
         status=raw.get("status", "active"),
-        yes_bid=float(raw.get("yes_bid", 0)) / 100,     # Kalshi uses cents
-        yes_ask=float(raw.get("yes_ask", 100)) / 100,
-        no_bid=float(raw.get("no_bid", 0)) / 100,
-        no_ask=float(raw.get("no_ask", 100)) / 100,
+        yes_bid=_kalshi_price(raw, "yes_bid_dollars", "yes_bid", 0.0),
+        yes_ask=_kalshi_price(raw, "yes_ask_dollars", "yes_ask", 1.0),
+        no_bid=_kalshi_price(raw, "no_bid_dollars", "no_bid", 0.0),
+        no_ask=_kalshi_price(raw, "no_ask_dollars", "no_ask", 1.0),
         volume=int(raw.get("volume", 0)),
         open_interest=int(raw.get("open_interest", 0)),
         expiration_time=raw.get("expiration_time", ""),
@@ -308,16 +322,20 @@ class KalshiClient:
             "side": "yes" if side.lower() in ("buy", "yes") else "no",
             "count": quantity,
             "type": order_type,
-            "yes_price": int(price * 100),  # Convert to cents
+            "yes_price": int(price * 100),  # cents for legacy API
+            "yes_price_dollars": str(round(price, 4)),  # dollars for new API
         }
 
         try:
             data = await self._post("/trade-api/v2/portfolio/orders", body=body)
             order_data = data.get("order", data)
+            fill_price = _kalshi_price(
+                order_data, "yes_price_dollars", "yes_price", price,
+            )
             return KalshiOrderResult(
                 order_id=order_data.get("order_id", ""),
                 status=order_data.get("status", "submitted"),
-                fill_price=float(order_data.get("yes_price", 0)) / 100,
+                fill_price=fill_price,
                 fill_size=int(order_data.get("count", 0)),
             )
         except Exception as e:

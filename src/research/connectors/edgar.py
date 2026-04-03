@@ -8,6 +8,7 @@ Rate limit: 10 req/sec with User-Agent header (SEC policy).
 
 from __future__ import annotations
 
+import os
 import re
 
 from src.connectors.rate_limiter import rate_limiter
@@ -88,7 +89,7 @@ _NUMERIC_KEYWORDS: list[str] = [
     "eps", "margin", "assets", "debt", "cash flow",
 ]
 
-_SEC_USER_AGENT = "PolymarketBot/1.0 (research@example.com)"
+_SEC_USER_AGENT = f"PolymarketBot/1.0 ({os.environ.get('BOT_CONTACT_EMAIL', 'bot-operator@polymarket-bot.local')})"
 
 
 class EdgarConnector(BaseResearchConnector):

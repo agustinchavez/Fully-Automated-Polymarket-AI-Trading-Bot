@@ -46,6 +46,7 @@ DEFAULT_LIMITS: dict[str, BucketConfig] = {
     "arxiv": BucketConfig(tokens_per_second=0.33, max_burst=1, name="arXiv"),
     "openfda": BucketConfig(tokens_per_second=4.0, max_burst=8, name="openFDA"),
     "worldbank": BucketConfig(tokens_per_second=2.0, max_burst=4, name="World Bank"),
+    "kalshi_prior": BucketConfig(tokens_per_second=2.0, max_burst=4, name="Kalshi Prior"),
     "metaculus": BucketConfig(tokens_per_second=0.5, max_burst=2, name="Metaculus"),
     "wikipedia": BucketConfig(tokens_per_second=1.0, max_burst=2, name="Wikipedia"),
     "google_trends": BucketConfig(tokens_per_second=0.5, max_burst=1, name="Google Trends"),

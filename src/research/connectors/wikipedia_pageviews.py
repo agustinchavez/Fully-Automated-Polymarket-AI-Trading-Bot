@@ -8,6 +8,7 @@ Uses the free Wikimedia REST API (no key required):
 
 from __future__ import annotations
 
+import os
 import re
 import time as _time
 from datetime import datetime, timedelta, timezone
@@ -24,7 +25,7 @@ _WIKIMEDIA_API = (
     "https://wikimedia.org/api/rest_v1/metrics/pageviews"
     "/per-article/en.wikipedia/all-access/all-agents/{article}/daily/{start}/{end}"
 )
-_USER_AGENT = "PolymarketBot/1.0 (research@example.com)"
+_USER_AGENT = f"PolymarketBot/1.0 ({os.environ.get('BOT_CONTACT_EMAIL', 'bot-operator@polymarket-bot.local')})"
 
 # Common entities → Wikipedia article titles
 _ENTITY_MAP: dict[str, str] = {
