@@ -111,12 +111,17 @@ class EnsembleConfig(BaseModel):
     """Multi-model ensemble configuration."""
     enabled: bool = True
     models: list[str] = Field(default_factory=lambda: [
-        "gpt-4o", "claude-sonnet-4-6", "gemini-2.0-flash"
+        "gpt-4o", "claude-sonnet-4-6", "gemini-2.0-flash",
+        "grok-4-fast-reasoning", "deepseek-chat",
     ])
-    aggregation: str = "trimmed_mean"  # trimmed_mean | median | weighted
+    aggregation: str = "median"  # trimmed_mean | median | weighted
     trim_fraction: float = 0.1
     weights: dict[str, float] = Field(default_factory=lambda: {
-        "gpt-4o": 0.40, "claude-sonnet-4-6": 0.35, "gemini-2.0-flash": 0.25
+        "gpt-4o": 0.25,
+        "claude-sonnet-4-6": 0.25,
+        "gemini-2.0-flash": 0.20,
+        "grok-4-fast-reasoning": 0.15,
+        "deepseek-chat": 0.15,
     })
     timeout_per_model_secs: int = 30
     min_models_required: int = 1
@@ -558,7 +563,7 @@ class AnalystConfig(BaseModel):
     @field_validator("provider")
     @classmethod
     def _validate_provider(cls, v: str) -> str:
-        valid = {"anthropic", "openai", "google", "deepseek"}
+        valid = {"anthropic", "openai", "google", "deepseek", "xai"}
         if v.lower() not in valid:
             raise ValueError(f"analyst.provider must be one of {valid}, got {v!r}")
         return v.lower()

@@ -99,7 +99,7 @@ class TestEnsembleConfigValidation:
     def test_defaults_valid(self) -> None:
         ec = EnsembleConfig()
         assert ec.enabled is True
-        assert len(ec.models) == 3
+        assert len(ec.models) == 5
 
 
 class TestDrawdownConfigValidation:

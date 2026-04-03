@@ -137,6 +137,8 @@ ensemble:
     - gpt-4o
     - claude-sonnet-4-6
     - gemini-2.0-flash
+    - grok-4-fast-reasoning
+    - deepseek-chat
   aggregation: median
   min_models_required: 1
   fallback_model: gpt-4o
