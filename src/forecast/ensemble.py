@@ -69,6 +69,30 @@ class EnsembleResult:
     key_evidence: list[dict[str, Any]] = field(default_factory=list)
 
 
+# ── Longshot Bias Correction ─────────────────────────────────────────
+
+
+def longshot_correction(
+    prob: float,
+    low_threshold: float = 0.12,
+    high_threshold: float = 0.88,
+    strength: float = 0.20,
+) -> float:
+    """Apply longshot bias correction.
+
+    Documented in Betfair, PredictIt, Polymarket research:
+    low-prob events overpriced; high-prob events underpriced.
+    strength=0.20 = 20% correction toward the tail.
+    """
+    if prob < low_threshold:
+        correction = (low_threshold - prob) / low_threshold
+        return prob * (1.0 - strength * correction)
+    elif prob > high_threshold:
+        correction = (prob - high_threshold) / (1.0 - high_threshold)
+        return prob + (1.0 - prob) * strength * correction
+    return prob
+
+
 _FORECAST_PROMPT = """\
 You are an expert probabilistic forecaster analyzing a prediction market.
 
@@ -120,6 +144,13 @@ RULES:
   Explain why you agree or disagree with each. If signals diverge by >10pp,
   increase your uncertainty.
 - If no consensus signals are present, form your estimate independently.
+- ORDER FLOW SIGNALS (if present) reflect real-time order book dynamics.
+  Positive OFI + smart money dominant = informed traders positioning UP.
+  Weight this alongside but separately from research evidence.
+- SMART MONEY SIGNALS (if present) reflect positions held by traders
+  with documented Polymarket PnL track records. A STRONG BULLISH signal
+  from traders with >70% win rate is meaningful independent evidence.
+  MIXED signal = uncertainty even among informed traders.
 - If evidence is weak (quality < 0.3), bias toward 0.50.
 - If evidence contradicts itself, widen uncertainty toward 0.50.
 - confidence_level:
@@ -207,6 +238,13 @@ RULES:
 - If CONSENSUS SIGNALS are present above, consider them as reference points.
   Explain why you agree or disagree with each. If signals diverge by >10pp,
   increase your uncertainty.
+- ORDER FLOW SIGNALS (if present) reflect real-time order book dynamics.
+  Positive OFI + smart money dominant = informed traders positioning UP.
+  Weight this alongside but separately from research evidence.
+- SMART MONEY SIGNALS (if present) reflect positions held by traders
+  with documented Polymarket PnL track records. A STRONG BULLISH signal
+  from traders with >70% win rate is meaningful independent evidence.
+  MIXED signal = uncertainty even among informed traders.
 - If evidence is weak (quality < 0.3), stay closer to the base rate.
 - If evidence contradicts itself, widen uncertainty toward the base rate.
 - confidence_level:
@@ -704,6 +742,19 @@ class EnsembleForecaster:
         # Aggregate probabilities
         model_probs = [(f.model_name, f.model_probability) for f in successes]
         agg_prob, agg_method_used = self._aggregate(model_probs)
+
+        # Longshot bias correction
+        ls_cfg = getattr(self._ensemble, "longshot", None)
+        if ls_cfg and getattr(ls_cfg, "enabled", False):
+            cat = (getattr(features, "category", None) or "").upper()
+            excluded = [c.upper() for c in getattr(ls_cfg, "excluded_categories", [])]
+            if cat not in excluded:
+                agg_prob = longshot_correction(
+                    agg_prob,
+                    low_threshold=getattr(ls_cfg, "low_threshold", 0.12),
+                    high_threshold=getattr(ls_cfg, "high_threshold", 0.88),
+                    strength=getattr(ls_cfg, "correction_strength", 0.20),
+                )
 
         # Aggregate confidence
         conf_order = {"LOW": 0, "MEDIUM": 1, "HIGH": 2}

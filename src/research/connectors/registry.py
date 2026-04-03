@@ -136,6 +136,20 @@ def get_enabled_connectors(config: Any) -> list[BaseResearchConnector]:
         except Exception as e:
             log.warning("registry.reddit_sentiment_load_failed", error=str(e))
 
+    if getattr(config, "manifold_enabled", False):
+        try:
+            from src.research.connectors.manifold import ManifoldConnector
+            connectors.append(ManifoldConnector(config))
+        except Exception as e:
+            log.warning("registry.manifold_load_failed", error=str(e))
+
+    if getattr(config, "predictit_enabled", False):
+        try:
+            from src.research.connectors.predictit import PredictItConnector
+            connectors.append(PredictItConnector(config))
+        except Exception as e:
+            log.warning("registry.predictit_load_failed", error=str(e))
+
     log.debug(
         "registry.connectors_loaded",
         count=len(connectors),

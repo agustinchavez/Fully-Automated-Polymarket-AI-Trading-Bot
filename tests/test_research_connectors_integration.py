@@ -34,6 +34,8 @@ class TestRegistry:
         config.google_trends_enabled = False
         config.reddit_sentiment_enabled = False
         config.pubmed_enabled = False
+        config.manifold_enabled = False
+        config.predictit_enabled = False
         connectors = get_enabled_connectors(config)
         assert connectors == []
 
@@ -55,6 +57,8 @@ class TestRegistry:
         config.google_trends_enabled = False
         config.reddit_sentiment_enabled = False
         config.pubmed_enabled = False
+        config.manifold_enabled = False
+        config.predictit_enabled = False
         connectors = get_enabled_connectors(config)
         assert len(connectors) == 1
         assert connectors[0].name == "open_meteo"
@@ -77,6 +81,8 @@ class TestRegistry:
         config.google_trends_enabled = False
         config.reddit_sentiment_enabled = False
         config.pubmed_enabled = False
+        config.manifold_enabled = False
+        config.predictit_enabled = False
         connectors = get_enabled_connectors(config)
         assert len(connectors) == 3
         names = {c.name for c in connectors}
@@ -102,8 +108,10 @@ class TestRegistry:
         config.google_trends_enabled = True
         config.pubmed_enabled = True
         config.reddit_sentiment_enabled = True
+        config.manifold_enabled = True
+        config.predictit_enabled = True
         connectors = get_enabled_connectors(config)
-        assert len(connectors) == 16
+        assert len(connectors) == 18
 
     def test_new_connectors_enabled_individually(self) -> None:
         for connector_flag, expected_name in [
@@ -117,6 +125,8 @@ class TestRegistry:
             ("google_trends_enabled", "google_trends"),
             ("pubmed_enabled", "pubmed"),
             ("reddit_sentiment_enabled", "reddit_sentiment"),
+            ("manifold_enabled", "manifold"),
+            ("predictit_enabled", "predictit"),
         ]:
             config = MagicMock()
             config.openmeteo_enabled = False
@@ -135,6 +145,8 @@ class TestRegistry:
             config.google_trends_enabled = False
             config.reddit_sentiment_enabled = False
             config.pubmed_enabled = False
+            config.manifold_enabled = False
+            config.predictit_enabled = False
             setattr(config, connector_flag, True)
             connectors = get_enabled_connectors(config)
             assert len(connectors) == 1
@@ -165,6 +177,8 @@ class TestConnectorContracts:
         config.google_trends_enabled = True
         config.pubmed_enabled = True
         config.reddit_sentiment_enabled = True
+        config.manifold_enabled = True
+        config.predictit_enabled = True
         return get_enabled_connectors(config)
 
     def test_all_have_name(self) -> None:
@@ -176,7 +190,8 @@ class TestConnectorContracts:
         for c in self._get_all_connectors():
             cats = c.relevant_categories()
             assert isinstance(cats, set)
-            assert len(cats) > 0
+            # Empty set means "all categories" (e.g., manifold)
+            # Non-empty set means specific categories
 
     def test_all_return_list_on_irrelevant(self) -> None:
         for c in self._get_all_connectors():

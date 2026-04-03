@@ -62,6 +62,9 @@ class WebSocketFeed:
         self._max_reconnect_delay = 60.0
         self._last_prices: dict[str, PriceTick] = {}
         self._ws: Any = None
+        # TWAP price history: token_id -> list of (timestamp, mid_price)
+        self._price_history: dict[str, list[tuple[float, float]]] = defaultdict(list)
+        self._max_history_hours: float = 4.0  # keep up to 4h of history
 
     def on_tick(self, callback: TickCallback) -> None:
         """Register a callback for price tick updates."""
@@ -82,6 +85,21 @@ class WebSocketFeed:
     def get_last_price(self, token_id: str) -> PriceTick | None:
         """Get the last known price for a token."""
         return self._last_prices.get(token_id)
+
+    def get_twap(self, token_id: str, window_hours: float = 2.0) -> float | None:
+        """Get time-weighted average price over the specified window.
+
+        Returns None if no price history is available.
+        """
+        history = self._price_history.get(token_id)
+        if not history:
+            return None
+        now = time.time()
+        cutoff = now - window_hours * 3600
+        window_pts = [(ts, px) for ts, px in history if ts >= cutoff]
+        if not window_pts:
+            return None
+        return sum(px for _, px in window_pts) / len(window_pts)
 
     async def start(self) -> None:
         """Start the websocket feed with auto-reconnection."""
@@ -171,6 +189,15 @@ class WebSocketFeed:
             tick.mid = (tick.best_bid + tick.best_ask) / 2
 
         self._last_prices[token_id] = tick
+
+        # Record price for TWAP calculation
+        if tick.mid > 0:
+            history = self._price_history[token_id]
+            history.append((tick.timestamp, tick.mid))
+            # Trim history beyond max window
+            cutoff = tick.timestamp - self._max_history_hours * 3600
+            while history and history[0][0] < cutoff:
+                history.pop(0)
 
         for cb in self._tick_callbacks:
             try:

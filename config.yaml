@@ -51,6 +51,8 @@ research:
   google_trends_enabled: true
   reddit_sentiment_enabled: false
   pubmed_enabled: true
+  manifold_enabled: false
+  predictit_enabled: false
   primary_domains:
     MACRO:
       - bls.gov
@@ -143,6 +145,12 @@ ensemble:
   min_models_required: 1
   fallback_model: gpt-4o
   timeout_per_model_secs: 30
+  longshot:
+    enabled: true
+    low_threshold: 0.12
+    high_threshold: 0.88
+    correction_strength: 0.20
+    excluded_categories: []
 risk:
   max_stake_per_market: 50.0
   max_daily_loss: 500.0
@@ -272,3 +280,11 @@ analyst:
   min_data_days: 28
   rate_limit_hours: 6
   schedule_enabled: false
+uma:
+  enabled: false
+  refresh_interval_mins: 15
+calendar:
+  enabled: false
+  pre_event_size_reduction: 0.5
+  refresh_interval_hours: 6
+  lookahead_days: 14

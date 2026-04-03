@@ -478,6 +478,60 @@ class WalletScanner:
                 key = f"{pos.market_slug}|{pos.outcome}"
                 self._prev_positions[addr][key] = pos
 
+    async def discover_top_wallets(
+        self,
+        top_n: int = 25,
+        min_pnl: float = 100_000.0,
+    ) -> list[dict[str, Any]]:
+        """Auto-discover top wallets from the Polymarket leaderboard API.
+
+        Returns a list of wallet dicts in the same format as LEADERBOARD_WALLETS.
+        Falls back to static list on failure.
+        """
+        try:
+            import aiohttp
+
+            url = "https://gamma-api.polymarket.com/leaderboard"
+            params = {"limit": str(top_n), "sort": "pnl", "order": "desc"}
+            async with aiohttp.ClientSession() as session:
+                async with session.get(
+                    url, params=params, timeout=aiohttp.ClientTimeout(total=15),
+                ) as resp:
+                    if resp.status != 200:
+                        log.warning("wallet_scanner.discover_api_error", status=resp.status)
+                        return LEADERBOARD_WALLETS[:top_n]
+                    data = await resp.json()
+
+            discovered: list[dict[str, Any]] = []
+            for entry in data if isinstance(data, list) else data.get("results", []):
+                address = entry.get("address", entry.get("wallet", ""))
+                pnl = float(entry.get("pnl", entry.get("total_pnl", 0)))
+                if not address or pnl < min_pnl:
+                    continue
+                discovered.append({
+                    "address": address.lower(),
+                    "name": entry.get("username", entry.get("name", address[:10])),
+                    "pnl": pnl,
+                })
+                if len(discovered) >= top_n:
+                    break
+
+            if discovered:
+                log.info("wallet_scanner.discovered", count=len(discovered))
+                return discovered
+            return LEADERBOARD_WALLETS[:top_n]
+        except Exception as exc:
+            log.warning("wallet_scanner.discover_failed", error=str(exc))
+            return LEADERBOARD_WALLETS[:top_n]
+
+    def _merge_discovered_wallets(self, discovered: list[dict[str, Any]]) -> None:
+        """Merge discovered wallets into the tracked wallet list, deduplicating."""
+        existing = {w["address"].lower() for w in self._wallets}
+        for d in discovered:
+            if d["address"].lower() not in existing:
+                self._wallets.append(d)
+                existing.add(d["address"].lower())
+
     def get_signal_for_market(
         self,
         market_slug: str,

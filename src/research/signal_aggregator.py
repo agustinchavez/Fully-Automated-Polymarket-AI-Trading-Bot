@@ -38,6 +38,29 @@ class SignalStack:
     reddit_sentiment: float | None = None
     reddit_post_count: int = 0
 
+    # ── Order flow signals (Improvement 2) ────────────────────────
+    order_flow_imbalance: float | None = None   # -1=sell-heavy, +1=buy-heavy
+    vwap_divergence_pct: float | None = None    # current vs time-weighted avg
+    smart_money_ratio: float | None = None      # 0-1, >0.6 = smart money dominant
+    whale_net_direction: str = ""               # 'BUY' | 'SELL' | ''
+    whale_total_usd: float = 0.0
+
+    # ── Smart money signals (Improvement 4B) ───────────────────
+    whale_count: int = 0
+    whale_direction: str = ""         # 'BULLISH' | 'BEARISH' | 'MIXED' | ''
+    whale_avg_entry: float | None = None
+    whale_signal_strength: str = ""   # 'STRONG' | 'MODERATE' | 'WEAK' | ''
+    whale_conviction_score: float = 0.0
+    whale_best_performer_rate: float | None = None
+
+    # ── Additional consensus signals (Improvement 6) ───────────
+    manifold_probability: float | None = None
+    manifold_traders: int = 0
+    predictit_probability: float | None = None
+
+    # ── Calendar events (Improvement 8) ────────────────────────
+    calendar_events: list[Any] = field(default_factory=list)
+
     # ── Computed ──────────────────────────────────────────────────
     consensus_divergence: float = 0.0
     recommended_kelly_multiplier: float = 1.0
@@ -46,6 +69,9 @@ class SignalStack:
 def build_signal_stack(
     sources: list[FetchedSource],
     poly_price: float,
+    micro_signals: Any | None = None,
+    conviction_signals: list[Any] | None = None,
+    calendar_events: list[Any] | None = None,
 ) -> SignalStack:
     """Build a ``SignalStack`` from research sources and the Polymarket price.
 
@@ -75,6 +101,15 @@ def build_signal_stack(
                 stack.metaculus_forecasters = cs.get("forecasters", 0)
                 consensus_prices.append(float(price))
 
+            elif platform == "manifold" and price is not None:
+                stack.manifold_probability = float(price)
+                stack.manifold_traders = cs.get("traders", 0)
+                consensus_prices.append(float(price))
+
+            elif platform == "predictit" and price is not None:
+                stack.predictit_probability = float(price)
+                consensus_prices.append(float(price))
+
         # ── Behavioral signals ────────────────────────────────────
         bs = raw.get("behavioral_signal")
         if bs and isinstance(bs, dict):
@@ -93,6 +128,45 @@ def build_signal_stack(
             elif sig_source == "reddit" and sig_type == "sentiment":
                 stack.reddit_sentiment = bs.get("value")
                 stack.reddit_post_count = bs.get("post_count", 0)
+
+    # ── Microstructure signals (Improvement 2) ────────────────────
+    if micro_signals is not None:
+        imb = getattr(micro_signals, "flow_imbalances", [])
+        if imb:
+            recent = imb[0] if imb else None
+            if recent:
+                stack.order_flow_imbalance = getattr(recent, "imbalance_ratio", None)
+        stack.vwap_divergence_pct = getattr(micro_signals, "vwap_divergence_pct", None)
+        stack.smart_money_ratio = getattr(micro_signals, "smart_money_ratio", None)
+        whales = getattr(micro_signals, "whale_alerts", [])
+        if whales:
+            total = sum(getattr(w, "size_usd", 0) for w in whales)
+            buys = sum(
+                getattr(w, "size_usd", 0) for w in whales
+                if getattr(w, "side", "") == "buy"
+            )
+            stack.whale_net_direction = (
+                "BUY" if total > 0 and buys > total * 0.6
+                else "SELL" if total > 0 and buys < total * 0.4
+                else ""
+            )
+            stack.whale_total_usd = total
+
+    # ── Smart money / conviction signals (Improvement 4B) ─────────
+    if conviction_signals:
+        for sig in conviction_signals:
+            if getattr(sig, "whale_count", 0) > 0:
+                stack.whale_count = sig.whale_count
+                stack.whale_total_usd = getattr(sig, "total_whale_usd", 0.0)
+                stack.whale_direction = getattr(sig, "direction", "")
+                stack.whale_avg_entry = getattr(sig, "avg_whale_price", None)
+                stack.whale_signal_strength = getattr(sig, "signal_strength", "")
+                stack.whale_conviction_score = getattr(sig, "conviction_score", 0.0)
+                break
+
+    # ── Calendar events (Improvement 8) ───────────────────────────
+    if calendar_events:
+        stack.calendar_events = calendar_events
 
     # ── Compute consensus divergence ──────────────────────────────
     if consensus_prices:
@@ -129,6 +203,20 @@ def render_signal_stack(stack: SignalStack) -> str:
         consensus_lines.append(
             f"- Metaculus community: {stack.metaculus_probability:.1%}"
             f" ({stack.metaculus_forecasters} forecasters)"
+        )
+
+    if stack.manifold_probability is not None:
+        traders_str = (
+            f" ({stack.manifold_traders} traders)"
+            if stack.manifold_traders
+            else ""
+        )
+        consensus_lines.append(
+            f"- Manifold community: {stack.manifold_probability:.1%}{traders_str}"
+        )
+    if stack.predictit_probability is not None:
+        consensus_lines.append(
+            f"- PredictIt: {stack.predictit_probability:.1%}"
         )
 
     if consensus_lines:
@@ -176,6 +264,85 @@ def render_signal_stack(stack: SignalStack) -> str:
             "BEHAVIORAL SIGNALS:\n" + "\n".join(behavioral_lines)
         )
 
+    # ── Order flow section (Improvement 2) ─────────────────────────
+    flow_lines: list[str] = []
+    if stack.order_flow_imbalance is not None:
+        ofi = stack.order_flow_imbalance
+        label = (
+            "net BUY pressure" if ofi > 0.1
+            else "net SELL pressure" if ofi < -0.1
+            else "balanced flow"
+        )
+        flow_lines.append(f"- Order flow imbalance: {ofi:+.2f} ({label})")
+    if stack.vwap_divergence_pct is not None:
+        d = stack.vwap_divergence_pct
+        flow_lines.append(
+            f"- Price vs VWAP: {abs(d):.1f}% {'above' if d > 0 else 'below'}"
+            " time-weighted avg"
+        )
+    if stack.smart_money_ratio is not None:
+        smr = stack.smart_money_ratio
+        label = (
+            "smart money dominant (informed traders active)" if smr > 0.6
+            else "retail dominant" if smr < 0.4
+            else "mixed"
+        )
+        flow_lines.append(f"- Trade composition: {label} ({smr:.0%} smart money)")
+    if stack.whale_net_direction and stack.whale_total_usd > 500:
+        flow_lines.append(
+            f"- Whale activity: ${stack.whale_total_usd:,.0f}"
+            f" net {stack.whale_net_direction}"
+        )
+    if flow_lines:
+        sections.append("ORDER FLOW SIGNALS:\n" + "\n".join(flow_lines))
+
+    # ── Smart money section (Improvement 4B) ───────────────────────
+    if stack.whale_count > 0 and stack.whale_direction:
+        whale_lines: list[str] = []
+        direction_text = {
+            "BULLISH": "holding YES positions",
+            "BEARISH": "holding NO positions",
+            "MIXED": "split between YES and NO",
+        }.get(stack.whale_direction, stack.whale_direction)
+        whale_lines.append(
+            f"- {stack.whale_count} tracked high-PnL traders {direction_text}"
+        )
+        if stack.whale_total_usd > 0:
+            entry_str = (
+                f" at avg entry {stack.whale_avg_entry:.2f}"
+                if stack.whale_avg_entry is not None
+                else ""
+            )
+            whale_lines.append(
+                f"- Combined position: ${stack.whale_total_usd:,.0f}{entry_str}"
+            )
+        if stack.whale_signal_strength:
+            whale_lines.append(
+                f"- Conviction: {stack.whale_signal_strength}"
+                f" (score: {stack.whale_conviction_score:.0f}/100)"
+            )
+        if stack.whale_best_performer_rate is not None:
+            whale_lines.append(
+                f"- Best performer win rate in this category:"
+                f" {stack.whale_best_performer_rate:.0%}"
+            )
+        sections.append("SMART MONEY SIGNALS:\n" + "\n".join(whale_lines))
+
+    # ── Upcoming events section (Improvement 8) ────────────────────
+    if stack.calendar_events:
+        event_lines: list[str] = []
+        for evt in stack.calendar_events[:5]:
+            name = getattr(evt, "name", str(evt))
+            hours = getattr(evt, "hours_away", None)
+            impact = getattr(evt, "impact", "")
+            if hours is not None:
+                event_lines.append(
+                    f"- {name} in {hours:.0f}h"
+                    + (f" [HIGH IMPACT]" if impact == "high" else "")
+                )
+        if event_lines:
+            sections.append("UPCOMING EVENTS:\n" + "\n".join(event_lines))
+
     if not sections:
         return ""
 
@@ -207,6 +374,10 @@ def compute_signal_confluence(
         consensus_prices.append(stack.kalshi_price)
     if stack.metaculus_probability is not None:
         consensus_prices.append(stack.metaculus_probability)
+    if stack.manifold_probability is not None:
+        consensus_prices.append(stack.manifold_probability)
+    if stack.predictit_probability is not None:
+        consensus_prices.append(stack.predictit_probability)
 
     if not consensus_prices:
         return 1.0

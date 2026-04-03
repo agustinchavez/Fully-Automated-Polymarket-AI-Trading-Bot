@@ -88,6 +88,9 @@ class ResearchConfig(BaseModel):
     reddit_client_secret: str = ""
     pubmed_api_key: str = ""  # optional NCBI key
     pubmed_max_results: int = 5
+    # Improvement 6: Additional consensus connectors
+    manifold_enabled: bool = False
+    predictit_enabled: bool = False
 
 
 class ForecastingConfig(BaseModel):
@@ -105,6 +108,15 @@ class ForecastingConfig(BaseModel):
     decomposition_enabled: bool = False  # enable question decomposition
     decomposition_model: str = "gpt-4o-mini"  # cheap model for decomposition
     max_sub_questions: int = 3  # max sub-questions per market
+
+
+class LongshotConfig(BaseModel):
+    """Longshot bias correction — documented in Betfair/PredictIt/Polymarket research."""
+    enabled: bool = True
+    low_threshold: float = 0.12
+    high_threshold: float = 0.88
+    correction_strength: float = 0.20   # 0 = no effect, 1 = maximum
+    excluded_categories: list[str] = Field(default_factory=list)
 
 
 class EnsembleConfig(BaseModel):
@@ -129,6 +141,7 @@ class EnsembleConfig(BaseModel):
     deepseek_excluded_categories: list[str] = Field(
         default_factory=lambda: ["GEOPOLITICS", "ELECTION"]
     )
+    longshot: LongshotConfig = Field(default_factory=LongshotConfig)
 
     @model_validator(mode="after")
     def _cross_field_checks(self) -> "EnsembleConfig":
@@ -206,6 +219,10 @@ class RiskConfig(BaseModel):
     uncertainty_penalty_factor: float = 0.5    # how much uncertainty penalizes edge (0-1)
     # Cost model: convert percentage-of-stake into probability space (cost_pct * price)
     use_probability_space_costs: bool = False
+    # Improvement 3: TWAP edge reference
+    use_twap_edge: bool = False
+    twap_window_hours: float = 2.0
+    twap_max_divergence: float = 0.08  # max pp TWAP can differ from spot
     category_stake_multipliers: dict[str, float] = Field(
         default_factory=lambda: {
             "MACRO": 1.0,
@@ -461,6 +478,25 @@ class WalletScannerConfig(BaseModel):
     enhanced_min_whale_count: int = 3
     enhanced_conviction_edge_boost: float = 0.04
     enhanced_conviction_edge_penalty: float = 0.03
+    # Improvement 4: Smart money as LLM signal
+    whale_in_prompt: bool = False        # inject whale positions into LLM prompt
+    wallet_auto_discover: bool = False   # auto-discover top wallets from leaderboard
+    wallet_discover_top_n: int = 25
+    wallet_min_pnl: float = 100_000.0
+
+
+class UMAConfig(BaseModel):
+    """UMA Oracle dispute resolution monitoring."""
+    enabled: bool = False
+    refresh_interval_mins: int = 15
+
+
+class CalendarConfig(BaseModel):
+    """Economic & political calendar awareness."""
+    enabled: bool = False
+    pre_event_size_reduction: float = 0.5  # Kelly multiplier when high-impact event < 24h
+    refresh_interval_hours: int = 6
+    lookahead_days: int = 14
 
 
 class EngineConfig(BaseModel):
@@ -688,6 +724,8 @@ class BotConfig(BaseModel):
     production: ProductionConfig = Field(default_factory=ProductionConfig)
     digest: DigestConfig = Field(default_factory=DigestConfig)
     analyst: AnalystConfig = Field(default_factory=AnalystConfig)
+    uma: UMAConfig = Field(default_factory=UMAConfig)
+    calendar: CalendarConfig = Field(default_factory=CalendarConfig)
 
     def redacted_dict(self) -> dict[str, Any]:
         """Return config dict with secret values masked."""

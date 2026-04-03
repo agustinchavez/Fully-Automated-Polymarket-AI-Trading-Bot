@@ -1038,6 +1038,9 @@ class TradingEngine:
         # ── Portfolio VaR Gate ─────────────────────────────────────
         pipeline.stage_var_gate(ctx)
 
+        # ── UMA Dispute Check ─────────────────────────────────────
+        await pipeline.stage_uma_check(ctx)
+
         # ── Decision Gate ────────────────────────────────────────────
         if not ctx.risk_result.allowed:
             log.info("engine.no_trade", market_id=ctx.market_id,

@@ -151,14 +151,41 @@ class PipelineRunner:
             except Exception:
                 log.warning("engine.search_provider_close_error", exc_info=True)
 
-        # Build signal stack from research sources
+        # Build signal stack from research sources + conviction + calendar
         try:
             from src.research.signal_aggregator import build_signal_stack
             poly_price = (
                 ctx.features.implied_probability
                 if ctx.features else 0.5
             )
-            ctx._signal_stack = build_signal_stack(ctx.sources, poly_price)
+            # Gather conviction signals from latest wallet scan
+            conviction_signals = None
+            if (self.config.wallet_scanner.enabled
+                    and self.config.wallet_scanner.whale_in_prompt
+                    and self._latest_scan_result
+                    and hasattr(self._latest_scan_result, "conviction_signals")):
+                conviction_signals = self._latest_scan_result.conviction_signals
+
+            # Gather calendar events
+            calendar_events = None
+            if self.config.calendar.enabled:
+                try:
+                    from src.analytics.event_calendar import EventCalendar
+                    cal = EventCalendar(
+                        refresh_interval_hours=self.config.calendar.refresh_interval_hours,
+                        lookahead_days=self.config.calendar.lookahead_days,
+                    )
+                    await cal.refresh()
+                    cat = ctx.classification.category if ctx.classification else ""
+                    calendar_events = cal.get_events_for_market(ctx.question, cat) or None
+                except Exception:
+                    log.debug("engine.calendar_events_skipped", market_id=ctx.market_id)
+
+            ctx._signal_stack = build_signal_stack(
+                ctx.sources, poly_price,
+                conviction_signals=conviction_signals,
+                calendar_events=calendar_events,
+            )
         except Exception:
             log.debug("engine.signal_stack_build_skipped", market_id=ctx.market_id)
 
@@ -470,8 +497,38 @@ class PipelineRunner:
             use a lower min_edge threshold for higher conviction trades
         """
         from src.policy.edge_calc import calculate_edge
+
+        # TWAP reference price: use time-weighted avg instead of spot if available
+        implied_for_edge = ctx.forecast.implied_probability
+        if self.config.risk.use_twap_edge:
+            try:
+                token_id = ""
+                for t in getattr(ctx.market, "tokens", []):
+                    if getattr(t, "outcome", "").lower() == "yes":
+                        token_id = t.token_id
+                        break
+                if not token_id and getattr(ctx.market, "tokens", []):
+                    token_id = ctx.market.tokens[0].token_id
+                if token_id:
+                    twap = self._ws_feed.get_twap(
+                        token_id, window_hours=self.config.risk.twap_window_hours,
+                    )
+                    if twap is not None:
+                        divergence = abs(twap - implied_for_edge)
+                        max_div = getattr(self.config.risk, "twap_max_divergence", 0.08)
+                        if divergence <= max_div:
+                            implied_for_edge = twap
+                            log.info(
+                                "engine.twap_reference",
+                                market_id=ctx.market_id,
+                                spot=round(ctx.forecast.implied_probability, 4),
+                                twap=round(twap, 4),
+                            )
+            except Exception:
+                pass  # fallback to spot price
+
         ctx.edge_result = calculate_edge(
-            implied_prob=ctx.forecast.implied_probability,
+            implied_prob=implied_for_edge,
             model_prob=ctx.forecast.model_probability,
             transaction_fee_pct=self.config.risk.transaction_fee_pct,
             gas_cost_usd=self.config.risk.gas_cost_usd,
@@ -494,6 +551,11 @@ class PipelineRunner:
             else:
                 _whale_boost = whale_cfg.conviction_edge_boost
                 _whale_penalty = whale_cfg.conviction_edge_penalty
+            # Double-counting fix: when whale data is in the LLM prompt,
+            # halve the numeric edge adjustment to avoid double-counting
+            if whale_cfg.whale_in_prompt:
+                _whale_boost *= 0.5
+                _whale_penalty *= 0.5
             market_slug = getattr(ctx.market, "slug", "") or ""
             market_cid = getattr(ctx.market, "condition_id", "") or ""
 
@@ -659,6 +721,31 @@ class PipelineRunner:
             min_edge_override=whale_min_edge,
         )
 
+    async def stage_uma_check(self, ctx: PipelineContext) -> None:
+        """Block markets with active UMA Oracle disputes (high tail risk)."""
+        if not self.config.uma.enabled:
+            return
+        if not ctx.risk_result or not ctx.risk_result.allowed:
+            return
+
+        try:
+            from src.analytics.uma_monitor import UMAMonitor
+            monitor = UMAMonitor(
+                refresh_interval_mins=self.config.uma.refresh_interval_mins,
+            )
+            await monitor.refresh_disputes()
+            cid = getattr(ctx.market, "condition_id", "") or ""
+            if cid and monitor.is_disputed(cid):
+                ctx.risk_result.allowed = False
+                ctx.risk_result.violations.append("UMA_DISPUTE: active dispute on market")
+                log.warning(
+                    "engine.uma_dispute_blocked",
+                    market_id=ctx.market_id,
+                    condition_id=cid[:16],
+                )
+        except Exception as e:
+            log.debug("engine.uma_check_skipped", error=str(e))
+
     def stage_persist_forecast(self, ctx: PipelineContext) -> None:
         """Persist forecast and market records to DB."""
         if not self._db:
@@ -776,13 +863,30 @@ class PipelineRunner:
         signal_stack = getattr(ctx, "_signal_stack", None)
         if signal_stack is not None:
             conf_mult = getattr(signal_stack, "recommended_kelly_multiplier", 1.0)
+        # Calendar: reduce size when high-impact event is within 24h
+        cal_mult = 1.0
+        if self.config.calendar.enabled and signal_stack is not None:
+            cal_events = getattr(signal_stack, "calendar_events", [])
+            for evt in cal_events:
+                impact = getattr(evt, "impact", "")
+                hours = getattr(evt, "hours_away", 999)
+                if impact == "high" and hours < 24:
+                    cal_mult = self.config.calendar.pre_event_size_reduction
+                    log.info(
+                        "engine.calendar_size_reduction",
+                        market_id=ctx.market_id,
+                        event=getattr(evt, "name", ""),
+                        hours=round(hours, 1),
+                        multiplier=cal_mult,
+                    )
+                    break
         ctx.position = calculate_position_size(
             edge=ctx.edge_result, risk_config=self.config.risk,
             confidence_level=ctx.forecast.confidence_level,
             drawdown_multiplier=self.drawdown.state.kelly_multiplier,
             timeline_multiplier=ctx.features.time_decay_multiplier,
             price_volatility=ctx.features.price_volatility,
-            regime_multiplier=regime_kelly * regime_size,
+            regime_multiplier=regime_kelly * regime_size * cal_mult,
             category_multiplier=cat_mult,
             uncertainty_multiplier=unc_mult,
             confluence_multiplier=conf_mult,
