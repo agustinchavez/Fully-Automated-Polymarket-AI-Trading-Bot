@@ -6,22 +6,22 @@ scanning:
   max_market_age_hours: 720
   batch_size: 100
   preferred_types:
-  - MACRO
-  - ELECTION
-  - CORPORATE
-  - LEGAL
-  - TECHNOLOGY
-  - SCIENCE
+    - MACRO
+    - ELECTION
+    - CORPORATE
+    - LEGAL
+    - TECHNOLOGY
+    - SCIENCE
   restricted_types:
-  - WEATHER
+    - WEATHER
   filter_min_score: 25
   filter_blocked_types:
-  - UNKNOWN
+    - UNKNOWN
   research_cooldown_minutes: 60
 research:
   max_sources: 10
   source_timeout_secs: 15
-  search_provider: fallback  # fallback chain: duckduckgo → tavily → serpapi
+  search_provider: fallback # fallback chain: duckduckgo → tavily → serpapi
   fetch_full_content: true
   max_content_length: 20000
   content_fetch_top_n: 8
@@ -45,12 +45,12 @@ research:
   edgar_max_filings: 3
   arxiv_max_results: 5
   worldbank_mrv: 3
-  kalshi_prior_enabled: false
-  metaculus_enabled: false
-  wikipedia_pageviews_enabled: false
-  google_trends_enabled: false
+  kalshi_prior_enabled: true
+  metaculus_enabled: true
+  wikipedia_pageviews_enabled: true
+  google_trends_enabled: true
   reddit_sentiment_enabled: false
-  pubmed_enabled: false
+  pubmed_enabled: true
   primary_domains:
     MACRO:
       - bls.gov
@@ -134,9 +134,9 @@ forecasting:
 ensemble:
   enabled: true
   models:
-  - gpt-4o
-  - claude-sonnet-4-6
-  - gemini-2.0-flash
+    - gpt-4o
+    - claude-sonnet-4-6
+    - gemini-2.0-flash
   aggregation: trimmed_mean
   min_models_required: 1
   fallback_model: gpt-4o
@@ -230,13 +230,13 @@ budget:
 model_tiers:
   enabled: true
   scout_models:
-  - gpt-4o-mini
+    - gpt-4o-mini
   standard_models:
-  - gpt-4o
+    - gpt-4o
   premium_models:
-  - gpt-4o
-  - claude-sonnet-4-6
-  - gemini-2.0-flash
+    - gpt-4o
+    - claude-sonnet-4-6
+    - gemini-2.0-flash
   premium_min_volume_usd: 10000.0
   premium_min_edge: 0.06
   scout_max_evidence_quality: 0.4
