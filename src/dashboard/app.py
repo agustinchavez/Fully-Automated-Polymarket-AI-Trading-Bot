@@ -6858,6 +6858,8 @@ def api_admin() -> Any:
             "OPENAI_API_KEY": bool(os.environ.get("OPENAI_API_KEY")),
             "ANTHROPIC_API_KEY": bool(os.environ.get("ANTHROPIC_API_KEY")),
             "GOOGLE_API_KEY": bool(os.environ.get("GOOGLE_API_KEY")),
+            "XAI_API_KEY": bool(os.environ.get("XAI_API_KEY")),
+            "DEEPSEEK_API_KEY": bool(os.environ.get("DEEPSEEK_API_KEY")),
             "POLYMARKET_API_KEY": bool(os.environ.get("POLYMARKET_API_KEY")),
             "POLYMARKET_SECRET": bool(os.environ.get("POLYMARKET_SECRET")),
             "POLYMARKET_PASSPHRASE": bool(os.environ.get("POLYMARKET_PASSPHRASE")),
@@ -7668,6 +7670,7 @@ _ENV_FILE = _PROJECT_ROOT / ".env"
 # Keys that are safe to manage from the dashboard
 _MANAGED_ENV_KEYS = [
     "OPENAI_API_KEY", "ANTHROPIC_API_KEY", "GOOGLE_API_KEY",
+    "XAI_API_KEY", "DEEPSEEK_API_KEY",
     "POLYMARKET_API_KEY", "POLYMARKET_API_SECRET", "POLYMARKET_API_PASSPHRASE",
     "POLYMARKET_PRIVATE_KEY", "POLYMARKET_CHAIN_ID",
     "CLOB_API_KEY", "PRIVATE_KEY",
