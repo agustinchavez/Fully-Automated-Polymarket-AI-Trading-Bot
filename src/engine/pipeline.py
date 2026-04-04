@@ -79,6 +79,28 @@ class PipelineRunner:
         self._positions = positions
         self._latest_scan_result = latest_scan_result
 
+        # Singletons for external-API modules — instantiated once, reuse cache/interval
+        self._uma_monitor: Any = None
+        if config.uma.enabled:
+            try:
+                from src.analytics.uma_monitor import UMAMonitor
+                self._uma_monitor = UMAMonitor(
+                    refresh_interval_mins=config.uma.refresh_interval_mins,
+                )
+            except Exception:
+                log.debug("engine.uma_monitor_init_skipped")
+
+        self._event_calendar: Any = None
+        if config.calendar.enabled:
+            try:
+                from src.analytics.event_calendar import EventCalendar
+                self._event_calendar = EventCalendar(
+                    refresh_interval_hours=config.calendar.refresh_interval_hours,
+                    lookahead_days=config.calendar.lookahead_days,
+                )
+            except Exception:
+                log.debug("engine.event_calendar_init_skipped")
+
     # ── Pipeline Stage Methods ────────────────────────────────────────
 
     def stage_classify(self, ctx: PipelineContext) -> None:
@@ -166,23 +188,42 @@ class PipelineRunner:
                     and hasattr(self._latest_scan_result, "conviction_signals")):
                 conviction_signals = self._latest_scan_result.conviction_signals
 
-            # Gather calendar events
+            # Gather calendar events (uses shared singleton)
             calendar_events = None
-            if self.config.calendar.enabled:
+            if self.config.calendar.enabled and self._event_calendar is not None:
                 try:
-                    from src.analytics.event_calendar import EventCalendar
-                    cal = EventCalendar(
-                        refresh_interval_hours=self.config.calendar.refresh_interval_hours,
-                        lookahead_days=self.config.calendar.lookahead_days,
-                    )
-                    await cal.refresh()
+                    await self._event_calendar.refresh()
                     cat = ctx.classification.category if ctx.classification else ""
-                    calendar_events = cal.get_events_for_market(ctx.question, cat) or None
+                    calendar_events = self._event_calendar.get_events_for_market(ctx.question, cat) or None
                 except Exception:
                     log.debug("engine.calendar_events_skipped", market_id=ctx.market_id)
 
+            # Build lightweight microstructure signals from ws_feed
+            micro_signals = None
+            try:
+                token_id = ""
+                for t in getattr(ctx.market, "tokens", []):
+                    if getattr(t, "outcome", "").lower() == "yes":
+                        token_id = t.token_id
+                        break
+                if not token_id and getattr(ctx.market, "tokens", []):
+                    token_id = ctx.market.tokens[0].token_id
+                if token_id and self._ws_feed:
+                    from src.connectors.microstructure import MicrostructureSignals, FlowImbalance
+                    last_tick = self._ws_feed.get_last_price(token_id)
+                    twap = self._ws_feed.get_twap(token_id, window_hours=2.0)
+                    if last_tick and twap and twap > 0:
+                        ms = MicrostructureSignals(token_id=token_id)
+                        ms.vwap = twap
+                        ms.vwap_divergence = last_tick.mid - twap
+                        ms.vwap_divergence_pct = ms.vwap_divergence / twap
+                        micro_signals = ms
+            except Exception:
+                pass  # microstructure signals are best-effort
+
             ctx._signal_stack = build_signal_stack(
                 ctx.sources, poly_price,
+                micro_signals=micro_signals,
                 conviction_signals=conviction_signals,
                 calendar_events=calendar_events,
             )
@@ -552,10 +593,10 @@ class PipelineRunner:
                 _whale_boost = whale_cfg.conviction_edge_boost
                 _whale_penalty = whale_cfg.conviction_edge_penalty
             # Double-counting fix: when whale data is in the LLM prompt,
-            # halve the numeric edge adjustment to avoid double-counting
+            # cap the numeric edge adjustment to avoid double-counting
             if whale_cfg.whale_in_prompt:
-                _whale_boost *= 0.5
-                _whale_penalty *= 0.5
+                _whale_boost = min(_whale_boost, 0.02)
+                _whale_penalty = min(_whale_penalty, 0.02)
             market_slug = getattr(ctx.market, "slug", "") or ""
             market_cid = getattr(ctx.market, "condition_id", "") or ""
 
@@ -723,19 +764,15 @@ class PipelineRunner:
 
     async def stage_uma_check(self, ctx: PipelineContext) -> None:
         """Block markets with active UMA Oracle disputes (high tail risk)."""
-        if not self.config.uma.enabled:
+        if self._uma_monitor is None:
             return
         if not ctx.risk_result or not ctx.risk_result.allowed:
             return
 
         try:
-            from src.analytics.uma_monitor import UMAMonitor
-            monitor = UMAMonitor(
-                refresh_interval_mins=self.config.uma.refresh_interval_mins,
-            )
-            await monitor.refresh_disputes()
+            await self._uma_monitor.refresh_disputes()
             cid = getattr(ctx.market, "condition_id", "") or ""
-            if cid and monitor.is_disputed(cid):
+            if cid and self._uma_monitor.is_disputed(cid):
                 ctx.risk_result.allowed = False
                 ctx.risk_result.violations.append("UMA_DISPUTE: active dispute on market")
                 log.warning(

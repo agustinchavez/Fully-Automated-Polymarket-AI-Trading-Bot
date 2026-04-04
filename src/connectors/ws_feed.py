@@ -89,17 +89,25 @@ class WebSocketFeed:
     def get_twap(self, token_id: str, window_hours: float = 2.0) -> float | None:
         """Get time-weighted average price over the specified window.
 
-        Returns None if no price history is available.
+        Each price is weighted by how long it persisted before the next tick.
+        Returns None if fewer than 2 data points or less than 60s of data.
         """
         history = self._price_history.get(token_id)
         if not history:
             return None
         now = time.time()
         cutoff = now - window_hours * 3600
-        window_pts = [(ts, px) for ts, px in history if ts >= cutoff]
-        if not window_pts:
+        pts = [(ts, px) for ts, px in history if ts >= cutoff]
+        if len(pts) < 2:
             return None
-        return sum(px for _, px in window_pts) / len(window_pts)
+        total_time = pts[-1][0] - pts[0][0]
+        if total_time < 60:
+            return None  # less than 1 minute of data — not meaningful
+        weighted = sum(
+            pts[i][1] * (pts[i + 1][0] - pts[i][0])
+            for i in range(len(pts) - 1)
+        )
+        return weighted / total_time
 
     async def start(self) -> None:
         """Start the websocket feed with auto-reconnection."""
