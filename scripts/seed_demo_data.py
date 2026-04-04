@@ -33,7 +33,11 @@ def seed() -> None:
         end = (now + dt.timedelta(days=random.randint(5, 60))).isoformat()
         first = (now - dt.timedelta(days=random.randint(3, 14))).isoformat()
         conn.execute(
-            "INSERT OR REPLACE INTO markets VALUES (?,?,?,?,?,?,?,?,?,?,?)",
+            """INSERT OR REPLACE INTO markets
+               (id, condition_id, question, market_type, category,
+                volume, liquidity, end_date, resolution_source,
+                first_seen, last_updated)
+               VALUES (?,?,?,?,?,?,?,?,?,?,?)""",
             (mid, cid, q, mt, cat, vol, liq, end, "Official source", first, now.isoformat()),
         )
 
@@ -66,7 +70,12 @@ def seed() -> None:
         evidence = json.dumps([{"text": f"Sample evidence {i+1}", "source": f"source_{i}"} for i in range(src)])
         reasoning = f"Model probability {mod:.0%} vs market {imp:.0%}. Edge of {edge:.1%}."
         conn.execute(
-            "INSERT OR REPLACE INTO forecasts VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+            """INSERT OR REPLACE INTO forecasts
+               (id, market_id, question, market_type, implied_probability,
+                model_probability, edge, confidence_level, evidence_quality,
+                num_sources, decision, reasoning, evidence_json,
+                invalidation_triggers_json, created_at)
+               VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
             (fid, mid, q, mt, imp, mod, edge, conf, eq, src, dec, reasoning, evidence, "[]", ts),
         )
 
@@ -87,7 +96,10 @@ def seed() -> None:
         ts = (now - dt.timedelta(days=ago, hours=random.randint(1, 8))).isoformat()
         token = "71321" if side == "BUY" else "71322"
         conn.execute(
-            "INSERT OR REPLACE INTO trades VALUES (?,?,?,?,?,?,?,?,?,?,?)",
+            """INSERT OR REPLACE INTO trades
+               (id, order_id, market_id, token_id, side,
+                price, size, stake_usd, status, dry_run, created_at)
+               VALUES (?,?,?,?,?,?,?,?,?,?,?)""",
             (tid, oid, mid, token, side, price, size, stake, status, int(dry), ts),
         )
 
@@ -100,7 +112,10 @@ def seed() -> None:
     for mid, tok, dir_, entry, size, stake, cur, pnl in positions:
         opened = (now - dt.timedelta(days=random.randint(1, 4))).isoformat()
         conn.execute(
-            "INSERT OR REPLACE INTO positions VALUES (?,?,?,?,?,?,?,?,?)",
+            """INSERT OR REPLACE INTO positions
+               (market_id, token_id, direction, entry_price, size,
+                stake_usd, current_price, pnl, opened_at)
+               VALUES (?,?,?,?,?,?,?,?,?)""",
             (mid, tok, dir_, entry, size, stake, cur, pnl, opened),
         )
 
