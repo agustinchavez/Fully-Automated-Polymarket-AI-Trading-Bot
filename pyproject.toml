@@ -58,12 +58,13 @@ dependencies = [
     "eval-type-backport>=0.2.0; python_version < '3.10'",
     "aiohttp>=3.9",
     "sentry-sdk[flask]>=1.40",
-    "duckduckgo-search>=6.0",
+    "ddgs>=7.0",
+    "certifi>=2024.2",
+    "py-clob-client>=0.1",
+    "cryptography>=42.0",
 ]
 
 [project.optional-dependencies]
-clob = ["py-clob-client>=0.1"]
-kalshi = ["cryptography>=42.0"]
 discord = ["discord.py>=2.3"]
 slack = ["slack-bolt>=1.18", "slack-sdk>=3.27"]
 prod = ["gunicorn>=21.2"]

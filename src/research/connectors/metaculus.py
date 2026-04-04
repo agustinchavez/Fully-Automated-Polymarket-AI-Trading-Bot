@@ -67,7 +67,10 @@ class MetaculusConnector(BaseResearchConnector):
                 "limit": 5,
                 "type": "forecast",
             },
-            headers={"Accept": "application/json"},
+            headers={
+                "Accept": "application/json",
+                "User-Agent": "PolymarketBot/1.0 (research; +https://github.com)",
+            },
         )
         resp.raise_for_status()
         data = resp.json()

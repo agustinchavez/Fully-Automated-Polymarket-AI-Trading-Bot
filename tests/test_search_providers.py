@@ -34,9 +34,12 @@ class TestDuckDuckGoProvider:
             mock_ddgs.text.return_value = mock_results
             MockDDGS.return_value = mock_ddgs
 
-            # Patch the import inside the method
+            # Patch the import inside the method (ddgs is preferred, duckduckgo_search is fallback)
             provider = DuckDuckGoProvider()
-            with patch.dict("sys.modules", {"duckduckgo_search": MagicMock(DDGS=MockDDGS)}):
+            with patch.dict("sys.modules", {
+                "ddgs": MagicMock(DDGS=MockDDGS),
+                "duckduckgo_search": MagicMock(DDGS=MockDDGS),
+            }):
                 results = await provider.search("test query", num_results=5)
 
         assert len(results) == 2
@@ -48,9 +51,9 @@ class TestDuckDuckGoProvider:
 
     @pytest.mark.asyncio
     async def test_search_empty_results(self):
-        with patch.dict("sys.modules", {"duckduckgo_search": MagicMock()}):
+        with patch.dict("sys.modules", {"ddgs": MagicMock()}):
             import sys
-            mock_module = sys.modules["duckduckgo_search"]
+            mock_module = sys.modules["ddgs"]
             mock_ddgs = MagicMock()
             mock_ddgs.text.return_value = []
             mock_module.DDGS.return_value = mock_ddgs
@@ -65,9 +68,9 @@ class TestDuckDuckGoProvider:
         mock_results = [
             {"title": "Test", "href": "https://www.reuters.com/article/123", "body": "News"},
         ]
-        with patch.dict("sys.modules", {"duckduckgo_search": MagicMock()}):
+        with patch.dict("sys.modules", {"ddgs": MagicMock()}):
             import sys
-            mock_module = sys.modules["duckduckgo_search"]
+            mock_module = sys.modules["ddgs"]
             mock_ddgs = MagicMock()
             mock_ddgs.text.return_value = mock_results
             mock_module.DDGS.return_value = mock_ddgs
@@ -83,8 +86,8 @@ class TestDuckDuckGoProvider:
         # Directly test the import guard without retry overhead
         provider = DuckDuckGoProvider()
         original_search = provider.search.__wrapped__  # unwrap tenacity
-        with patch.dict("sys.modules", {"duckduckgo_search": None}):
-            with pytest.raises(RuntimeError, match="duckduckgo-search not installed"):
+        with patch.dict("sys.modules", {"ddgs": None, "duckduckgo_search": None}):
+            with pytest.raises(RuntimeError, match="ddgs not installed"):
                 await original_search(provider, "test")
 
     @pytest.mark.asyncio
@@ -98,9 +101,9 @@ class TestDuckDuckGoProvider:
         mock_results = [
             {"title": "Alt", "link": "https://example.com/alt", "snippet": "Alt snippet"},
         ]
-        with patch.dict("sys.modules", {"duckduckgo_search": MagicMock()}):
+        with patch.dict("sys.modules", {"ddgs": MagicMock()}):
             import sys
-            mock_module = sys.modules["duckduckgo_search"]
+            mock_module = sys.modules["ddgs"]
             mock_ddgs = MagicMock()
             mock_ddgs.text.return_value = mock_results
             mock_module.DDGS.return_value = mock_ddgs

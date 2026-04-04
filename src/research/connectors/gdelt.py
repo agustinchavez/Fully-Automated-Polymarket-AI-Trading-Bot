@@ -81,6 +81,14 @@ class GdeltConnector(BaseResearchConnector):
             },
         )
         resp.raise_for_status()
+        content_type = resp.headers.get("content-type", "")
+        if "json" not in content_type:
+            log.warning(
+                "gdelt.non_json_response",
+                content_type=content_type,
+                body_preview=resp.text[:200],
+            )
+            return []
         data = resp.json()
 
         timeline = data.get("timeline", [])

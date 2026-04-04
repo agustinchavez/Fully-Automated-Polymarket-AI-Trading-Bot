@@ -296,11 +296,14 @@ class DuckDuckGoProvider(SearchProvider):
     @retry(stop=stop_after_attempt(3), wait=wait_exponential(min=1, max=8))
     async def search(self, query: str, num_results: int = 10) -> list[SearchResult]:
         try:
-            from duckduckgo_search import DDGS
+            from ddgs import DDGS
         except ImportError:
-            raise RuntimeError(
-                "duckduckgo-search not installed. Run: pip install duckduckgo-search"
-            )
+            try:
+                from duckduckgo_search import DDGS  # legacy fallback
+            except ImportError:
+                raise RuntimeError(
+                    "ddgs not installed. Run: pip install ddgs"
+                )
 
         await rate_limiter.get("duckduckgo").acquire()
         with track_latency("duckduckgo"):

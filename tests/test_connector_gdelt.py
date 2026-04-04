@@ -98,6 +98,7 @@ class TestFetch:
         mock_resp = MagicMock()
         mock_resp.json.return_value = _timeline_response(spike=False)
         mock_resp.raise_for_status = MagicMock()
+        mock_resp.headers = {"content-type": "application/json"}
 
         mock_client = AsyncMock()
         mock_client.get = AsyncMock(return_value=mock_resp)
@@ -121,6 +122,7 @@ class TestFetch:
         mock_resp = MagicMock()
         mock_resp.json.return_value = _timeline_response(spike=True)
         mock_resp.raise_for_status = MagicMock()
+        mock_resp.headers = {"content-type": "application/json"}
 
         mock_client = AsyncMock()
         mock_client.get = AsyncMock(return_value=mock_resp)
@@ -139,6 +141,25 @@ class TestFetch:
         mock_resp = MagicMock()
         mock_resp.json.return_value = {"timeline": []}
         mock_resp.raise_for_status = MagicMock()
+        mock_resp.headers = {"content-type": "application/json"}
+
+        mock_client = AsyncMock()
+        mock_client.get = AsyncMock(return_value=mock_resp)
+        c._client = mock_client
+
+        result = asyncio.run(c.fetch("Will trade war escalate?", "MACRO"))
+        assert result == []
+
+    @patch("src.research.connectors.gdelt.rate_limiter")
+    def test_non_json_response_returns_empty(self, mock_rl: MagicMock) -> None:
+        """GDELT sometimes returns HTML error pages instead of JSON."""
+        mock_rl.get.return_value.acquire = AsyncMock()
+        c = _make_connector()
+
+        mock_resp = MagicMock()
+        mock_resp.raise_for_status = MagicMock()
+        mock_resp.headers = {"content-type": "text/html; charset=utf-8"}
+        mock_resp.text = "<html><body>Service Unavailable</body></html>"
 
         mock_client = AsyncMock()
         mock_client.get = AsyncMock(return_value=mock_resp)

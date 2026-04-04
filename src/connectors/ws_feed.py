@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import ssl
 import time
 from collections import defaultdict
 from dataclasses import dataclass, field
@@ -146,8 +147,17 @@ class WebSocketFeed:
             log.error("ws_feed.missing_dep", msg="websockets package required")
             return
 
+        # Build SSL context with certifi CA bundle to avoid
+        # CERTIFICATE_VERIFY_FAILED on macOS/Homebrew Python
+        ssl_ctx = ssl.create_default_context()
+        try:
+            import certifi
+            ssl_ctx.load_verify_locations(certifi.where())
+        except ImportError:
+            pass  # Fall back to system CA bundle
+
         log.info("ws_feed.connecting", url=self._url)
-        async with websockets.connect(self._url) as ws:
+        async with websockets.connect(self._url, ssl=ssl_ctx) as ws:
             self._ws = ws
             self._reconnect_delay = 1.0  # Reset on successful connect
             log.info("ws_feed.connected", tokens=len(self._subscribed_tokens))
