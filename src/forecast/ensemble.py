@@ -745,7 +745,7 @@ class EnsembleForecaster:
 
         # Longshot bias correction
         ls_cfg = getattr(self._ensemble, "longshot", None)
-        if ls_cfg and getattr(ls_cfg, "enabled", False):
+        if ls_cfg and ls_cfg.enabled:
             cat = (getattr(features, "category", None) or "").upper()
             excluded = [c.upper() for c in getattr(ls_cfg, "excluded_categories", [])]
             if cat not in excluded:

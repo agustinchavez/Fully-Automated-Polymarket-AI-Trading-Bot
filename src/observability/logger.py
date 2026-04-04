@@ -71,6 +71,18 @@ def configure_logging(
         fh.setLevel(log_level)
         root.addHandler(fh)
 
+        # Errors-only file: captures WARNING+ for quick daily review
+        errors_path = log_path.parent / "errors.log"
+        efh = logging.handlers.TimedRotatingFileHandler(
+            str(errors_path),
+            when="midnight",
+            interval=1,
+            backupCount=30,             # Keep 30 days of error logs
+            utc=True,
+        )
+        efh.setLevel(logging.WARNING)
+        root.addHandler(efh)
+
     # structlog pipeline
     shared_processors: list[structlog.types.Processor] = [
         structlog.contextvars.merge_contextvars,

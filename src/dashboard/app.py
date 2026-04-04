@@ -6652,7 +6652,11 @@ def api_calibration_curve() -> Any:
 
 @app.route("/api/model-accuracy")
 def api_model_accuracy() -> Any:
-    """Return per-model accuracy breakdown."""
+    """Return per-model accuracy breakdown.
+
+    Shows all models with forecasts (resolved or not), so every ensemble
+    model appears. Brier/error computed only from resolved forecasts.
+    """
     conn = _get_conn()
     _ensure_tables(conn)
     try:
@@ -6661,13 +6665,15 @@ def api_model_accuracy() -> Any:
             rows = conn.execute("""
                 SELECT model_name,
                        COUNT(*) as total_forecasts,
-                       AVG(ABS(forecast_prob - actual_outcome)) as avg_error,
-                       AVG((forecast_prob - actual_outcome) *
-                           (forecast_prob - actual_outcome)) as brier_score
+                       SUM(CASE WHEN actual_outcome >= 0 THEN 1 ELSE 0 END) as resolved_count,
+                       AVG(CASE WHEN actual_outcome >= 0
+                           THEN ABS(forecast_prob - actual_outcome) END) as avg_error,
+                       AVG(CASE WHEN actual_outcome >= 0
+                           THEN (forecast_prob - actual_outcome) *
+                                (forecast_prob - actual_outcome) END) as brier_score
                 FROM model_forecast_log
-                WHERE actual_outcome >= 0
                 GROUP BY model_name
-                ORDER BY brier_score ASC
+                ORDER BY total_forecasts DESC
             """).fetchall()
         except sqlite3.OperationalError:
             pass
@@ -6676,6 +6682,7 @@ def api_model_accuracy() -> Any:
             {
                 "model_name": r["model_name"],
                 "total_forecasts": int(r["total_forecasts"]),
+                "resolved_count": int(r["resolved_count"] or 0),
                 "avg_error": round(float(r["avg_error"] or 0), 4),
                 "brier_score": round(float(r["brier_score"] or 0), 4),
             }
@@ -8655,6 +8662,83 @@ def api_export(table_name: str) -> Any:
         return jsonify({"table": table_name, "count": len(data), "rows": data})
     finally:
         conn.close()
+
+
+# ─── API: Research Connector Status ─────────────────────────────────
+
+@app.route("/api/connector-status")
+def api_connector_status() -> Any:
+    """Return which research connectors are enabled and their status."""
+    cfg = _config or load_config()
+    rc = cfg.research
+    connectors = [
+        {"name": "DuckDuckGo Search", "enabled": True, "type": "search"},
+        {"name": "FRED Economic", "enabled": rc.fred_enabled, "type": "data"},
+        {"name": "Congress.gov", "enabled": rc.congress_enabled, "type": "data"},
+        {"name": "CourtListener", "enabled": rc.courtlistener_enabled, "type": "data"},
+        {"name": "CoinGecko", "enabled": rc.coingecko_enabled, "type": "data"},
+        {"name": "OpenMeteo", "enabled": rc.openmeteo_enabled, "type": "data"},
+        {"name": "GDELT", "enabled": rc.gdelt_enabled, "type": "data"},
+        {"name": "EDGAR/SEC", "enabled": rc.edgar_enabled, "type": "data"},
+        {"name": "ArXiv", "enabled": rc.arxiv_enabled, "type": "data"},
+        {"name": "OpenFDA", "enabled": rc.openfda_enabled, "type": "data"},
+        {"name": "World Bank", "enabled": rc.worldbank_enabled, "type": "data"},
+        {"name": "Kalshi Prior", "enabled": rc.kalshi_prior_enabled, "type": "consensus"},
+        {"name": "Metaculus", "enabled": rc.metaculus_enabled, "type": "consensus"},
+        {"name": "Wikipedia Views", "enabled": rc.wikipedia_pageviews_enabled, "type": "behavioral"},
+        {"name": "Google Trends", "enabled": rc.google_trends_enabled, "type": "behavioral"},
+        {"name": "Reddit Sentiment", "enabled": rc.reddit_sentiment_enabled, "type": "behavioral"},
+        {"name": "PubMed", "enabled": rc.pubmed_enabled, "type": "data"},
+        {"name": "Manifold Markets", "enabled": rc.manifold_enabled, "type": "consensus"},
+        {"name": "PredictIt", "enabled": rc.predictit_enabled, "type": "consensus"},
+    ]
+    enabled_count = sum(1 for c in connectors if c["enabled"])
+    return jsonify({
+        "connectors": connectors,
+        "enabled_count": enabled_count,
+        "total_count": len(connectors),
+    })
+
+
+@app.route("/api/event-calendar")
+def api_event_calendar() -> Any:
+    """Return upcoming economic/political events from the calendar."""
+    try:
+        from src.analytics.event_calendar import EventCalendar
+        cfg = _config or load_config()
+        cal = EventCalendar(
+            refresh_interval_hours=cfg.calendar.refresh_interval_hours,
+            lookahead_days=cfg.calendar.lookahead_days,
+        )
+        # Use sync wrapper for the async refresh
+        import asyncio
+        try:
+            loop = asyncio.get_event_loop()
+            if loop.is_running():
+                # Running inside an async context — can't await
+                events = cal._events
+            else:
+                loop.run_until_complete(cal.refresh())
+                events = cal._events
+        except RuntimeError:
+            events = cal._events
+
+        return jsonify({
+            "enabled": cfg.calendar.enabled,
+            "events": [
+                {
+                    "name": e.name,
+                    "date": e.date.isoformat(),
+                    "category": e.category,
+                    "hours_away": round(e.hours_away, 1),
+                    "impact": e.impact,
+                }
+                for e in events[:20]
+            ],
+            "total": len(events),
+        })
+    except Exception as e:
+        return jsonify({"enabled": False, "events": [], "error": str(e)})
 
 
 # ─── Runner ────────────────────────────────────────────────────────

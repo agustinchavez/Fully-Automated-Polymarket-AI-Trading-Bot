@@ -75,6 +75,7 @@ class MicrostructureSignals:
     depth_imbalance: float = 0.0  # (bid - ask) / (bid + ask)
 
     # Smart money estimate
+    smart_money_ratio: float = 0.0  # fraction of volume from large trades (0-1)
     large_trade_direction: str = "neutral"  # "bullish" | "bearish" | "neutral"
     confidence: float = 0.0
 
@@ -95,6 +96,7 @@ class MicrostructureSignals:
             "whale_net_flow": round(self.whale_net_flow, 2),
             "trade_acceleration": round(self.trade_acceleration, 2),
             "depth_ratio": round(self.depth_ratio, 3),
+            "smart_money_ratio": round(self.smart_money_ratio, 3),
             "large_trade_direction": self.large_trade_direction,
         }
 
@@ -161,6 +163,12 @@ def analyze_microstructure(
                 signals.whale_sell_volume += notional
 
     signals.whale_net_flow = signals.whale_buy_volume - signals.whale_sell_volume
+
+    # Smart money ratio: fraction of total volume from large trades
+    total_trade_volume = sum(t.size * t.price for t in trades) if trades else 0
+    whale_volume = signals.whale_buy_volume + signals.whale_sell_volume
+    if total_trade_volume > 0:
+        signals.smart_money_ratio = min(1.0, whale_volume / total_trade_volume)
 
     # ── Trade Acceleration ───────────────────────────────────────
     accel_window = config.trade_acceleration_window_mins * 60

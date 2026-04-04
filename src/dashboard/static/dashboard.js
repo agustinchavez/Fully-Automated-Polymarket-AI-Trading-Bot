@@ -43,7 +43,7 @@ function switchTab(tabName) {
 
 // Mapping: which update functions belong to which tab
 const TAB_UPDATERS = {
-    overview: ['updatePortfolio', 'updateCharts', 'updateEquityCurve', 'updateEngineStatus', 'updateDrawdown', 'updateRegime'],
+    overview: ['updatePortfolio', 'updateCharts', 'updateEquityCurve', 'updateEngineStatus', 'updateDrawdown', 'updateRegime', 'updateConnectorStatus', 'updateEventCalendar'],
     trading:  ['updatePositions', 'updateCandidates', 'updateForecasts', 'updateTrades'],
     analytics: ['updateAnalytics'],
     whales:   ['updateWhaleTracker'],
@@ -3654,7 +3654,14 @@ async function updateAnalytics() {
                             callbacks: {
                                 afterLabel: (ctx) => {
                                     const m = models[ctx.dataIndex];
-                                    return `Brier: ${m.brier_score.toFixed(4)} | Err: ${m.avg_error.toFixed(4)}`;
+                                    const resolved = m.resolved_count || 0;
+                                    const lines = [`Forecasts: ${m.total_forecasts} (${resolved} resolved)`];
+                                    if (resolved > 0) {
+                                        lines.push(`Brier: ${m.brier_score.toFixed(4)} | Err: ${m.avg_error.toFixed(4)}`);
+                                    } else {
+                                        lines.push('No resolved markets yet');
+                                    }
+                                    return lines;
                                 }
                             }
                         }
@@ -3695,6 +3702,83 @@ async function updateRegime() {
         $('#regime-detected-at').textContent = c.detected_at ? `Detected: ${new Date(c.detected_at).toLocaleString()}` : '—';
     } catch (e) {
         console.warn('Regime update error:', e);
+    }
+}
+
+// ─── Research Connectors Status ──────────────────────────────
+async function updateConnectorStatus() {
+    try {
+        const data = await authFetch('/api/connector-status').then(r => r.json()).catch(() => null);
+        if (!data) return;
+
+        safeText($('#connectors-count'), `${data.enabled_count} / ${data.total_count} active`);
+
+        const grid = $('#connectors-grid');
+        if (!grid) return;
+
+        const typeColors = {
+            search: '#3b82f6',
+            data: '#8b5cf6',
+            consensus: '#f59e0b',
+            behavioral: '#22c55e',
+        };
+
+        const html = data.connectors.map(c => {
+            const color = typeColors[c.type] || '#64748b';
+            const status = c.enabled ? 'ON' : 'OFF';
+            const opacity = c.enabled ? '1' : '0.4';
+            return `<div class="mini-card" style="opacity:${opacity};border-left:3px solid ${color};padding:8px 10px;">
+                <div style="font-size:0.75rem;font-weight:600;color:var(--text);">${c.name}</div>
+                <div style="display:flex;justify-content:space-between;margin-top:4px;">
+                    <span class="badge" style="font-size:0.65rem;background:${color}22;color:${color};">${c.type.toUpperCase()}</span>
+                    <span style="font-size:0.7rem;color:${c.enabled ? 'var(--accent-green)' : 'var(--text-dim)'};">${status}</span>
+                </div>
+            </div>`;
+        }).join('');
+        safeHTML(grid, html);
+    } catch (e) {
+        console.warn('Connector status update error:', e);
+    }
+}
+
+// ─── Event Calendar ──────────────────────────────────────────
+async function updateEventCalendar() {
+    try {
+        const data = await authFetch('/api/event-calendar').then(r => r.json()).catch(() => null);
+        if (!data) return;
+
+        const tbody = $('#calendar-body');
+        if (!tbody) return;
+
+        if (!data.enabled || !data.events || data.events.length === 0) {
+            safeHTML(tbody, '<tr><td colspan="5" class="empty-state">Calendar disabled or no upcoming events</td></tr>');
+            safeText($('#calendar-count'), '0 events');
+            return;
+        }
+
+        safeText($('#calendar-count'), `${data.events.length} events`);
+
+        const impactColor = (imp) => {
+            if (imp === 'high') return 'var(--accent-red)';
+            if (imp === 'medium') return 'var(--accent-yellow, #f59e0b)';
+            return 'var(--text-dim)';
+        };
+
+        const rows = data.events.map(e => {
+            const dt = new Date(e.date);
+            const dateStr = dt.toLocaleDateString('en-US', {month:'short', day:'numeric', hour:'2-digit', minute:'2-digit'});
+            const hoursStr = e.hours_away <= 0 ? 'NOW' : e.hours_away < 1 ? `${(e.hours_away * 60).toFixed(0)}m` : `${e.hours_away.toFixed(1)}h`;
+            return `<tr>
+                <td>${e.name}</td>
+                <td>${e.category || '—'}</td>
+                <td style="color:${impactColor(e.impact)};font-weight:600;">${(e.impact || '—').toUpperCase()}</td>
+                <td>${hoursStr}</td>
+                <td>${dateStr}</td>
+            </tr>`;
+        }).join('');
+        safeHTML(tbody, rows);
+    } catch (e) {
+        console.warn('Event calendar update error:', e);
     }
 }
 
