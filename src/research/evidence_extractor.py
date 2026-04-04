@@ -21,6 +21,7 @@ Implements strict extraction rules:
 
 from __future__ import annotations
 
+import asyncio
 import json
 import re
 import datetime as dt
@@ -353,20 +354,23 @@ class EvidenceExtractor:
             evidence_model = getattr(
                 self._config, "evidence_model", self._config.llm_model,
             )
-            resp = await self._llm.chat.completions.create(
-                model=evidence_model,
-                temperature=0.1,
-                max_tokens=self._config.llm_max_tokens,
-                messages=[
-                    {
-                        "role": "system",
-                        "content": (
-                            "You are a precise research analyst. "
-                            "Return only valid JSON. Never fabricate data."
-                        ),
-                    },
-                    {"role": "user", "content": prompt},
-                ],
+            resp = await asyncio.wait_for(
+                self._llm.chat.completions.create(
+                    model=evidence_model,
+                    temperature=0.1,
+                    max_tokens=self._config.llm_max_tokens,
+                    messages=[
+                        {
+                            "role": "system",
+                            "content": (
+                                "You are a precise research analyst. "
+                                "Return only valid JSON. Never fabricate data."
+                            ),
+                        },
+                        {"role": "user", "content": prompt},
+                    ],
+                ),
+                timeout=60,
             )
             raw_text = resp.choices[0].message.content or "{}"
             usage = getattr(resp, "usage", None)

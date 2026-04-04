@@ -845,7 +845,10 @@ class TradingEngine:
 
             for candidate in filtered:
                 try:
-                    result = await self._process_candidate(candidate, cycle.cycle_id)
+                    result = await asyncio.wait_for(
+                        self._process_candidate(candidate, cycle.cycle_id),
+                        timeout=300,  # 5 minutes max per market
+                    )
                     # Mark as researched so it's skipped for cooldown period
                     self._research_cache.mark_researched(
                         getattr(candidate, "id", ""),
@@ -856,6 +859,14 @@ class TradingEngine:
                         cycle.trades_attempted += 1
                     if result.get("trade_executed"):
                         cycle.trades_executed += 1
+                except asyncio.TimeoutError:
+                    log.warning(
+                        "engine.candidate_timeout",
+                        market_id=getattr(candidate, "id", "?"),
+                    )
+                    cycle.errors.append(
+                        f"Timeout: {getattr(candidate, 'id', '?')[:8]}"
+                    )
                 except Exception as e:
                     log.error(
                         "engine.candidate_error",

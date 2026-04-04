@@ -336,6 +336,18 @@ _r(r"\b(formula\s*1|f1|nascar|indy\s*500|motogp|race\s+winner)\b",
    strategy="sports_odds", queries=2, tags=["odds_available", "unpredictable"],
    reasons=["Motorsport outcomes highly dependent on race-day conditions"])
 
+_r(r"\b(serie\s*[ab]|calcio|ligue\s*1|bundesliga|eredivisie|primeira\s*liga|la\s+liga|el\s+clasico|mls|liga\s+mx)\b",
+   "SPORTS", "soccer_europe",
+   researchability=40, sources=["ESPN"],
+   strategy="sports_odds", queries=2, tags=["odds_available", "unpredictable"],
+   reasons=["Soccer league outcomes are highly unpredictable"])
+
+_r(r"\b(vs\.?\s+fc|sc\s+vs|fc\s+vs|end\s+in\s+a\s+draw|match\s+draw|soccer|football\s+match)\b",
+   "SPORTS", "soccer_general",
+   researchability=40, sources=["ESPN"],
+   strategy="sports_odds", queries=2, tags=["odds_available", "unpredictable"],
+   reasons=["Soccer match outcomes are highly unpredictable"])
+
 # General sports fallback
 _r(r"\b(score|win\s+game|playoff|championship|mvp|draft\s+pick|season\s+record|sport)\b",
    "SPORTS", "general",

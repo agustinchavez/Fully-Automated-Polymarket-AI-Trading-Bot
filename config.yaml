@@ -17,6 +17,7 @@ scanning:
   filter_min_score: 25
   filter_blocked_types:
     - UNKNOWN
+    - SPORTS
   research_cooldown_minutes: 60
 research:
   max_sources: 10
@@ -45,10 +46,10 @@ research:
   edgar_max_filings: 3
   arxiv_max_results: 5
   worldbank_mrv: 3
-  kalshi_prior_enabled: false   # needs Kalshi API key
-  metaculus_enabled: false       # 403 — requires API registration
+  kalshi_prior_enabled: true # needs Kalshi API key
+  metaculus_enabled: false # 403 — requires API registration
   wikipedia_pageviews_enabled: true
-  google_trends_enabled: false   # needs SERPAPI_KEY or TAVILY_API_KEY with quota
+  google_trends_enabled: false # needs SERPAPI_KEY or TAVILY_API_KEY with quota
   reddit_sentiment_enabled: false
   pubmed_enabled: true
   manifold_enabled: false

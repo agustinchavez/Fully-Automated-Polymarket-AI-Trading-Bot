@@ -282,15 +282,16 @@ class TestKalshiAuth:
 
     def test_load_rsa_key_missing_raises(self) -> None:
         """Missing key raises RuntimeError."""
-        client = KalshiClient(paper_mode=False)
         with patch.dict("os.environ", {}, clear=True):
+            client = KalshiClient(paper_mode=False)
             with pytest.raises(RuntimeError, match="cryptography is required|Kalshi RSA key"):
                 client._load_rsa_key()
 
     def test_build_auth_headers_requires_key(self) -> None:
-        client = KalshiClient(paper_mode=False, api_key_id="test-key")
-        with pytest.raises((RuntimeError, Exception)):
-            client._build_auth_headers("GET", "/test")
+        with patch.dict("os.environ", {}, clear=True):
+            client = KalshiClient(paper_mode=False, api_key_id="test-key")
+            with pytest.raises((RuntimeError, Exception)):
+                client._build_auth_headers("GET", "/test")
 
     def test_paper_mode_skips_auth(self) -> None:
         """Paper mode GET doesn't require auth headers."""
