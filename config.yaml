@@ -45,10 +45,10 @@ research:
   edgar_max_filings: 3
   arxiv_max_results: 5
   worldbank_mrv: 3
-  kalshi_prior_enabled: true
-  metaculus_enabled: true
+  kalshi_prior_enabled: false   # needs Kalshi API key
+  metaculus_enabled: false       # 403 — requires API registration
   wikipedia_pageviews_enabled: true
-  google_trends_enabled: true
+  google_trends_enabled: false   # needs SERPAPI_KEY or TAVILY_API_KEY with quota
   reddit_sentiment_enabled: false
   pubmed_enabled: true
   manifold_enabled: false
