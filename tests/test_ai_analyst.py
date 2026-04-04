@@ -225,7 +225,7 @@ class TestDataGate:
         _populate_test_db(conn, days=30, trades=10)
         cfg = _make_config(min_resolved_trades=50)
         analyst = AIAnalyst(conn=conn, config=cfg)
-        result = asyncio.get_event_loop().run_until_complete(analyst.analyse(days=30))
+        result = asyncio.run(analyst.analyse(days=30))
         assert not result.data_sufficient
         assert "50" in result.summary  # mentions required trades
 
@@ -236,7 +236,7 @@ class TestDataGate:
         _populate_test_db(conn, days=5, trades=60)
         cfg = _make_config(min_data_days=28)
         analyst = AIAnalyst(conn=conn, config=cfg)
-        result = asyncio.get_event_loop().run_until_complete(analyst.analyse(days=30))
+        result = asyncio.run(analyst.analyse(days=30))
         assert not result.data_sufficient
 
 
@@ -419,7 +419,7 @@ class TestProviderCalls:
 
         mock_call = AsyncMock(return_value=SAMPLE_JSON_RESPONSE)
         with patch.dict(_PROVIDER_DISPATCH, {"anthropic": mock_call}):
-            result = asyncio.get_event_loop().run_until_complete(analyst.analyse(days=30))
+            result = asyncio.run(analyst.analyse(days=30))
             mock_call.assert_awaited_once()
             assert result.provider_used == "anthropic"
             assert result.data_sufficient
@@ -434,7 +434,7 @@ class TestProviderCalls:
 
         mock_call = AsyncMock(return_value=SAMPLE_JSON_RESPONSE)
         with patch.dict(_PROVIDER_DISPATCH, {"openai": mock_call}):
-            result = asyncio.get_event_loop().run_until_complete(analyst.analyse(days=30))
+            result = asyncio.run(analyst.analyse(days=30))
             mock_call.assert_awaited_once()
             assert result.provider_used == "openai"
 
@@ -448,7 +448,7 @@ class TestProviderCalls:
 
         mock_call = AsyncMock(return_value=SAMPLE_JSON_RESPONSE)
         with patch.dict(_PROVIDER_DISPATCH, {"google": mock_call}):
-            result = asyncio.get_event_loop().run_until_complete(analyst.analyse(days=30))
+            result = asyncio.run(analyst.analyse(days=30))
             mock_call.assert_awaited_once()
             assert result.provider_used == "google"
 
@@ -462,7 +462,7 @@ class TestProviderCalls:
 
         mock_call = AsyncMock(return_value=SAMPLE_JSON_RESPONSE)
         with patch.dict(_PROVIDER_DISPATCH, {"deepseek": mock_call}):
-            result = asyncio.get_event_loop().run_until_complete(analyst.analyse(days=30))
+            result = asyncio.run(analyst.analyse(days=30))
             mock_call.assert_awaited_once()
             assert result.provider_used == "deepseek"
 
@@ -525,7 +525,7 @@ class TestRateLimiting:
             (str(time.time()), time.time()),
         )
         conn.commit()
-        result = asyncio.get_event_loop().run_until_complete(analyst.analyse(days=30))
+        result = asyncio.run(analyst.analyse(days=30))
         assert "rate limited" in result.summary.lower() or "Rate limited" in result.summary
 
 
@@ -581,14 +581,14 @@ class TestTelegramCommands:
         engine = MagicMock()
         engine.config.analyst.enabled = False
         bot = TelegramKillBot(token="t", chat_id="1", engine=engine)
-        result = asyncio.get_event_loop().run_until_complete(bot._commands.cmd_analyze(30))
+        result = asyncio.run(bot._commands.cmd_analyze(30))
         assert "disabled" in result.lower()
 
     def test_analyze_no_engine(self) -> None:
         """Returns error when no engine connected."""
         from src.observability.telegram_bot import TelegramKillBot
         bot = TelegramKillBot(token="t", chat_id="1", engine=None)
-        result = asyncio.get_event_loop().run_until_complete(bot._commands.cmd_analyze(30))
+        result = asyncio.run(bot._commands.cmd_analyze(30))
         assert "No engine" in result
 
     def test_analyze_success(self) -> None:
@@ -613,7 +613,7 @@ class TestTelegramCommands:
         with patch("src.analytics.ai_analyst.AIAnalyst.analyse", new_callable=AsyncMock) as mock_analyse:
             mock_analyse.return_value = mock_result
             bot = TelegramKillBot(token="t", chat_id="1", engine=engine)
-            result = asyncio.get_event_loop().run_until_complete(bot._commands.cmd_analyze(30))
+            result = asyncio.run(bot._commands.cmd_analyze(30))
             assert "AI Analysis" in result
             assert "anthropic" in result
             assert "Performance is strong" in result
@@ -629,7 +629,7 @@ class TestTelegramCommands:
         engine.config.analyst.model = "claude-sonnet-4-6"
         engine.config.analyst.rate_limit_hours = 6
         bot = TelegramKillBot(token="t", chat_id="1", engine=engine)
-        result = asyncio.get_event_loop().run_until_complete(bot._commands.cmd_provider())
+        result = asyncio.run(bot._commands.cmd_provider())
         assert "anthropic" in result
         assert "claude-sonnet" in result
         assert "6h" in result
@@ -638,7 +638,7 @@ class TestTelegramCommands:
         """Help command includes /analyze and /provider."""
         from src.observability.telegram_bot import TelegramKillBot
         bot = TelegramKillBot(token="t", chat_id="1")
-        result = asyncio.get_event_loop().run_until_complete(bot._commands.cmd_help())
+        result = asyncio.run(bot._commands.cmd_help())
         assert "analyze" in result
         assert "provider" in result
 
@@ -733,7 +733,7 @@ class TestTimeoutHandling:
 
         mock_call = AsyncMock(side_effect=asyncio.TimeoutError())
         with patch.dict(_PROVIDER_DISPATCH, {"anthropic": mock_call}):
-            result = asyncio.get_event_loop().run_until_complete(analyst.analyse(days=30))
+            result = asyncio.run(analyst.analyse(days=30))
             assert "timed out" in result.summary.lower()
             assert result.provider_used == "anthropic"
 
@@ -755,7 +755,7 @@ class TestCostTracking:
         mock_call = AsyncMock(return_value=SAMPLE_JSON_RESPONSE)
         with patch.dict(_PROVIDER_DISPATCH, {"anthropic": mock_call}):
             with patch("src.observability.metrics.cost_tracker") as mock_ct:
-                result = asyncio.get_event_loop().run_until_complete(analyst.analyse(days=30))
+                result = asyncio.run(analyst.analyse(days=30))
                 mock_ct.record_call.assert_called_once()
                 call_args = mock_ct.record_call.call_args
                 assert "analyst-anthropic" in call_args[0][0]

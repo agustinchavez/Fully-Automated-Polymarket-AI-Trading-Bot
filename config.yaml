@@ -223,6 +223,7 @@ alerts:
   daily_summary_hour: 18
 wallet_scanner:
   enabled: true
+  whale_in_prompt: true
   scan_interval_minutes: 15
   min_whale_count: 1
   min_conviction_score: 15.0
@@ -282,10 +283,10 @@ analyst:
   rate_limit_hours: 6
   schedule_enabled: false
 uma:
-  enabled: false
+  enabled: true
   refresh_interval_mins: 15
 calendar:
-  enabled: false
+  enabled: true
   pre_event_size_reduction: 0.5
   refresh_interval_hours: 6
   lookahead_days: 14
