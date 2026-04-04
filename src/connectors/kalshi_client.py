@@ -19,13 +19,20 @@ from dataclasses import dataclass, field
 from typing import Any
 
 import httpx
-from tenacity import retry, stop_after_attempt, wait_exponential
+from tenacity import retry, retry_if_exception, stop_after_attempt, wait_exponential
 
 from src.connectors.rate_limiter import rate_limiter
 from src.observability.logger import get_logger
 from src.observability.metrics import track_latency
 
 log = get_logger(__name__)
+
+
+def _is_retryable(exc: BaseException) -> bool:
+    """Only retry on transient errors — skip 4xx client errors."""
+    if isinstance(exc, httpx.HTTPStatusError):
+        return exc.response.status_code >= 500
+    return True
 
 
 # ── Data Models ──────────────────────────────────────────────────────
@@ -233,7 +240,11 @@ class KalshiClient:
 
     # ── HTTP helpers ─────────────────────────────────────────────────
 
-    @retry(stop=stop_after_attempt(3), wait=wait_exponential(min=1, max=10))
+    @retry(
+        stop=stop_after_attempt(3),
+        wait=wait_exponential(min=1, max=10),
+        retry=retry_if_exception(_is_retryable),
+    )
     async def _get(
         self, path: str, params: dict[str, Any] | None = None,
     ) -> Any:
@@ -250,7 +261,11 @@ class KalshiClient:
             resp.raise_for_status()
             return resp.json()
 
-    @retry(stop=stop_after_attempt(3), wait=wait_exponential(min=1, max=10))
+    @retry(
+        stop=stop_after_attempt(3),
+        wait=wait_exponential(min=1, max=10),
+        retry=retry_if_exception(_is_retryable),
+    )
     async def _post(
         self, path: str, body: dict[str, Any] | None = None,
     ) -> Any:
