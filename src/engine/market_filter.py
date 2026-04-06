@@ -343,9 +343,10 @@ def score_market(
     market_id = getattr(market, "id", "?")
     question = getattr(market, "question", "?")
 
-    # Run classifier first
+    # Run classifier first — pass raw Gamma API metadata for platform-based classification
     description = getattr(market, "description", "")
-    classification = classify_market(question, description)
+    raw = getattr(market, "raw", None)
+    classification = classify_market(question, description, raw=raw)
 
     rejection = _hard_reject(market, blocked_types=blocked_types,
                              classification=classification,

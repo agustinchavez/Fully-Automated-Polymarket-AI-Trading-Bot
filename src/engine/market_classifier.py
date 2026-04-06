@@ -188,12 +188,9 @@ _r(r"\b(bill\s+pass|legislat(ion|ive)|act\s+(pass|sign|vote)|law\s+(pass|sign))\
    reasons=["Congress.gov tracks bill status",
             "GovTrack provides probability estimates"])
 
-# General election fallback
-_r(r"\b(election|vote|ballot|poll(ing)?|primary|caucus|electoral)\b",
-   "ELECTION", "general",
-   researchability=80, sources=["AP News", "Reuters", "FiveThirtyEight"],
-   strategy="news_analysis", queries=6, tags=["polling_data"],
-   reasons=["General election coverage widely available"])
+# NOTE: General election fallback moved to end of rules (after SPORTS)
+# to prevent Polymarket descriptions containing "vote"/"poll" from
+# shadowing sports matches.  See _ELECTION_GENERAL_FALLBACK below.
 
 # ── CRYPTO ───────────────────────────────────────────────────────────
 
@@ -329,7 +326,7 @@ _r(r"\b(mvp|season\s+record|award|hall\s+of\s+fame|retire[d]?)\b",
 
 # sports_business — news-driven events (coach firings, transfers, contracts)
 # Must fire BEFORE game_outcome so "NFL expand to London" is business, not game
-_r(r"\b(trade\s+deadline|traded|salary\s+cap|coach(ing)?.*\b(fired|hire[d]?|change)|fired\s+(coach|manager|head)|draft\s+pick|transfer\s+(window|fee|market|list)|relegat|free\s+agenc|signing\s+(bonus|day)|player\s+sign|franchise\s+(relocat|expand|tag)|expansion\s+(team|draft)|relocate[ds]?)\b",
+_r(r"\b(trade\s+deadline|salary\s+cap|coach(ing)?.*\b(fired|hire[d]?|change)|fired\s+(coach|manager|head)|draft\s+pick|transfer\s+(window|fee|market|list)|relegat|free\s+agenc|signing\s+(bonus|day)|player\s+sign|franchise\s+(relocat|expand|tag)|expansion\s+(team|draft)|relocate[ds]?)\b",
    "SPORTS", "sports_business",
    researchability=72, sources=["ESPN", "Reuters", "The Athletic"],
    strategy="news_analysis", queries=5, tags=["news_trackable"],
@@ -449,6 +446,58 @@ _r(r"\b(sanctions?|embargo|diplomacy|treaty|summit|nato|un\s+vote|g[78]|g20)\b",
    strategy="news_analysis", queries=5, tags=["political"],
    reasons=["Diplomatic events have press coverage and schedules"])
 
+# ── STRUCTURAL SPORTS (format-based, catches markets no keyword can) ─
+# These fire after all keyword-based SPORTS rules but before catch-all
+# fallbacks like ELECTION/general.  They detect sports by title format.
+
+# Soccer/football club suffixes: FC, AFC, SC, BK, FK, CF, etc.
+# Only match uppercase suffixes preceded by a capitalized word (proper noun).
+# Uses a non-IGNORECASE sub-pattern via inline flag.
+_r(r"(?-i:[A-Z][\w'-]+\s+(?:FC|AFC|SC|CF|CD|FK|BK|SK))\b",
+   "SPORTS", "game_outcome",
+   researchability=50, sources=["ESPN", "Sportsbooks"],
+   strategy="sports_odds", queries=3, tags=["odds_available", "unpredictable"],
+   reasons=["Soccer club name detected (FC/SC/AFC suffix)"])
+
+# Italian/South American club patterns: AC, AS, SS, US + Name
+# Case-sensitive prefix match to avoid "us policy vs china" false positives.
+_r(r"(?-i:\b(?:AC|AS|SS|US|CA|CD|CF)\s+[A-Z]\w+).*\bvs\.?\b",
+   "SPORTS", "game_outcome",
+   researchability=50, sources=["ESPN", "Sportsbooks"],
+   strategy="sports_odds", queries=3, tags=["odds_available", "unpredictable"],
+   reasons=["Club prefix pattern (AC/AS/US) with matchup detected"])
+
+# Sports prop-bet markers: O/U, over/under, both teams to score
+_r(r"\b(O/U\s+\d|over/under|both\s+teams\s+to\s+score|end\s+in\s+a\s+draw|total\s+(kills|points|goals|runs|sets)|moneyline|spread\s+[+-]?\d|handicap)\b",
+   "SPORTS", "game_outcome",
+   researchability=40, sources=["ESPN", "Sportsbooks"],
+   strategy="sports_odds", queries=2, tags=["odds_available", "unpredictable"],
+   reasons=["Sports prop bet format detected (O/U, BTTS, draw)"])
+
+# Esports markers: BO3, BO5, Counter-Strike, Dota, LoL, Valorant
+_r(r"\b(BO[1357]|Counter[- ]?Strike|CS2|Dota\s*2|League\s+of\s+Legends|LCK|LPL|LEC|LCS|Valorant|PUBG)\b",
+   "SPORTS", "game_outcome",
+   researchability=35, sources=["Sportsbooks"],
+   strategy="sports_odds", queries=2, tags=["odds_available", "unpredictable", "esports"],
+   reasons=["Esports match detected by format"])
+
+# "X vs. Y" with period — Polymarket convention for sports matchups
+# (non-sports on Polymarket use "vs" without period, or different formats)
+_r(r"\bvs\.\s+\w+",
+   "SPORTS", "game_outcome",
+   researchability=40, sources=["ESPN", "Sportsbooks"],
+   strategy="sports_odds", queries=2, tags=["odds_available", "unpredictable"],
+   reasons=["Matchup format (vs.) typically indicates sports event"])
+
+# ── ELECTION general fallback (moved here to avoid shadowing sports) ─
+# Polymarket descriptions often contain "vote"/"poll" generically,
+# which would misclassify sports markets if this were higher up.
+_r(r"\b(election|vote|ballot|poll(ing)?|primary|caucus|electoral)\b",
+   "ELECTION", "general",
+   researchability=80, sources=["AP News", "Reuters", "FiveThirtyEight"],
+   strategy="news_analysis", queries=6, tags=["polling_data"],
+   reasons=["General election coverage widely available"])
+
 # ── SOCIAL MEDIA / CULTURE ───────────────────────────────────────────
 
 _r(r"\b(tweet|x\.com|twitter|elon\s+musk\s+(tweet|post|say)|truth\s+social)\b",
@@ -501,17 +550,269 @@ _LOW_EDGE_CATEGORIES: set[str] = {"SPORTS"}
 _LOW_EDGE_SUBCATEGORIES: set[str] = {"game_outcome", "sports_general"}
 
 
-def classify_market(question: str, description: str = "") -> MarketClassification:
+# ── Polymarket sportsMarketType → subcategory mapping ─────────────
+# Maps Gamma API sportsMarketType values to our subcategory taxonomy.
+_SPORTS_MARKET_TYPE_MAP: dict[str, str] = {
+    "moneyline": "game_outcome",
+    "child_moneyline": "game_outcome",
+    "spreads": "game_outcome",
+    "totals": "game_outcome",
+    "both_teams_to_score": "game_outcome",
+    "cricket_completed_match": "game_outcome",
+    "kill_over_under_game": "game_outcome",
+    "tennis_set_totals": "game_outcome",
+    "tennis_first_set_totals": "game_outcome",
+    "tennis_match_totals": "game_outcome",
+    "tennis_first_set_winner": "game_outcome",
+    "cs2_odd_even_total_kills": "game_outcome",
+    "cs2_odd_even_total_rounds": "game_outcome",
+    "map_handicap": "game_outcome",
+    "dota2_rampage": "game_outcome",
+    "dota2_ultra_kill": "game_outcome",
+    "dota2_game_ends_daytime": "game_outcome",
+    "dota2_both_teams_barracks": "game_outcome",
+}
+
+# ── Polymarket feeType → category mapping ─────────────────────────
+_FEE_TYPE_CATEGORY_MAP: dict[str, tuple[str, str]] = {
+    "sports_fees_v2": ("SPORTS", "game_outcome"),
+    "weather_fees": ("WEATHER", "forecast"),
+    "crypto_fees_v2": ("CRYPTO", "price"),
+    "culture_fees": ("SOCIAL_MEDIA", "social_posts"),
+    "finance_prices_fees": ("CORPORATE", "earnings"),
+    "tech_fees": ("TECH", "ai"),
+}
+
+# ── Series slug prefixes → sport refinement ───────────────────────
+_SERIES_SPORT_MAP: dict[str, str] = {
+    "soccer": "game_outcome",
+    "la-liga": "game_outcome",
+    "serie-a": "game_outcome",
+    "serie-b": "game_outcome",
+    "primeira-liga": "game_outcome",
+    "ucl": "game_outcome",
+    "europa": "game_outcome",
+    "mlb": "game_outcome",
+    "nba": "game_outcome",
+    "nfl": "game_outcome",
+    "nhl": "game_outcome",
+    "atp": "game_outcome",
+    "wta": "game_outcome",
+    "league-of-legends": "game_outcome",
+    "dota": "game_outcome",
+    "international-cricket": "game_outcome",
+    "norway": "game_outcome",
+}
+
+# Default configs for platform-detected categories
+_PLATFORM_SPORTS_CONFIG = {
+    "researchability": 50,
+    "sources": ["ESPN", "Sportsbooks"],
+    "strategy": "sports_odds",
+    "queries": 3,
+    "tags": ["odds_available", "unpredictable", "platform_classified"],
+    "reasons": ["Classified via Polymarket platform metadata (sportsMarketType/feeType)"],
+}
+
+_PLATFORM_WEATHER_CONFIG = {
+    "researchability": 55,
+    "sources": ["NOAA", "Weather.gov", "Open-Meteo"],
+    "strategy": "official_data",
+    "queries": 4,
+    "tags": ["nowcast", "platform_classified"],
+    "reasons": ["Classified via Polymarket platform metadata (feeType)"],
+}
+
+_PLATFORM_CRYPTO_CONFIG = {
+    "researchability": 45,
+    "sources": ["CoinGecko", "CoinMarketCap"],
+    "strategy": "news_analysis",
+    "queries": 3,
+    "tags": ["volatile", "platform_classified"],
+    "reasons": ["Classified via Polymarket platform metadata (feeType)"],
+}
+
+_PLATFORM_SOCIAL_MEDIA_CONFIG = {
+    "researchability": 15,
+    "sources": [],
+    "strategy": "skip",
+    "queries": 2,
+    "tags": ["unpredictable", "noise", "platform_classified"],
+    "reasons": ["Classified via Polymarket platform metadata (feeType)"],
+}
+
+_PLATFORM_CORPORATE_CONFIG = {
+    "researchability": 65,
+    "sources": ["Yahoo Finance", "Bloomberg"],
+    "strategy": "market_data",
+    "queries": 4,
+    "tags": ["market_data", "platform_classified"],
+    "reasons": ["Classified via Polymarket platform metadata (feeType)"],
+}
+
+_PLATFORM_TECH_CONFIG = {
+    "researchability": 60,
+    "sources": ["TechCrunch", "The Verge"],
+    "strategy": "news_analysis",
+    "queries": 4,
+    "tags": ["fast_moving", "platform_classified"],
+    "reasons": ["Classified via Polymarket platform metadata (feeType)"],
+}
+
+# ── Event-level category → (category, subcategory) mapping ─────────
+# Maps Polymarket's event.category field to our taxonomy.
+# Present on legacy/older markets that lack feeType; used as fallback.
+_EVENT_CATEGORY_MAP: dict[str, tuple[str, str]] = {
+    "US-current-affairs": ("ELECTION", "general"),
+    "Global Politics": ("ELECTION", "international"),
+    "Sports": ("SPORTS", "game_outcome"),
+    "NBA Playoffs": ("SPORTS", "game_outcome"),
+    "Olympics": ("SPORTS", "game_outcome"),
+    "Crypto": ("CRYPTO", "price"),
+    "NFTs": ("CRYPTO", "nft"),
+    "Business": ("CORPORATE", "earnings"),
+    "Tech": ("TECH", "ai"),
+    "Science": ("SCIENCE", "general"),
+    "Space": ("SCIENCE", "space"),
+    "Coronavirus": ("SCIENCE", "pandemic"),
+    "Pop-Culture ": ("SOCIAL_MEDIA", "social_posts"),  # note trailing space
+    "Pop-Culture": ("SOCIAL_MEDIA", "social_posts"),
+    "Art": ("SOCIAL_MEDIA", "social_posts"),
+    "Chess": ("SPORTS", "game_outcome"),
+}
+
+_PLATFORM_ELECTION_CONFIG = {
+    "researchability": 82,
+    "sources": ["FiveThirtyEight", "RCP", "AP News"],
+    "strategy": "news_analysis",
+    "queries": 6,
+    "tags": ["polling_data", "platform_classified"],
+    "reasons": ["Classified via Polymarket platform metadata (event.category)"],
+}
+
+_PLATFORM_SCIENCE_CONFIG = {
+    "researchability": 60,
+    "sources": ["Nature", "Science", "PubMed"],
+    "strategy": "news_analysis",
+    "queries": 4,
+    "tags": ["expert_domain", "platform_classified"],
+    "reasons": ["Classified via Polymarket platform metadata (event.category)"],
+}
+
+_PLATFORM_CONFIGS: dict[str, dict[str, Any]] = {
+    "SPORTS": _PLATFORM_SPORTS_CONFIG,
+    "WEATHER": _PLATFORM_WEATHER_CONFIG,
+    "CRYPTO": _PLATFORM_CRYPTO_CONFIG,
+    "SOCIAL_MEDIA": _PLATFORM_SOCIAL_MEDIA_CONFIG,
+    "CORPORATE": _PLATFORM_CORPORATE_CONFIG,
+    "TECH": _PLATFORM_TECH_CONFIG,
+    "ELECTION": _PLATFORM_ELECTION_CONFIG,
+    "SCIENCE": _PLATFORM_SCIENCE_CONFIG,
+}
+
+
+def _classify_from_platform_metadata(
+    raw: dict[str, Any],
+) -> MarketClassification | None:
+    """Attempt classification using Polymarket's own metadata.
+
+    Checks (in order):
+      1. ``sportsMarketType`` — explicit sport market type tag
+      2. ``feeType`` — fee schedule category (sports/weather/crypto)
+      3. Event ``series`` slug — sport refinement
+      4. Event ``category`` — legacy category string (older markets)
+
+    Returns None if no platform metadata yields a classification,
+    allowing the caller to fall back to regex rules.
+    """
+    category: str | None = None
+    subcategory: str | None = None
+
+    # 1. sportsMarketType — highest confidence
+    smt = raw.get("sportsMarketType", "") or ""
+    if smt:
+        category = "SPORTS"
+        subcategory = _SPORTS_MARKET_TYPE_MAP.get(smt, "game_outcome")
+
+    # 2. feeType — broader category signal
+    if category is None:
+        fee_type = raw.get("feeType", "") or ""
+        if fee_type in _FEE_TYPE_CATEGORY_MAP:
+            category, subcategory = _FEE_TYPE_CATEGORY_MAP[fee_type]
+
+    # 3. Series slug — detect sports from event series
+    if category is None:
+        for event in raw.get("events", []):
+            for series in event.get("series", []):
+                slug = series.get("slug", "")
+                for prefix, subcat in _SERIES_SPORT_MAP.items():
+                    if slug.startswith(prefix):
+                        category = "SPORTS"
+                        subcategory = subcat
+                        break
+                if category:
+                    break
+            if category:
+                break
+
+    # 4. Event category — legacy field on older markets
+    if category is None:
+        for event in raw.get("events", []):
+            ev_cat = event.get("category", "") or ""
+            if ev_cat in _EVENT_CATEGORY_MAP:
+                category, subcategory = _EVENT_CATEGORY_MAP[ev_cat]
+                break
+
+    if category is None or subcategory is None:
+        return None
+
+    config = _PLATFORM_CONFIGS.get(category, _PLATFORM_SPORTS_CONFIG)
+    researchability = config["researchability"]
+    worth = researchability >= 25 and category not in _SKIP_CATEGORIES
+
+    return MarketClassification(
+        category=category,
+        subcategory=subcategory,
+        researchability=researchability,
+        researchability_reasons=list(config["reasons"]),
+        primary_sources=list(config["sources"]),
+        search_strategy=config["strategy"],
+        recommended_queries=config["queries"],
+        worth_researching=worth,
+        confidence=0.95,  # platform metadata is highest confidence
+        tags=list(config["tags"]),
+    )
+
+
+def classify_market(
+    question: str,
+    description: str = "",
+    *,
+    raw: dict[str, Any] | None = None,
+) -> MarketClassification:
     """Classify a market question into category/subcategory with
     researchability scoring.
+
+    Uses Polymarket's own platform metadata (``sportsMarketType``,
+    ``feeType``, event ``series``) as the primary signal when available,
+    falling back to regex rules for markets without metadata (e.g. in
+    tests or backtest replay).
 
     Args:
         question: The market question text.
         description: Optional market description for additional context.
+        raw: Optional raw Gamma API response dict.  When present, platform
+             metadata is checked first for high-confidence classification.
 
     Returns:
         MarketClassification with full analysis.
     """
+    # ── Platform metadata fast-path ─────────────────────────────────
+    if raw:
+        meta_result = _classify_from_platform_metadata(raw)
+        if meta_result is not None:
+            return meta_result
+
     text = f"{question} {description}".strip()
 
     for pattern, category, subcategory, config in _RULES:
@@ -561,7 +862,8 @@ def classify_and_log(market: Any) -> MarketClassification:
     """Convenience wrapper — classify a GammaMarket and log the result."""
     question = getattr(market, "question", "")
     description = getattr(market, "description", "")
-    result = classify_market(question, description)
+    raw = getattr(market, "raw", None)
+    result = classify_market(question, description, raw=raw)
 
     log.info(
         "classifier.result",

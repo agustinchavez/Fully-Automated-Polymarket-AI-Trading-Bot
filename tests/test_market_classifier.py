@@ -509,3 +509,436 @@ class TestDescriptionFallback:
             description="Some extra context",
         )
         assert c.confidence >= 0.8
+
+
+# ═══════════════════════════════════════════════════════════════
+#  PLATFORM METADATA CLASSIFICATION
+# ═══════════════════════════════════════════════════════════════
+
+
+class TestPlatformMetadata:
+    """Platform metadata from Gamma API should take priority over regex."""
+
+    # ── sportsMarketType ──────────────────────────────────────
+
+    def test_sportsmarkettype_moneyline(self):
+        c = classify_market(
+            "Will Real Sociedad win on 2026-04-06?",
+            raw={"sportsMarketType": "moneyline"},
+        )
+        assert c.category == "SPORTS"
+        assert c.subcategory == "game_outcome"
+        assert c.confidence == 0.95
+        assert "platform_classified" in c.tags
+
+    def test_sportsmarkettype_totals(self):
+        c = classify_market(
+            "Stevenage FC vs. Blackpool FC: O/U 2.5",
+            raw={"sportsMarketType": "totals"},
+        )
+        assert c.category == "SPORTS"
+        assert c.subcategory == "game_outcome"
+
+    def test_sportsmarkettype_both_teams_to_score(self):
+        c = classify_market(
+            "Will both teams score?",
+            raw={"sportsMarketType": "both_teams_to_score"},
+        )
+        assert c.category == "SPORTS"
+        assert c.subcategory == "game_outcome"
+
+    def test_sportsmarkettype_cricket(self):
+        c = classify_market(
+            "T20 Kalahari Tournament: Zambia vs Mozambique - Completed match?",
+            raw={"sportsMarketType": "cricket_completed_match"},
+        )
+        assert c.category == "SPORTS"
+        assert c.subcategory == "game_outcome"
+
+    def test_sportsmarkettype_esports_kills(self):
+        c = classify_market(
+            "Total Kills Over/Under 27.5 in Game 1?",
+            raw={"sportsMarketType": "kill_over_under_game"},
+        )
+        assert c.category == "SPORTS"
+        assert c.subcategory == "game_outcome"
+
+    def test_sportsmarkettype_tennis_sets(self):
+        c = classify_market(
+            "Upper Austria Ladies Linz: Katie Boulter vs Gabriela Ruse",
+            raw={"sportsMarketType": "tennis_set_totals"},
+        )
+        assert c.category == "SPORTS"
+        assert c.subcategory == "game_outcome"
+
+    def test_sportsmarkettype_spreads(self):
+        c = classify_market(
+            "Lakers -4.5 vs Celtics",
+            raw={"sportsMarketType": "spreads"},
+        )
+        assert c.category == "SPORTS"
+        assert c.subcategory == "game_outcome"
+
+    def test_unknown_sportsmarkettype_defaults_game_outcome(self):
+        c = classify_market(
+            "Some new sport market type",
+            raw={"sportsMarketType": "some_future_type"},
+        )
+        assert c.category == "SPORTS"
+        assert c.subcategory == "game_outcome"
+
+    # ── feeType ───────────────────────────────────────────────
+
+    def test_feetype_sports(self):
+        c = classify_market(
+            "Mitch Johnson wins NBA Coach of the Year?",
+            raw={"feeType": "sports_fees_v2"},
+        )
+        assert c.category == "SPORTS"
+        assert c.subcategory == "game_outcome"
+
+    def test_feetype_weather(self):
+        c = classify_market(
+            "Will the highest temperature in LA be 68-69F?",
+            raw={"feeType": "weather_fees"},
+        )
+        assert c.category == "WEATHER"
+        assert c.subcategory == "forecast"
+        assert c.confidence == 0.95
+
+    def test_feetype_crypto(self):
+        c = classify_market(
+            "Will Bitcoin be above $56,000 on April 7?",
+            raw={"feeType": "crypto_fees_v2"},
+        )
+        assert c.category == "CRYPTO"
+        assert c.subcategory == "price"
+
+    def test_feetype_culture(self):
+        c = classify_market(
+            "Will Elon Musk post 400 tweets?",
+            raw={"feeType": "culture_fees"},
+        )
+        assert c.category == "SOCIAL_MEDIA"
+        assert c.confidence == 0.95
+
+    def test_feetype_finance(self):
+        c = classify_market(
+            "Will WTI Crude Oil hit $20?",
+            raw={"feeType": "finance_prices_fees"},
+        )
+        assert c.category == "CORPORATE"
+
+    def test_feetype_tech(self):
+        c = classify_market(
+            "Will qwen3.5 be the best AI model?",
+            raw={"feeType": "tech_fees"},
+        )
+        assert c.category == "TECH"
+
+    def test_feetype_unknown_falls_through(self):
+        """Unknown feeType should fall through to regex."""
+        c = classify_market(
+            "Will the Fed cut rates?",
+            raw={"feeType": "general_fees"},
+        )
+        assert c.category == "MACRO"  # regex kicks in
+
+    # ── Event series slug ─────────────────────────────────────
+
+    def test_series_slug_atp(self):
+        c = classify_market(
+            "Some tennis match nobody can classify",
+            raw={"events": [{"series": [{"slug": "atp"}]}]},
+        )
+        assert c.category == "SPORTS"
+        assert c.subcategory == "game_outcome"
+
+    def test_series_slug_league_of_legends(self):
+        c = classify_market(
+            "BO3 Game result?",
+            raw={"events": [{"series": [{"slug": "league-of-legends"}]}]},
+        )
+        assert c.category == "SPORTS"
+
+    def test_series_slug_international_cricket(self):
+        c = classify_market(
+            "Match completed?",
+            raw={"events": [{"series": [{"slug": "international-cricket"}]}]},
+        )
+        assert c.category == "SPORTS"
+
+    def test_series_slug_mlb(self):
+        c = classify_market(
+            "Some baseball question",
+            raw={"events": [{"series": [{"slug": "mlb"}]}]},
+        )
+        assert c.category == "SPORTS"
+
+    def test_series_slug_soccer_prefix(self):
+        c = classify_market(
+            "Match result?",
+            raw={"events": [{"series": [{"slug": "soccer-el1"}]}]},
+        )
+        assert c.category == "SPORTS"
+
+    def test_series_slug_la_liga(self):
+        c = classify_market(
+            "Match winner?",
+            raw={"events": [{"series": [{"slug": "la-liga-2"}]}]},
+        )
+        assert c.category == "SPORTS"
+
+    def test_series_slug_ucl(self):
+        c = classify_market(
+            "Champions League match",
+            raw={"events": [{"series": [{"slug": "ucl-2025"}]}]},
+        )
+        assert c.category == "SPORTS"
+
+    def test_series_slug_no_match_falls_through(self):
+        """Non-sport series slug should fall through to regex."""
+        c = classify_market(
+            "Will Bitcoin hit $100K?",
+            raw={"events": [{"series": [{"slug": "btc-multi-strikes-weekly"}]}]},
+        )
+        assert c.category == "CRYPTO"  # regex kicks in
+
+    # ── Priority: sportsMarketType > feeType > series ─────────
+
+    def test_sportsmarkettype_overrides_feetype(self):
+        """sportsMarketType is checked first, even if feeType disagrees."""
+        c = classify_market(
+            "Some question",
+            raw={"sportsMarketType": "moneyline", "feeType": "weather_fees"},
+        )
+        assert c.category == "SPORTS"
+
+    # ── No raw dict → regex fallback ──────────────────────────
+
+    def test_no_raw_uses_regex(self):
+        c = classify_market("Will the Fed cut rates in June?")
+        assert c.category == "MACRO"
+
+    def test_empty_raw_uses_regex(self):
+        c = classify_market("Will the Fed cut rates?", raw={})
+        assert c.category == "MACRO"
+
+    def test_raw_none_uses_regex(self):
+        c = classify_market("Will the Fed cut rates?", raw=None)
+        assert c.category == "MACRO"
+
+    # ── Confidence is highest for platform metadata ───────────
+
+    def test_platform_confidence_higher_than_regex(self):
+        regex_result = classify_market("Will Real Sociedad win?")
+        platform_result = classify_market(
+            "Will Real Sociedad win?",
+            raw={"sportsMarketType": "moneyline"},
+        )
+        assert platform_result.confidence > regex_result.confidence
+
+    # ── classify_and_log passes raw through ───────────────────
+
+    def test_classify_and_log_uses_raw(self):
+        class FakeMarket:
+            question = "Unknown obscure matchup"
+            description = ""
+            raw = {"sportsMarketType": "moneyline"}
+            id = "test-123"
+
+        result = classify_and_log(FakeMarket())
+        assert result.category == "SPORTS"
+        assert result.confidence == 0.95
+
+    # ── New sportsMarketType values ────────────────────────────
+
+    def test_sportsmarkettype_child_moneyline(self):
+        c = classify_market("Lakers vs Celtics", raw={"sportsMarketType": "child_moneyline"})
+        assert c.category == "SPORTS"
+        assert c.subcategory == "game_outcome"
+
+    def test_sportsmarkettype_tennis_first_set_totals(self):
+        c = classify_market("First set O/U?", raw={"sportsMarketType": "tennis_first_set_totals"})
+        assert c.category == "SPORTS"
+        assert c.subcategory == "game_outcome"
+
+    def test_sportsmarkettype_tennis_match_totals(self):
+        c = classify_market("Match total?", raw={"sportsMarketType": "tennis_match_totals"})
+        assert c.category == "SPORTS"
+
+    def test_sportsmarkettype_tennis_first_set_winner(self):
+        c = classify_market("First set winner?", raw={"sportsMarketType": "tennis_first_set_winner"})
+        assert c.category == "SPORTS"
+
+    def test_sportsmarkettype_cs2_kills(self):
+        c = classify_market("Odd/even kills?", raw={"sportsMarketType": "cs2_odd_even_total_kills"})
+        assert c.category == "SPORTS"
+
+    def test_sportsmarkettype_cs2_rounds(self):
+        c = classify_market("Odd/even rounds?", raw={"sportsMarketType": "cs2_odd_even_total_rounds"})
+        assert c.category == "SPORTS"
+
+    def test_sportsmarkettype_map_handicap(self):
+        c = classify_market("Map handicap?", raw={"sportsMarketType": "map_handicap"})
+        assert c.category == "SPORTS"
+
+    def test_sportsmarkettype_dota2_rampage(self):
+        c = classify_market("Will there be a rampage?", raw={"sportsMarketType": "dota2_rampage"})
+        assert c.category == "SPORTS"
+
+    def test_sportsmarkettype_dota2_ultra_kill(self):
+        c = classify_market("Ultra kill?", raw={"sportsMarketType": "dota2_ultra_kill"})
+        assert c.category == "SPORTS"
+
+    def test_sportsmarkettype_dota2_daytime(self):
+        c = classify_market("Game ends daytime?", raw={"sportsMarketType": "dota2_game_ends_daytime"})
+        assert c.category == "SPORTS"
+
+    def test_sportsmarkettype_dota2_barracks(self):
+        c = classify_market("Both barracks?", raw={"sportsMarketType": "dota2_both_teams_barracks"})
+        assert c.category == "SPORTS"
+
+    # ── Event category (legacy markets) ────────────────────────
+
+    def test_event_category_us_current_affairs(self):
+        c = classify_market(
+            "Will Congress pass the spending bill?",
+            raw={"events": [{"category": "US-current-affairs"}]},
+        )
+        assert c.category == "ELECTION"
+        assert c.subcategory == "general"
+        assert c.confidence == 0.95
+        assert "platform_classified" in c.tags
+
+    def test_event_category_global_politics(self):
+        c = classify_market(
+            "Will the UK PM resign?",
+            raw={"events": [{"category": "Global Politics"}]},
+        )
+        assert c.category == "ELECTION"
+        assert c.subcategory == "international"
+
+    def test_event_category_sports(self):
+        c = classify_market(
+            "Who wins the match?",
+            raw={"events": [{"category": "Sports"}]},
+        )
+        assert c.category == "SPORTS"
+        assert c.subcategory == "game_outcome"
+
+    def test_event_category_nba_playoffs(self):
+        c = classify_market(
+            "NBA playoff game result",
+            raw={"events": [{"category": "NBA Playoffs"}]},
+        )
+        assert c.category == "SPORTS"
+        assert c.subcategory == "game_outcome"
+
+    def test_event_category_crypto(self):
+        c = classify_market(
+            "Will ETH hit $5000?",
+            raw={"events": [{"category": "Crypto"}]},
+        )
+        assert c.category == "CRYPTO"
+        assert c.subcategory == "price"
+
+    def test_event_category_nfts(self):
+        c = classify_market(
+            "Will this NFT sell for $100k?",
+            raw={"events": [{"category": "NFTs"}]},
+        )
+        assert c.category == "CRYPTO"
+        assert c.subcategory == "nft"
+
+    def test_event_category_business(self):
+        c = classify_market(
+            "What will Airbnb market cap be?",
+            raw={"events": [{"category": "Business"}]},
+        )
+        assert c.category == "CORPORATE"
+
+    def test_event_category_tech(self):
+        c = classify_market(
+            "Will GPT-5 launch this year?",
+            raw={"events": [{"category": "Tech"}]},
+        )
+        assert c.category == "TECH"
+
+    def test_event_category_science(self):
+        c = classify_market(
+            "Will they find evidence of life on Mars?",
+            raw={"events": [{"category": "Science"}]},
+        )
+        assert c.category == "SCIENCE"
+
+    def test_event_category_coronavirus(self):
+        c = classify_market(
+            "Will COVID cases spike?",
+            raw={"events": [{"category": "Coronavirus"}]},
+        )
+        assert c.category == "SCIENCE"
+        assert c.subcategory == "pandemic"
+
+    def test_event_category_space(self):
+        c = classify_market(
+            "Will SpaceX land on Mars?",
+            raw={"events": [{"category": "Space"}]},
+        )
+        assert c.category == "SCIENCE"
+        assert c.subcategory == "space"
+
+    def test_event_category_pop_culture(self):
+        c = classify_market(
+            "Will Bad Bunny release an album?",
+            raw={"events": [{"category": "Pop-Culture "}]},
+        )
+        assert c.category == "SOCIAL_MEDIA"
+
+    def test_event_category_chess(self):
+        c = classify_market(
+            "Who wins the chess championship?",
+            raw={"events": [{"category": "Chess"}]},
+        )
+        assert c.category == "SPORTS"
+
+    def test_event_category_olympics(self):
+        c = classify_market(
+            "Who wins gold in the 100m?",
+            raw={"events": [{"category": "Olympics"}]},
+        )
+        assert c.category == "SPORTS"
+
+    def test_event_category_unknown_falls_through(self):
+        """Unknown event category should fall through to regex."""
+        c = classify_market(
+            "Will the Fed cut rates in June?",
+            raw={"events": [{"category": "SomeNewCategory"}]},
+        )
+        assert c.category == "MACRO"  # regex kicks in
+
+    # ── Priority: feeType > event.category ─────────────────────
+
+    def test_feetype_overrides_event_category(self):
+        """feeType is checked before event.category."""
+        c = classify_market(
+            "Some question",
+            raw={
+                "feeType": "crypto_fees_v2",
+                "events": [{"category": "US-current-affairs"}],
+            },
+        )
+        assert c.category == "CRYPTO"  # feeType wins
+
+    def test_series_slug_overrides_event_category(self):
+        """Series slug is checked before event.category."""
+        c = classify_market(
+            "Match result?",
+            raw={
+                "events": [{
+                    "category": "Tech",
+                    "series": [{"slug": "nba"}],
+                }],
+            },
+        )
+        assert c.category == "SPORTS"  # series slug wins
