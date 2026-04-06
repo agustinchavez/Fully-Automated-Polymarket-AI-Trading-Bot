@@ -317,43 +317,58 @@ _r(r"\b(apple|google|microsoft|meta|amazon|tesla)\b.{0,40}\b(launch|announc|rele
 
 # ── SPORTS ───────────────────────────────────────────────────────────
 
+# game_outcome — direct match/game results (odds-dependent)
 _r(r"\b(super\s+bowl|nfl|nba\s+final|world\s+series|mlb|nhl|stanley\s+cup|world\s+cup|premier\s+league|champions\s+league)\b",
-   "SPORTS", "major_leagues",
+   "SPORTS", "game_outcome",
    researchability=50, sources=["ESPN", "FiveThirtyEight Sports"],
    strategy="sports_odds", queries=3, tags=["odds_available", "unpredictable"],
-   reasons=["Sports odds readily available but highly unpredictable",
-            "Our model has no edge over dedicated sportsbooks"])
+   reasons=["Sportsbook odds provide sharp reference probabilities",
+            "Edge comes from Polymarket vs sportsbook divergence"])
 
 _r(r"\b(ufc|mma|boxing|fight|bout|knockout)\b",
-   "SPORTS", "combat",
+   "SPORTS", "game_outcome",
    researchability=40, sources=["ESPN", "Sherdog"],
    strategy="sports_odds", queries=2, tags=["odds_available", "unpredictable"],
    reasons=["Combat sports are extremely unpredictable"])
 
 _r(r"\b(formula\s*1|f1|nascar|indy\s*500|motogp|race\s+winner)\b",
-   "SPORTS", "motorsport",
+   "SPORTS", "game_outcome",
    researchability=42, sources=["formula1.com", "ESPN"],
    strategy="sports_odds", queries=2, tags=["odds_available", "unpredictable"],
    reasons=["Motorsport outcomes highly dependent on race-day conditions"])
 
 _r(r"\b(serie\s*[ab]|calcio|ligue\s*1|bundesliga|eredivisie|primeira\s*liga|la\s+liga|el\s+clasico|mls|liga\s+mx)\b",
-   "SPORTS", "soccer_europe",
-   researchability=40, sources=["ESPN"],
-   strategy="sports_odds", queries=2, tags=["odds_available", "unpredictable"],
-   reasons=["Soccer league outcomes are highly unpredictable"])
+   "SPORTS", "game_outcome",
+   researchability=50, sources=["ESPN", "Sportsbooks"],
+   strategy="sports_odds", queries=3, tags=["odds_available", "unpredictable"],
+   reasons=["Soccer league odds available from sharp sportsbooks"])
 
 _r(r"\b(vs\.?\s+fc|sc\s+vs|fc\s+vs|end\s+in\s+a\s+draw|match\s+draw|soccer|football\s+match)\b",
-   "SPORTS", "soccer_general",
-   researchability=40, sources=["ESPN"],
-   strategy="sports_odds", queries=2, tags=["odds_available", "unpredictable"],
-   reasons=["Soccer match outcomes are highly unpredictable"])
+   "SPORTS", "game_outcome",
+   researchability=50, sources=["ESPN", "Sportsbooks"],
+   strategy="sports_odds", queries=3, tags=["odds_available", "unpredictable"],
+   reasons=["Soccer match odds available from sharp sportsbooks"])
 
-# General sports fallback
-_r(r"\b(score|win\s+game|playoff|championship|mvp|draft\s+pick|season\s+record|sport)\b",
-   "SPORTS", "general",
+_r(r"\b(score|win\s+game|playoff|championship)\b",
+   "SPORTS", "game_outcome",
    researchability=40, sources=["ESPN"],
    strategy="sports_odds", queries=2, tags=["odds_available", "unpredictable"],
-   reasons=["Sports outcomes are hard to predict without domain expertise"])
+   reasons=["Game outcome predictions require sportsbook reference odds"])
+
+# sports_business — news-driven events (coach firings, transfers, contracts)
+_r(r"\b(trade\s+deadline|sign(ing)?|contract|salary\s+cap|coach(ing)?|fired|hire[d]?|draft\s+pick|transfer|relegat)\b",
+   "SPORTS", "sports_business",
+   researchability=72, sources=["ESPN", "Reuters", "The Athletic"],
+   strategy="news_analysis", queries=5, tags=["news_trackable"],
+   reasons=["Sports business events are covered by sports press",
+            "Coach hirings, transfers, and contracts are researchable"])
+
+# sports_general — awards, records, retirements
+_r(r"\b(mvp|season\s+record|award|hall\s+of\s+fame|retire[d]?|sport)\b",
+   "SPORTS", "sports_general",
+   researchability=40, sources=["ESPN"],
+   strategy="news_analysis", queries=2, tags=["unpredictable"],
+   reasons=["Sports awards and records are hard to predict"])
 
 # ── WEATHER ──────────────────────────────────────────────────────────
 
@@ -435,8 +450,10 @@ _r(r"\b(meme\s+coin|meme\s+stock|dog\s+race|eating\s+contest|hot\s+dog|challenge
 # Categories that should NOT be researched at all
 _SKIP_CATEGORIES: set[str] = {"SOCIAL_MEDIA"}
 
-# Categories where we have no information edge
+# Categories / subcategories where we have no information edge
+# Note: sports_business is NOT low-edge (news-driven, researchable)
 _LOW_EDGE_CATEGORIES: set[str] = {"SPORTS"}
+_LOW_EDGE_SUBCATEGORIES: set[str] = {"game_outcome", "sports_general"}
 
 
 def classify_market(question: str, description: str = "") -> MarketClassification:

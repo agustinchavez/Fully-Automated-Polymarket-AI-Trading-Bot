@@ -150,6 +150,20 @@ def get_enabled_connectors(config: Any) -> list[BaseResearchConnector]:
         except Exception as e:
             log.warning("registry.predictit_load_failed", error=str(e))
 
+    if getattr(config, "sports_odds_enabled", False):
+        try:
+            from src.research.connectors.sports_odds import SportsOddsConnector
+            connectors.append(SportsOddsConnector(config))
+        except Exception as e:
+            log.warning("registry.sports_odds_load_failed", error=str(e))
+
+    if getattr(config, "sports_stats_enabled", False):
+        try:
+            from src.research.connectors.sports_stats import SportsStatsConnector
+            connectors.append(SportsStatsConnector(config))
+        except Exception as e:
+            log.warning("registry.sports_stats_load_failed", error=str(e))
+
     log.debug(
         "registry.connectors_loaded",
         count=len(connectors),

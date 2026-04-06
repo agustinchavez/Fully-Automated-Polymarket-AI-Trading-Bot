@@ -297,18 +297,18 @@ class TestSportsClassification:
     def test_super_bowl(self):
         c = classify_market("Will the Chiefs win the Super Bowl?")
         assert c.category == "SPORTS"
-        assert c.subcategory == "major_leagues"
+        assert c.subcategory == "game_outcome"
         assert c.researchability <= 55
 
     def test_ufc(self):
         c = classify_market("Will the UFC champion defend the title?")
         assert c.category == "SPORTS"
-        assert c.subcategory == "combat"
+        assert c.subcategory == "game_outcome"
 
     def test_f1(self):
         c = classify_market("Will Verstappen win the F1 championship?")
         assert c.category == "SPORTS"
-        assert c.subcategory == "motorsport"
+        assert c.subcategory == "game_outcome"
 
     def test_sports_low_queries(self):
         c = classify_market("Will the NBA finals go to game 7?")

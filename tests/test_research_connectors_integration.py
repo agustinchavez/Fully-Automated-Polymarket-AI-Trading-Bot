@@ -36,6 +36,8 @@ class TestRegistry:
         config.pubmed_enabled = False
         config.manifold_enabled = False
         config.predictit_enabled = False
+        config.sports_odds_enabled = False
+        config.sports_stats_enabled = False
         connectors = get_enabled_connectors(config)
         assert connectors == []
 
@@ -59,6 +61,8 @@ class TestRegistry:
         config.pubmed_enabled = False
         config.manifold_enabled = False
         config.predictit_enabled = False
+        config.sports_odds_enabled = False
+        config.sports_stats_enabled = False
         connectors = get_enabled_connectors(config)
         assert len(connectors) == 1
         assert connectors[0].name == "open_meteo"
@@ -83,6 +87,8 @@ class TestRegistry:
         config.pubmed_enabled = False
         config.manifold_enabled = False
         config.predictit_enabled = False
+        config.sports_odds_enabled = False
+        config.sports_stats_enabled = False
         connectors = get_enabled_connectors(config)
         assert len(connectors) == 3
         names = {c.name for c in connectors}
@@ -110,8 +116,10 @@ class TestRegistry:
         config.reddit_sentiment_enabled = True
         config.manifold_enabled = True
         config.predictit_enabled = True
+        config.sports_odds_enabled = True
+        config.sports_stats_enabled = True
         connectors = get_enabled_connectors(config)
-        assert len(connectors) == 18
+        assert len(connectors) == 20
 
     def test_new_connectors_enabled_individually(self) -> None:
         for connector_flag, expected_name in [
@@ -127,6 +135,8 @@ class TestRegistry:
             ("reddit_sentiment_enabled", "reddit_sentiment"),
             ("manifold_enabled", "manifold"),
             ("predictit_enabled", "predictit"),
+            ("sports_odds_enabled", "sports_odds"),
+            ("sports_stats_enabled", "sports_stats"),
         ]:
             config = MagicMock()
             config.openmeteo_enabled = False
@@ -147,6 +157,8 @@ class TestRegistry:
             config.pubmed_enabled = False
             config.manifold_enabled = False
             config.predictit_enabled = False
+            config.sports_odds_enabled = False
+            config.sports_stats_enabled = False
             setattr(config, connector_flag, True)
             connectors = get_enabled_connectors(config)
             assert len(connectors) == 1

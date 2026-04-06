@@ -88,6 +88,15 @@ class ResearchConfig(BaseModel):
     reddit_client_secret: str = ""
     pubmed_api_key: str = ""  # optional NCBI key
     pubmed_max_results: int = 5
+    # Sports intelligence connectors
+    sports_odds_enabled: bool = False
+    sports_stats_enabled: bool = False
+    sports_odds_api_key: str = ""         # The Odds API key
+    sports_stats_api_key: str = ""        # API-Football key
+    sports_book_weights: dict[str, float] = Field(default_factory=lambda: {
+        "pinnacle": 0.40, "betfair": 0.30, "draftkings": 0.20, "fanduel": 0.10,
+    })
+    sports_min_books: int = 2             # min sportsbooks needed for consensus
     # Improvement 6: Additional consensus connectors
     manifold_enabled: bool = False
     predictit_enabled: bool = False
@@ -694,6 +703,7 @@ _SECRET_FIELDS = frozenset({
     "fred_api_key", "coingecko_api_key", "congress_api_key",
     "courtlistener_api_key", "openfda_api_key",
     "reddit_client_id", "reddit_client_secret", "pubmed_api_key",
+    "sports_odds_api_key", "sports_stats_api_key",
 })
 
 
@@ -765,6 +775,8 @@ _ENV_OVERRIDES: dict[str, tuple[str, str, type]] = {
     "REDDIT_CLIENT_ID": ("research", "reddit_client_id", str),
     "REDDIT_CLIENT_SECRET": ("research", "reddit_client_secret", str),
     "NCBI_API_KEY": ("research", "pubmed_api_key", str),
+    "ODDS_API_KEY": ("research", "sports_odds_api_key", str),
+    "API_FOOTBALL_KEY": ("research", "sports_stats_api_key", str),
 }
 
 

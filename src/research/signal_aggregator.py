@@ -58,6 +58,13 @@ class SignalStack:
     manifold_traders: int = 0
     predictit_probability: float | None = None
 
+    # ── Sports consensus (Sports Intelligence Layer) ────────────
+    sportsbook_consensus: float | None = None
+    sportsbook_spread_pp: float | None = None
+    sportsbook_count: int = 0
+    sportsbook_sharp_price: float | None = None  # Pinnacle-specific
+    sports_context: str = ""  # form/H2H summary
+
     # ── Calendar events (Improvement 8) ────────────────────────
     calendar_events: list[Any] = field(default_factory=list)
 
@@ -110,6 +117,17 @@ def build_signal_stack(
                 stack.predictit_probability = float(price)
                 consensus_prices.append(float(price))
 
+            elif platform == "sportsbooks" and price is not None:
+                stack.sportsbook_consensus = float(price)
+                stack.sportsbook_spread_pp = cs.get("spread_pp")
+                stack.sportsbook_count = cs.get("books", 0)
+                stack.sportsbook_sharp_price = (
+                    float(cs["sharp_book"])
+                    if cs.get("sharp_book") is not None
+                    else None
+                )
+                consensus_prices.append(float(price))
+
         # ── Behavioral signals ────────────────────────────────────
         bs = raw.get("behavioral_signal")
         if bs and isinstance(bs, dict):
@@ -128,6 +146,9 @@ def build_signal_stack(
             elif sig_source == "reddit" and sig_type == "sentiment":
                 stack.reddit_sentiment = bs.get("value")
                 stack.reddit_post_count = bs.get("post_count", 0)
+
+            elif sig_source == "sports_stats" and sig_type == "sports_context":
+                stack.sports_context = source.content or ""
 
     # ── Microstructure signals (Improvement 2) ────────────────────
     if micro_signals is not None:
@@ -218,6 +239,21 @@ def render_signal_stack(stack: SignalStack) -> str:
         consensus_lines.append(
             f"- PredictIt: {stack.predictit_probability:.1%}"
         )
+    if stack.sportsbook_consensus is not None:
+        sharp_str = (
+            f", Pinnacle sharp: {stack.sportsbook_sharp_price:.1%}"
+            if stack.sportsbook_sharp_price is not None
+            else ""
+        )
+        spread_str = (
+            f", spread: {stack.sportsbook_spread_pp:.1f}pp"
+            if stack.sportsbook_spread_pp is not None
+            else ""
+        )
+        consensus_lines.append(
+            f"- Sportsbook consensus: {stack.sportsbook_consensus:.1%}"
+            f" ({stack.sportsbook_count} books{sharp_str}{spread_str})"
+        )
 
     if consensus_lines:
         sections.append(
@@ -257,6 +293,11 @@ def render_signal_stack(stack: SignalStack) -> str:
         behavioral_lines.append(
             f"- Reddit sentiment: {stack.reddit_sentiment:+.2f} ({direction},"
             f" {stack.reddit_post_count} posts)"
+        )
+    if stack.sports_context:
+        # Truncate to first 300 chars to keep prompt manageable
+        behavioral_lines.append(
+            f"- Sports context: {stack.sports_context[:300]}"
         )
 
     if behavioral_lines:
@@ -378,6 +419,8 @@ def compute_signal_confluence(
         consensus_prices.append(stack.manifold_probability)
     if stack.predictit_probability is not None:
         consensus_prices.append(stack.predictit_probability)
+    if stack.sportsbook_consensus is not None:
+        consensus_prices.append(stack.sportsbook_consensus)
 
     if not consensus_prices:
         return 1.0

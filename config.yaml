@@ -52,6 +52,8 @@ research:
   google_trends_enabled: false # needs SERPAPI_KEY or TAVILY_API_KEY with quota
   reddit_sentiment_enabled: false
   pubmed_enabled: true
+  sports_odds_enabled: false  # needs ODDS_API_KEY
+  sports_stats_enabled: false  # needs API_FOOTBALL_KEY
   manifold_enabled: false
   predictit_enabled: false
   primary_domains:
