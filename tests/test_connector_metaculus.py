@@ -10,6 +10,9 @@ import pytest
 from src.research.connectors.metaculus import MetaculusConnector
 from src.research.source_fetcher import FetchedSource
 
+# All TestFetch tests need an API key to pass the early-exit guard
+_KEY_PATCH = patch.object(MetaculusConnector, "_get_api_key", return_value="test-key")
+
 
 def _make_metaculus_response(
     title: str = "Will the Fed cut rates?",
@@ -113,23 +116,24 @@ class TestRelevance:
 
 class TestFetch:
     def test_match_above_jaccard_returns_source(self) -> None:
-        c = MetaculusConnector()
+        with _KEY_PATCH:
+            c = MetaculusConnector()
 
-        mock_resp = MagicMock()
-        mock_resp.json.return_value = _make_metaculus_response(
-            title="Will the Fed cut rates?", prob=0.61, forecasters=847
-        )
-        mock_resp.raise_for_status = MagicMock()
-
-        mock_client = AsyncMock()
-        mock_client.get = AsyncMock(return_value=mock_resp)
-        c._client = mock_client
-
-        with patch("src.research.connectors.metaculus.rate_limiter") as mock_rl:
-            mock_rl.get.return_value.acquire = AsyncMock()
-            sources = asyncio.run(
-                c._fetch_impl("Will the Fed cut rates?", "MACRO")
+            mock_resp = MagicMock()
+            mock_resp.json.return_value = _make_metaculus_response(
+                title="Will the Fed cut rates?", prob=0.61, forecasters=847
             )
+            mock_resp.raise_for_status = MagicMock()
+
+            mock_client = AsyncMock()
+            mock_client.get = AsyncMock(return_value=mock_resp)
+            c._client = mock_client
+
+            with patch("src.research.connectors.metaculus.rate_limiter") as mock_rl:
+                mock_rl.get.return_value.acquire = AsyncMock()
+                sources = asyncio.run(
+                    c._fetch_impl("Will the Fed cut rates?", "MACRO")
+                )
 
         assert len(sources) == 1
         src = sources[0]
@@ -142,152 +146,159 @@ class TestFetch:
         assert signal["forecasters"] == 847
 
     def test_match_below_jaccard_returns_empty(self) -> None:
-        c = MetaculusConnector()
+        with _KEY_PATCH:
+            c = MetaculusConnector()
 
-        mock_resp = MagicMock()
-        mock_resp.json.return_value = _make_metaculus_response(
-            title="Completely different unrelated topic here",
-            prob=0.50,
-            forecasters=100,
-        )
-        mock_resp.raise_for_status = MagicMock()
-
-        mock_client = AsyncMock()
-        mock_client.get = AsyncMock(return_value=mock_resp)
-        c._client = mock_client
-
-        with patch("src.research.connectors.metaculus.rate_limiter") as mock_rl:
-            mock_rl.get.return_value.acquire = AsyncMock()
-            sources = asyncio.run(
-                c._fetch_impl("Will the Fed cut rates?", "MACRO")
+            mock_resp = MagicMock()
+            mock_resp.json.return_value = _make_metaculus_response(
+                title="Completely different unrelated topic here",
+                prob=0.50,
+                forecasters=100,
             )
+            mock_resp.raise_for_status = MagicMock()
+
+            mock_client = AsyncMock()
+            mock_client.get = AsyncMock(return_value=mock_resp)
+            c._client = mock_client
+
+            with patch("src.research.connectors.metaculus.rate_limiter") as mock_rl:
+                mock_rl.get.return_value.acquire = AsyncMock()
+                sources = asyncio.run(
+                    c._fetch_impl("Will the Fed cut rates?", "MACRO")
+                )
 
         assert sources == []
 
     def test_below_min_forecasters_returns_empty(self) -> None:
-        c = MetaculusConnector()
+        with _KEY_PATCH:
+            c = MetaculusConnector()
 
-        mock_resp = MagicMock()
-        mock_resp.json.return_value = _make_metaculus_response(
-            title="Will the Fed cut rates?",
-            prob=0.61,
-            forecasters=5,  # Below default min of 20
-        )
-        mock_resp.raise_for_status = MagicMock()
-
-        mock_client = AsyncMock()
-        mock_client.get = AsyncMock(return_value=mock_resp)
-        c._client = mock_client
-
-        with patch("src.research.connectors.metaculus.rate_limiter") as mock_rl:
-            mock_rl.get.return_value.acquire = AsyncMock()
-            sources = asyncio.run(
-                c._fetch_impl("Will the Fed cut rates?", "MACRO")
+            mock_resp = MagicMock()
+            mock_resp.json.return_value = _make_metaculus_response(
+                title="Will the Fed cut rates?",
+                prob=0.61,
+                forecasters=5,  # Below default min of 20
             )
+            mock_resp.raise_for_status = MagicMock()
+
+            mock_client = AsyncMock()
+            mock_client.get = AsyncMock(return_value=mock_resp)
+            c._client = mock_client
+
+            with patch("src.research.connectors.metaculus.rate_limiter") as mock_rl:
+                mock_rl.get.return_value.acquire = AsyncMock()
+                sources = asyncio.run(
+                    c._fetch_impl("Will the Fed cut rates?", "MACRO")
+                )
 
         assert sources == []
 
     def test_no_api_results_returns_empty(self) -> None:
-        c = MetaculusConnector()
+        with _KEY_PATCH:
+            c = MetaculusConnector()
 
-        mock_resp = MagicMock()
-        mock_resp.json.return_value = {"results": []}
-        mock_resp.raise_for_status = MagicMock()
+            mock_resp = MagicMock()
+            mock_resp.json.return_value = {"results": []}
+            mock_resp.raise_for_status = MagicMock()
 
-        mock_client = AsyncMock()
-        mock_client.get = AsyncMock(return_value=mock_resp)
-        c._client = mock_client
+            mock_client = AsyncMock()
+            mock_client.get = AsyncMock(return_value=mock_resp)
+            c._client = mock_client
 
-        with patch("src.research.connectors.metaculus.rate_limiter") as mock_rl:
-            mock_rl.get.return_value.acquire = AsyncMock()
-            sources = asyncio.run(
-                c._fetch_impl("Will the Fed cut rates?", "MACRO")
-            )
+            with patch("src.research.connectors.metaculus.rate_limiter") as mock_rl:
+                mock_rl.get.return_value.acquire = AsyncMock()
+                sources = asyncio.run(
+                    c._fetch_impl("Will the Fed cut rates?", "MACRO")
+                )
 
         assert sources == []
 
     def test_api_error_returns_empty_via_fetch(self) -> None:
-        c = MetaculusConnector()
+        with _KEY_PATCH:
+            c = MetaculusConnector()
 
-        mock_client = AsyncMock()
-        mock_client.get = AsyncMock(side_effect=RuntimeError("API down"))
-        c._client = mock_client
+            mock_client = AsyncMock()
+            mock_client.get = AsyncMock(side_effect=RuntimeError("API down"))
+            c._client = mock_client
 
-        with patch("src.research.connectors.metaculus.rate_limiter") as mock_rl:
-            mock_rl.get.return_value.acquire = AsyncMock()
-            # Use .fetch() to go through base class circuit breaker
-            sources = asyncio.run(
-                c.fetch("Will the Fed cut rates?", "MACRO")
-            )
+            with patch("src.research.connectors.metaculus.rate_limiter") as mock_rl:
+                mock_rl.get.return_value.acquire = AsyncMock()
+                # Use .fetch() to go through base class circuit breaker
+                sources = asyncio.run(
+                    c.fetch("Will the Fed cut rates?", "MACRO")
+                )
 
         assert sources == []
 
     def test_prediction_missing_returns_empty(self) -> None:
-        c = MetaculusConnector()
+        with _KEY_PATCH:
+            c = MetaculusConnector()
 
-        mock_resp = MagicMock()
-        mock_resp.json.return_value = {
-            "results": [
-                {
-                    "id": 12345,
-                    "title": "Will the Fed cut rates?",
-                    "community_prediction": {"full": {}},  # No q2
-                    "number_of_forecasters": 847,
-                }
-            ]
-        }
-        mock_resp.raise_for_status = MagicMock()
+            mock_resp = MagicMock()
+            mock_resp.json.return_value = {
+                "results": [
+                    {
+                        "id": 12345,
+                        "title": "Will the Fed cut rates?",
+                        "community_prediction": {"full": {}},  # No q2
+                        "number_of_forecasters": 847,
+                    }
+                ]
+            }
+            mock_resp.raise_for_status = MagicMock()
 
-        mock_client = AsyncMock()
-        mock_client.get = AsyncMock(return_value=mock_resp)
-        c._client = mock_client
+            mock_client = AsyncMock()
+            mock_client.get = AsyncMock(return_value=mock_resp)
+            c._client = mock_client
 
-        with patch("src.research.connectors.metaculus.rate_limiter") as mock_rl:
-            mock_rl.get.return_value.acquire = AsyncMock()
-            sources = asyncio.run(
-                c._fetch_impl("Will the Fed cut rates?", "MACRO")
-            )
+            with patch("src.research.connectors.metaculus.rate_limiter") as mock_rl:
+                mock_rl.get.return_value.acquire = AsyncMock()
+                sources = asyncio.run(
+                    c._fetch_impl("Will the Fed cut rates?", "MACRO")
+                )
 
         assert sources == []
 
     def test_authority_score(self) -> None:
-        c = MetaculusConnector()
+        with _KEY_PATCH:
+            c = MetaculusConnector()
 
-        mock_resp = MagicMock()
-        mock_resp.json.return_value = _make_metaculus_response()
-        mock_resp.raise_for_status = MagicMock()
+            mock_resp = MagicMock()
+            mock_resp.json.return_value = _make_metaculus_response()
+            mock_resp.raise_for_status = MagicMock()
 
-        mock_client = AsyncMock()
-        mock_client.get = AsyncMock(return_value=mock_resp)
-        c._client = mock_client
+            mock_client = AsyncMock()
+            mock_client.get = AsyncMock(return_value=mock_resp)
+            c._client = mock_client
 
-        with patch("src.research.connectors.metaculus.rate_limiter") as mock_rl:
-            mock_rl.get.return_value.acquire = AsyncMock()
-            sources = asyncio.run(
-                c._fetch_impl("Will the Fed cut rates?", "MACRO")
-            )
+            with patch("src.research.connectors.metaculus.rate_limiter") as mock_rl:
+                mock_rl.get.return_value.acquire = AsyncMock()
+                sources = asyncio.run(
+                    c._fetch_impl("Will the Fed cut rates?", "MACRO")
+                )
 
         assert len(sources) == 1
         assert sources[0].authority_score == 0.95
 
     def test_confidence_is_jaccard_in_raw(self) -> None:
-        c = MetaculusConnector()
+        with _KEY_PATCH:
+            c = MetaculusConnector()
 
-        mock_resp = MagicMock()
-        mock_resp.json.return_value = _make_metaculus_response(
-            title="Will the Fed cut rates?", prob=0.70, forecasters=200
-        )
-        mock_resp.raise_for_status = MagicMock()
-
-        mock_client = AsyncMock()
-        mock_client.get = AsyncMock(return_value=mock_resp)
-        c._client = mock_client
-
-        with patch("src.research.connectors.metaculus.rate_limiter") as mock_rl:
-            mock_rl.get.return_value.acquire = AsyncMock()
-            sources = asyncio.run(
-                c._fetch_impl("Will the Fed cut rates?", "MACRO")
+            mock_resp = MagicMock()
+            mock_resp.json.return_value = _make_metaculus_response(
+                title="Will the Fed cut rates?", prob=0.70, forecasters=200
             )
+            mock_resp.raise_for_status = MagicMock()
+
+            mock_client = AsyncMock()
+            mock_client.get = AsyncMock(return_value=mock_resp)
+            c._client = mock_client
+
+            with patch("src.research.connectors.metaculus.rate_limiter") as mock_rl:
+                mock_rl.get.return_value.acquire = AsyncMock()
+                sources = asyncio.run(
+                    c._fetch_impl("Will the Fed cut rates?", "MACRO")
+                )
 
         assert len(sources) == 1
         signal = sources[0].raw["consensus_signal"]
@@ -295,29 +306,39 @@ class TestFetch:
         assert signal["confidence"] > 0.0
 
     def test_url_contains_question_id(self) -> None:
-        c = MetaculusConnector()
+        with _KEY_PATCH:
+            c = MetaculusConnector()
 
-        mock_resp = MagicMock()
-        mock_resp.json.return_value = _make_metaculus_response()
-        mock_resp.raise_for_status = MagicMock()
+            mock_resp = MagicMock()
+            mock_resp.json.return_value = _make_metaculus_response()
+            mock_resp.raise_for_status = MagicMock()
 
-        mock_client = AsyncMock()
-        mock_client.get = AsyncMock(return_value=mock_resp)
-        c._client = mock_client
+            mock_client = AsyncMock()
+            mock_client.get = AsyncMock(return_value=mock_resp)
+            c._client = mock_client
 
-        with patch("src.research.connectors.metaculus.rate_limiter") as mock_rl:
-            mock_rl.get.return_value.acquire = AsyncMock()
-            sources = asyncio.run(
-                c._fetch_impl("Will the Fed cut rates?", "MACRO")
-            )
+            with patch("src.research.connectors.metaculus.rate_limiter") as mock_rl:
+                mock_rl.get.return_value.acquire = AsyncMock()
+                sources = asyncio.run(
+                    c._fetch_impl("Will the Fed cut rates?", "MACRO")
+                )
 
         assert len(sources) == 1
         assert "12345" in sources[0].url
 
     def test_empty_search_terms_returns_empty(self) -> None:
+        with _KEY_PATCH:
+            c = MetaculusConnector()
+            # All stop words — _extract_search_terms returns ""
+            sources = asyncio.run(
+                c._fetch_impl("will the a an be?", "MACRO")
+            )
+        assert sources == []
+
+    def test_no_api_key_returns_empty(self) -> None:
+        """Connector should return [] when no API key is configured."""
         c = MetaculusConnector()
-        # All stop words — _extract_search_terms returns ""
         sources = asyncio.run(
-            c._fetch_impl("will the a an be?", "MACRO")
+            c._fetch_impl("Will the Fed cut rates?", "MACRO")
         )
         assert sources == []

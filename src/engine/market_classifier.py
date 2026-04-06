@@ -329,7 +329,7 @@ _r(r"\b(mvp|season\s+record|award|hall\s+of\s+fame|retire[d]?)\b",
 
 # sports_business — news-driven events (coach firings, transfers, contracts)
 # Must fire BEFORE game_outcome so "NFL expand to London" is business, not game
-_r(r"\b(trade\s+deadline|traded|salary\s+cap|coach(ing)?.*\b(fired|hire[d]?|change)|fired\s+(coach|manager|head)|draft\s+pick|transfer\s+(window|fee|market|list)|relegat|free\s+agenc|signing\s+(bonus|day)|player\s+sign|franchise\s+(relocat|expand|tag)|expansion\s+(team|draft))\b",
+_r(r"\b(trade\s+deadline|traded|salary\s+cap|coach(ing)?.*\b(fired|hire[d]?|change)|fired\s+(coach|manager|head)|draft\s+pick|transfer\s+(window|fee|market|list)|relegat|free\s+agenc|signing\s+(bonus|day)|player\s+sign|franchise\s+(relocat|expand|tag)|expansion\s+(team|draft)|relocate[ds]?)\b",
    "SPORTS", "sports_business",
    researchability=72, sources=["ESPN", "Reuters", "The Athletic"],
    strategy="news_analysis", queries=5, tags=["news_trackable"],
