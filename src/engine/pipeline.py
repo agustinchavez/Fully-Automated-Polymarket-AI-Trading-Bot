@@ -577,6 +577,34 @@ class PipelineRunner:
             use_probability_space_costs=self.config.risk.use_probability_space_costs,
         )
 
+        # Dual edge: if sportsbook consensus available, use max(model_edge, book_edge * 0.7)
+        signal_stack = getattr(ctx, "_signal_stack", None)
+        book_consensus = getattr(signal_stack, "sportsbook_consensus", None) if signal_stack else None
+        if book_consensus is not None:
+            poly_price = implied_for_edge
+            book_edge = abs(book_consensus - poly_price)
+            book_edge_discounted = book_edge * 0.7
+            model_edge = ctx.edge_result.abs_net_edge
+            if book_edge_discounted > model_edge:
+                # Re-calc edge using sportsbook-anchored probability
+                book_model_prob = book_consensus
+                ctx.edge_result = calculate_edge(
+                    implied_prob=implied_for_edge,
+                    model_prob=book_model_prob,
+                    transaction_fee_pct=self.config.risk.transaction_fee_pct,
+                    gas_cost_usd=self.config.risk.gas_cost_usd,
+                    holding_hours=ctx.features.hours_to_resolution,
+                    use_probability_space_costs=self.config.risk.use_probability_space_costs,
+                )
+                log.info(
+                    "engine.sportsbook_dual_edge",
+                    market_id=ctx.market_id,
+                    model_edge=round(model_edge, 4),
+                    book_edge=round(book_edge, 4),
+                    book_edge_discounted=round(book_edge_discounted, 4),
+                    used="sportsbook",
+                )
+
         # Track whale convergence for min_edge override later
         ctx_whale_converged = False
 

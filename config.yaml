@@ -47,7 +47,7 @@ research:
   arxiv_max_results: 5
   worldbank_mrv: 3
   kalshi_prior_enabled: true # needs Kalshi API key
-  metaculus_enabled: false # 403 — requires API registration
+  metaculus_enabled: true # needs METACULUS_API_KEY
   wikipedia_pageviews_enabled: true
   google_trends_enabled: false # needs SERPAPI_KEY or TAVILY_API_KEY with quota
   reddit_sentiment_enabled: false

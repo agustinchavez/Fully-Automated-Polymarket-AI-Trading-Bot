@@ -76,6 +76,7 @@ class ResearchConfig(BaseModel):
     # Phase 2: Behavioral signal connectors
     kalshi_prior_enabled: bool = False
     metaculus_enabled: bool = False
+    metaculus_api_key: str = ""
     wikipedia_pageviews_enabled: bool = False
     google_trends_enabled: bool = False
     reddit_sentiment_enabled: bool = False
@@ -703,6 +704,7 @@ _SECRET_FIELDS = frozenset({
     "fred_api_key", "coingecko_api_key", "congress_api_key",
     "courtlistener_api_key", "openfda_api_key",
     "reddit_client_id", "reddit_client_secret", "pubmed_api_key",
+    "metaculus_api_key",
     "sports_odds_api_key", "sports_stats_api_key",
 })
 
@@ -775,6 +777,7 @@ _ENV_OVERRIDES: dict[str, tuple[str, str, type]] = {
     "REDDIT_CLIENT_ID": ("research", "reddit_client_id", str),
     "REDDIT_CLIENT_SECRET": ("research", "reddit_client_secret", str),
     "NCBI_API_KEY": ("research", "pubmed_api_key", str),
+    "METACULUS_API_KEY": ("research", "metaculus_api_key", str),
     "ODDS_API_KEY": ("research", "sports_odds_api_key", str),
     "API_FOOTBALL_KEY": ("research", "sports_stats_api_key", str),
 }

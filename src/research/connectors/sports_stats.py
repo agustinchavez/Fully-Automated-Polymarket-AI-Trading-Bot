@@ -9,6 +9,11 @@ The stats context is emitted as a ``behavioral_signal`` in
 
 Free tier: 100 requests/day, no credit card required.
 https://www.api-football.com/
+
+API call budget per market:
+  - Cached team ID: 2 calls (fixtures + H2H)
+  - Uncached team ID: 3 calls (team search + fixtures + H2H)
+  - Form is derived from H2H results to avoid 2 extra /statistics calls.
 """
 
 from __future__ import annotations
@@ -43,6 +48,11 @@ _TEAM_RE = re.compile(
 
 class SportsStatsConnector(BaseResearchConnector):
     """Fetch soccer team form and H2H from API-Football."""
+
+    def __init__(self, config: Any = None) -> None:
+        super().__init__(config)
+        # Persistent cache: normalized team name → API-Football team ID
+        self._team_id_cache: dict[str, int] = {}
 
     @property
     def name(self) -> str:
@@ -80,34 +90,16 @@ class SportsStatsConnector(BaseResearchConnector):
         if not teams:
             return []
 
-        await rate_limiter.get("sports_stats").acquire()
-
         client = self._get_client()
-        headers = {
-            "x-apisports-key": api_key,
-        }
+        headers = {"x-apisports-key": api_key}
 
-        # Search for team
+        # Resolve team ID (cached or via API)
         search_team = teams[0]
-        resp = await client.get(
-            f"{_API_BASE}/teams",
-            params={"search": search_team},
-            headers=headers,
-        )
-        resp.raise_for_status()
-        data = resp.json()
-
-        team_results = data.get("response", [])
-        if not team_results:
-            return []
-
-        team_info = team_results[0]
-        team_id = team_info.get("team", {}).get("id")
-        team_name = team_info.get("team", {}).get("name", search_team)
+        team_id = await self._resolve_team_id(search_team, client, headers)
         if not team_id:
             return []
 
-        # Fetch upcoming fixtures for this team
+        # Fetch upcoming fixtures for this team (1 API call)
         await rate_limiter.get("sports_stats").acquire()
         resp = await client.get(
             f"{_API_BASE}/fixtures",
@@ -115,8 +107,7 @@ class SportsStatsConnector(BaseResearchConnector):
             headers=headers,
         )
         resp.raise_for_status()
-        fixtures_data = resp.json()
-        fixtures = fixtures_data.get("response", [])
+        fixtures = resp.json().get("response", [])
 
         # Try to find fixture matching the away team too
         matched_fixture = None
@@ -149,14 +140,14 @@ class SportsStatsConnector(BaseResearchConnector):
         away_info = matched_fixture.get("teams", {}).get("away", {})
         home_name = home_info.get("name", "Home")
         away_name = away_info.get("name", "Away")
+        home_team_id = home_info.get("id")
         league_info = matched_fixture.get("league", {})
         league_name = league_info.get("name", "")
-        league_id = league_info.get("id")
-        season = league_info.get("season")
 
-        # Fetch H2H if we have both team IDs
+        # Fetch H2H — also derives form from recent results (1 API call)
         h2h_record = {"home_wins": 0, "draws": 0, "away_wins": 0}
-        home_team_id = home_info.get("id")
+        home_form = ""
+        away_form = ""
         if home_team_id and away_team_id:
             try:
                 await rate_limiter.get("sports_stats").acquire()
@@ -166,58 +157,25 @@ class SportsStatsConnector(BaseResearchConnector):
                     headers=headers,
                 )
                 resp.raise_for_status()
-                h2h_data = resp.json()
-                h2h_record = self._parse_h2h(
-                    h2h_data.get("response", []),
-                    home_team_id,
-                )
+                h2h_fixtures = resp.json().get("response", [])
+                h2h_record = self._parse_h2h(h2h_fixtures, home_team_id)
+                # Derive form from H2H results (avoids 2 extra API calls)
+                home_form = self._derive_form(h2h_fixtures, home_team_id)
+                away_form = self._derive_form(h2h_fixtures, away_team_id)
             except Exception as e:
                 log.debug("sports_stats.h2h_failed", error=str(e))
-
-        # Fetch team form (last 5 results) if league info available
-        home_form = ""
-        away_form = ""
-        if league_id and season:
-            try:
-                await rate_limiter.get("sports_stats").acquire()
-                resp = await client.get(
-                    f"{_API_BASE}/teams/statistics",
-                    params={"team": home_team_id, "season": season, "league": league_id},
-                    headers=headers,
-                )
-                resp.raise_for_status()
-                stats = resp.json().get("response", {})
-                home_form = stats.get("form", "")[:5] if stats.get("form") else ""
-            except Exception as e:
-                log.debug("sports_stats.home_form_failed", error=str(e))
-
-            if away_team_id:
-                try:
-                    await rate_limiter.get("sports_stats").acquire()
-                    resp = await client.get(
-                        f"{_API_BASE}/teams/statistics",
-                        params={"team": away_team_id, "season": season, "league": league_id},
-                        headers=headers,
-                    )
-                    resp.raise_for_status()
-                    stats = resp.json().get("response", {})
-                    away_form = stats.get("form", "")[:5] if stats.get("form") else ""
-                except Exception as e:
-                    log.debug("sports_stats.away_form_failed", error=str(e))
 
         # Compute form score (W=3, D=1, L=0)
         form_score = self._compute_form_score(home_form)
 
         # Build content summary
-        lines = [
-            f"Sports Context: {home_name} vs {away_name}",
-        ]
+        lines = [f"Sports Context: {home_name} vs {away_name}"]
         if league_name:
             lines.append(f"League: {league_name}")
         if home_form:
-            lines.append(f"Home form (last 5): {home_form}")
+            lines.append(f"Home form (last {len(home_form)}): {home_form}")
         if away_form:
-            lines.append(f"Away form (last 5): {away_form}")
+            lines.append(f"Away form (last {len(away_form)}): {away_form}")
         h2h_total = h2h_record["home_wins"] + h2h_record["draws"] + h2h_record["away_wins"]
         if h2h_total > 0:
             lines.append(
@@ -230,7 +188,7 @@ class SportsStatsConnector(BaseResearchConnector):
         return [
             self._make_source(
                 title=f"Sports Context: {home_name} vs {away_name}",
-                url=f"https://www.api-football.com/",
+                url="https://www.api-football.com/",
                 snippet=f"Form: {home_form or 'N/A'} vs {away_form or 'N/A'}, H2H: {h2h_record['home_wins']}-{h2h_record['draws']}-{h2h_record['away_wins']}",
                 publisher="API-Football",
                 content=content,
@@ -248,6 +206,35 @@ class SportsStatsConnector(BaseResearchConnector):
                 },
             )
         ]
+
+    async def _resolve_team_id(
+        self,
+        team_name: str,
+        client: Any,
+        headers: dict[str, str],
+    ) -> int | None:
+        """Resolve team name to API-Football team ID, with persistent cache."""
+        cache_key = team_name.lower().strip()
+        if cache_key in self._team_id_cache:
+            return self._team_id_cache[cache_key]
+
+        await rate_limiter.get("sports_stats").acquire()
+        resp = await client.get(
+            f"{_API_BASE}/teams",
+            params={"search": team_name},
+            headers=headers,
+        )
+        resp.raise_for_status()
+        data = resp.json()
+
+        team_results = data.get("response", [])
+        if not team_results:
+            return None
+
+        team_id = team_results[0].get("team", {}).get("id")
+        if team_id:
+            self._team_id_cache[cache_key] = team_id
+        return team_id
 
     @staticmethod
     def _extract_teams(question: str) -> list[str]:
@@ -289,6 +276,33 @@ class SportsStatsConnector(BaseResearchConnector):
                     record["home_wins"] += 1
 
         return record
+
+    @staticmethod
+    def _derive_form(
+        fixtures: list[dict[str, Any]],
+        team_id: int,
+    ) -> str:
+        """Derive W/D/L form string from H2H fixtures for a given team."""
+        form_chars: list[str] = []
+        for fix in fixtures:
+            goals = fix.get("goals", {})
+            home_goals = goals.get("home")
+            away_goals = goals.get("away")
+            if home_goals is None or away_goals is None:
+                continue
+
+            teams = fix.get("teams", {})
+            fixture_home_id = teams.get("home", {}).get("id")
+            is_home = fixture_home_id == team_id
+
+            if home_goals == away_goals:
+                form_chars.append("D")
+            elif is_home:
+                form_chars.append("W" if home_goals > away_goals else "L")
+            else:
+                form_chars.append("W" if away_goals > home_goals else "L")
+
+        return "".join(form_chars)
 
     @staticmethod
     def _compute_form_score(form: str) -> float:

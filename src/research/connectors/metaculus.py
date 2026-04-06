@@ -1,14 +1,17 @@
 """Metaculus consensus connector — expert forecaster probabilities.
 
-Uses the free Metaculus API (no key required):
+Uses the Metaculus API:
 - Endpoint: metaculus.com/api2/questions/
 - Jaccard similarity filter for question matching
 - Minimum forecasters gate for result quality
 - Returns community_prediction.full.q2 (median probability)
+
+API key required (set METACULUS_API_KEY env var).
 """
 
 from __future__ import annotations
 
+import os
 import re
 from typing import Any
 
@@ -43,11 +46,22 @@ class MetaculusConnector(BaseResearchConnector):
             "ENTERTAINMENT", "TECH", "REGULATION", "UNKNOWN",
         }
 
+    def _get_api_key(self) -> str:
+        """Get API key from config or environment."""
+        key = getattr(self._config, "metaculus_api_key", "") or ""
+        if not key:
+            key = os.environ.get("METACULUS_API_KEY", "")
+        return key
+
     async def _fetch_impl(
         self,
         question: str,
         market_type: str,
     ) -> list[FetchedSource]:
+        api_key = self._get_api_key()
+        if not api_key:
+            return []
+
         min_forecasters = getattr(self._config, "metaculus_min_forecasters", 20)
         min_jaccard = getattr(self._config, "metaculus_min_jaccard", 0.60)
 
@@ -59,6 +73,11 @@ class MetaculusConnector(BaseResearchConnector):
         await rate_limiter.get("metaculus").acquire()
 
         client = self._get_client()
+        headers = {
+            "Accept": "application/json",
+            "Authorization": f"Token {api_key}",
+            "User-Agent": "PolymarketBot/1.0 (research; +https://github.com)",
+        }
         resp = await client.get(
             _METACULUS_API,
             params={
@@ -67,10 +86,7 @@ class MetaculusConnector(BaseResearchConnector):
                 "limit": 5,
                 "type": "forecast",
             },
-            headers={
-                "Accept": "application/json",
-                "User-Agent": "PolymarketBot/1.0 (research; +https://github.com)",
-            },
+            headers=headers,
         )
         resp.raise_for_status()
         data = resp.json()

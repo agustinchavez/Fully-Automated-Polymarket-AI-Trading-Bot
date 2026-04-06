@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import os
 import re
+import time
 from typing import Any
 
 from src.connectors.rate_limiter import rate_limiter
@@ -21,6 +22,8 @@ from src.research.connectors.base import BaseResearchConnector
 from src.research.source_fetcher import FetchedSource
 
 log = get_logger(__name__)
+
+_CACHE_TTL_SECS = 600  # 10-minute cache per sport key
 
 _API_BASE = "https://api.the-odds-api.com/v4/sports"
 
@@ -68,6 +71,11 @@ _TEAM_WIN_RE = re.compile(
 class SportsOddsConnector(BaseResearchConnector):
     """Fetch sportsbook odds and compute vig-free consensus probability."""
 
+    def __init__(self, config: Any = None) -> None:
+        super().__init__(config)
+        # Cache: sport_key → (timestamp, events_json)
+        self._cache: dict[str, tuple[float, list[dict[str, Any]]]] = {}
+
     @property
     def name(self) -> str:
         return "sports_odds"
@@ -97,20 +105,24 @@ class SportsOddsConnector(BaseResearchConnector):
 
         teams = self._extract_teams(question)
 
-        await rate_limiter.get("sports_odds").acquire()
+        # Check cache before making HTTP request
+        events = self._get_cached(sport_key)
+        if events is None:
+            await rate_limiter.get("sports_odds").acquire()
 
-        client = self._get_client()
-        resp = await client.get(
-            f"{_API_BASE}/{sport_key}/odds/",
-            params={
-                "apiKey": api_key,
-                "regions": "us,eu",
-                "markets": "h2h",
-                "oddsFormat": "decimal",
-            },
-        )
-        resp.raise_for_status()
-        events = resp.json()
+            client = self._get_client()
+            resp = await client.get(
+                f"{_API_BASE}/{sport_key}/odds/",
+                params={
+                    "apiKey": api_key,
+                    "regions": "us,eu",
+                    "markets": "h2h",
+                    "oddsFormat": "decimal",
+                },
+            )
+            resp.raise_for_status()
+            events = resp.json()
+            self._set_cached(sport_key, events)
 
         if not events:
             return []
@@ -151,6 +163,21 @@ class SportsOddsConnector(BaseResearchConnector):
                 },
             )
         ]
+
+    def _get_cached(self, sport_key: str) -> list[dict[str, Any]] | None:
+        """Return cached events if still within TTL, else None."""
+        entry = self._cache.get(sport_key)
+        if entry is None:
+            return None
+        ts, events = entry
+        if time.monotonic() - ts > _CACHE_TTL_SECS:
+            del self._cache[sport_key]
+            return None
+        return events
+
+    def _set_cached(self, sport_key: str, events: list[dict[str, Any]]) -> None:
+        """Store events in cache with current timestamp."""
+        self._cache[sport_key] = (time.monotonic(), events)
 
     @staticmethod
     def _extract_sport_key(question: str) -> str | None:

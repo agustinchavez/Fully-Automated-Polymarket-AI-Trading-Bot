@@ -316,9 +316,35 @@ _r(r"\b(apple|google|microsoft|meta|amazon|tesla)\b.{0,40}\b(launch|announc|rele
    reasons=["Tech launch rumors are common but unreliable"])
 
 # ── SPORTS ───────────────────────────────────────────────────────────
+# Order matters: sports_general first (MVP/awards catch before league names),
+# then sports_business (news-driven), then game_outcome (catch-all).
+
+# sports_general — awards, records, retirements (must fire BEFORE game_outcome
+# so "NFL MVP" doesn't match the NFL game_outcome rule first)
+_r(r"\b(mvp|season\s+record|award|hall\s+of\s+fame|retire[d]?)\b",
+   "SPORTS", "sports_general",
+   researchability=22, sources=["ESPN"],
+   strategy="news_analysis", queries=2, tags=["unpredictable"],
+   reasons=["Sports awards and records are hard to predict"])
+
+# sports_business — news-driven events (coach firings, transfers, contracts)
+# Must fire BEFORE game_outcome so "NFL expand to London" is business, not game
+_r(r"\b(trade\s+deadline|traded|salary\s+cap|coach(ing)?.*\b(fired|hire[d]?|change)|fired\s+(coach|manager|head)|draft\s+pick|transfer\s+(window|fee|market|list)|relegat|free\s+agenc|signing\s+(bonus|day)|player\s+sign|franchise\s+(relocat|expand|tag)|expansion\s+(team|draft))\b",
+   "SPORTS", "sports_business",
+   researchability=72, sources=["ESPN", "Reuters", "The Athletic"],
+   strategy="news_analysis", queries=5, tags=["news_trackable"],
+   reasons=["Sports business events are covered by sports press",
+            "Coach hirings, transfers, and contracts are researchable"])
+
+# League expansion/relocation — must fire BEFORE game_outcome
+_r(r"\b(nfl|nba|mlb|nhl|mls|premier\s+league)\b.{0,30}\b(expand|relocat|franchise|new\s+team)\b",
+   "SPORTS", "sports_business",
+   researchability=72, sources=["ESPN", "Reuters", "The Athletic"],
+   strategy="news_analysis", queries=5, tags=["news_trackable"],
+   reasons=["League expansion/relocation is a business decision"])
 
 # game_outcome — direct match/game results (odds-dependent)
-_r(r"\b(super\s+bowl|nfl|nba\s+final|world\s+series|mlb|nhl|stanley\s+cup|world\s+cup|premier\s+league|champions\s+league)\b",
+_r(r"\b(super\s+bowl|nfl|nba\s+finals?|nba|world\s+series|mlb|nhl|stanley\s+cup|world\s+cup|premier\s+league|champions\s+league)\b",
    "SPORTS", "game_outcome",
    researchability=50, sources=["ESPN", "FiveThirtyEight Sports"],
    strategy="sports_odds", queries=3, tags=["odds_available", "unpredictable"],
@@ -349,26 +375,12 @@ _r(r"\b(vs\.?\s+fc|sc\s+vs|fc\s+vs|end\s+in\s+a\s+draw|match\s+draw|soccer|footb
    strategy="sports_odds", queries=3, tags=["odds_available", "unpredictable"],
    reasons=["Soccer match odds available from sharp sportsbooks"])
 
-_r(r"\b(score|win\s+game|playoff|championship)\b",
+# Generic game markers — "win vs", "score", "playoff", etc.
+_r(r"\b(win\b.*\bvs\.?|vs\.?\s+\w+.*\bwin|score|win\s+game|playoff|championship)\b",
    "SPORTS", "game_outcome",
    researchability=40, sources=["ESPN"],
    strategy="sports_odds", queries=2, tags=["odds_available", "unpredictable"],
    reasons=["Game outcome predictions require sportsbook reference odds"])
-
-# sports_business — news-driven events (coach firings, transfers, contracts)
-_r(r"\b(trade\s+deadline|sign(ing)?|contract|salary\s+cap|coach(ing)?|fired|hire[d]?|draft\s+pick|transfer|relegat)\b",
-   "SPORTS", "sports_business",
-   researchability=72, sources=["ESPN", "Reuters", "The Athletic"],
-   strategy="news_analysis", queries=5, tags=["news_trackable"],
-   reasons=["Sports business events are covered by sports press",
-            "Coach hirings, transfers, and contracts are researchable"])
-
-# sports_general — awards, records, retirements
-_r(r"\b(mvp|season\s+record|award|hall\s+of\s+fame|retire[d]?|sport)\b",
-   "SPORTS", "sports_general",
-   researchability=40, sources=["ESPN"],
-   strategy="news_analysis", queries=2, tags=["unpredictable"],
-   reasons=["Sports awards and records are hard to predict"])
 
 # ── WEATHER ──────────────────────────────────────────────────────────
 

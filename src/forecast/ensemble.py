@@ -144,6 +144,13 @@ RULES:
   Explain why you agree or disagree with each. If signals diverge by >10pp,
   increase your uncertainty.
 - If no consensus signals are present, form your estimate independently.
+- SPORTSBOOK CONSENSUS (if present) is from professional bookmakers who
+  set sharp lines with real money at stake. Treat the sportsbook consensus
+  probability as a strong anchor — deviate only with specific evidence the
+  books may not have priced in (e.g. late injury news, weather conditions,
+  lineup changes). The Pinnacle sharp line is the most reliable single price.
+  If SPORTS CONTEXT (form/H2H) is also present, use it to evaluate whether
+  deviation from sportsbook consensus is justified.
 - ORDER FLOW SIGNALS (if present) reflect real-time order book dynamics.
   Positive OFI + smart money dominant = informed traders positioning UP.
   Weight this alongside but separately from research evidence.
@@ -238,6 +245,13 @@ RULES:
 - If CONSENSUS SIGNALS are present above, consider them as reference points.
   Explain why you agree or disagree with each. If signals diverge by >10pp,
   increase your uncertainty.
+- SPORTSBOOK CONSENSUS (if present) is from professional bookmakers who
+  set sharp lines with real money at stake. Treat the sportsbook consensus
+  probability as a strong anchor — deviate only with specific evidence the
+  books may not have priced in (e.g. late injury news, weather conditions,
+  lineup changes). The Pinnacle sharp line is the most reliable single price.
+  If SPORTS CONTEXT (form/H2H) is also present, use it to evaluate whether
+  deviation from sportsbook consensus is justified.
 - ORDER FLOW SIGNALS (if present) reflect real-time order book dynamics.
   Positive OFI + smart money dominant = informed traders positioning UP.
   Weight this alongside but separately from research evidence.

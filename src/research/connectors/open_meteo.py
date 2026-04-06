@@ -42,12 +42,17 @@ class OpenMeteoConnector(BaseResearchConnector):
         return "open_meteo"
 
     def relevant_categories(self) -> set[str]:
-        return {"WEATHER"}
+        return {"WEATHER", "SPORTS"}
 
     def is_relevant(self, question: str, market_type: str) -> bool:
-        """Check if this connector should run for the given question."""
-        if market_type in self.relevant_categories():
+        """Check if this connector should run for the given question.
+
+        For SPORTS, only fires when the question mentions weather keywords
+        (rain, snow, weather, etc.) — outdoor venue weather can affect outcomes.
+        """
+        if market_type == "WEATHER":
             return True
+        # For SPORTS or any other category, require explicit weather keywords
         return self._question_matches_keywords(question, _WEATHER_KEYWORDS)
 
     async def _fetch_impl(

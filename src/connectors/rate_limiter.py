@@ -56,7 +56,7 @@ DEFAULT_LIMITS: dict[str, BucketConfig] = {
     "deepseek": BucketConfig(tokens_per_second=3.0, max_burst=5, name="DeepSeek"),
     "manifold": BucketConfig(tokens_per_second=5.0, max_burst=10, name="Manifold"),
     "predictit": BucketConfig(tokens_per_second=0.5, max_burst=1, name="PredictIt"),
-    "sports_odds": BucketConfig(tokens_per_second=0.5, max_burst=2, name="TheOddsAPI"),
+    "sports_odds": BucketConfig(tokens_per_second=0.017, max_burst=1, name="TheOddsAPI"),
     "sports_stats": BucketConfig(tokens_per_second=0.5, max_burst=2, name="APIFootball"),
 }
 
