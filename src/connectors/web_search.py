@@ -14,8 +14,9 @@ from __future__ import annotations
 
 import abc
 import os
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field
-from typing import Any
+from typing import Any, ClassVar
 from urllib.parse import urlparse
 
 import httpx
@@ -288,7 +289,17 @@ class DuckDuckGoProvider(SearchProvider):
 
     Uses the duckduckgo-search library (pip install duckduckgo-search).
     No rate limits enforced by DDG, but we self-rate-limit to be polite.
+
+    IMPORTANT: DDGS uses primp (Rust HTTP client) internally.  Multiple
+    concurrent primp.Client initialisations deadlock the process, so we
+    serialise all DDGS calls through a single-worker thread pool.
     """
+
+    # Single-worker executor prevents concurrent primp.Client inits
+    # which deadlock when DDGS._get_engines() spawns parallel threads.
+    _executor: ClassVar[ThreadPoolExecutor] = ThreadPoolExecutor(
+        max_workers=1, thread_name_prefix="ddgs",
+    )
 
     async def close(self) -> None:
         pass  # No persistent client
@@ -307,11 +318,12 @@ class DuckDuckGoProvider(SearchProvider):
 
         await rate_limiter.get("duckduckgo").acquire()
         with track_latency("duckduckgo"):
-            # DDGS is sync — run in thread pool to avoid blocking
+            # DDGS is sync — run in a dedicated single-worker thread pool
+            # to avoid primp Rust client initialisation deadlocks.
             import asyncio
             loop = asyncio.get_running_loop()
             raw_results = await loop.run_in_executor(
-                None,
+                self._executor,
                 lambda: list(DDGS(timeout=8).text(query, max_results=num_results)),
             )
 
