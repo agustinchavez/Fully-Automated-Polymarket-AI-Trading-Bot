@@ -8782,4 +8782,4 @@ def run_dashboard(
     print(f"  🔧 Maintenance worker started (snapshots / backup / vacuum)")
 
     print()
-    app.run(host=host, port=port, debug=debug)
+    app.run(host=host, port=port, debug=debug, threaded=True)

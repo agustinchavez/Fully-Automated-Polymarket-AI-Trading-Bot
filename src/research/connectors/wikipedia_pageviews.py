@@ -156,13 +156,15 @@ class WikipediaPageviewsConnector(BaseResearchConnector):
         # Fallback: extract capitalized noun phrases
         words = question.split()
         proper_nouns = [
-            w for w in words
+            re.sub(r'[^\w]', '', w) for w in words
             if w[0].isupper() and len(w) > 2
             and w.lower() not in {
                 "will", "the", "does", "has", "are", "can",
                 "should", "what", "when", "how", "is",
             }
         ]
+        # Filter out empty strings after stripping
+        proper_nouns = [w for w in proper_nouns if w]
         if proper_nouns:
             return "_".join(proper_nouns[:2])
 

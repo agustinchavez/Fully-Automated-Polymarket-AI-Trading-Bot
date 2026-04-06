@@ -153,9 +153,20 @@ class SourceFetcher:
         secondary = self._config.secondary_domains
         blocked = self._config.blocked_domains
 
-        # Run queries concurrently
+        # Run queries concurrently with a hard timeout to prevent hangs
+        # (DDGS threads can't be cancelled by asyncio, so we need an outer deadline)
         tasks = [self._run_query(q) for q in queries]
-        results_per_query = await asyncio.gather(*tasks, return_exceptions=True)
+        try:
+            results_per_query = await asyncio.wait_for(
+                asyncio.gather(*tasks, return_exceptions=True),
+                timeout=45.0,
+            )
+        except asyncio.TimeoutError:
+            log.warning(
+                "source_fetcher.query_gather_timeout",
+                queries=len(queries),
+            )
+            results_per_query = []
 
         for query, results in zip(queries, results_per_query):
             if isinstance(results, BaseException):
@@ -205,7 +216,17 @@ class SourceFetcher:
             content_tasks = [
                 self.fetch_page_content(src.url) for src in top[:fetch_n]
             ]
-            contents = await asyncio.gather(*content_tasks, return_exceptions=True)
+            try:
+                contents = await asyncio.wait_for(
+                    asyncio.gather(*content_tasks, return_exceptions=True),
+                    timeout=30.0,
+                )
+            except asyncio.TimeoutError:
+                log.warning(
+                    "source_fetcher.content_fetch_timeout",
+                    pages=fetch_n,
+                )
+                contents = []
             for i, content in enumerate(contents):
                 if isinstance(content, str) and content:
                     top[i].content = content

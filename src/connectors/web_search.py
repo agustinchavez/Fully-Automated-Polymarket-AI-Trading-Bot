@@ -312,7 +312,7 @@ class DuckDuckGoProvider(SearchProvider):
             loop = asyncio.get_running_loop()
             raw_results = await loop.run_in_executor(
                 None,
-                lambda: list(DDGS().text(query, max_results=num_results)),
+                lambda: list(DDGS(timeout=8).text(query, max_results=num_results)),
             )
 
         results: list[SearchResult] = []
