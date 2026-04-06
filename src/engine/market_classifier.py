@@ -363,6 +363,30 @@ _r(r"\b(formula\s*1|f1|nascar|indy\s*500|motogp|race\s+winner)\b",
    strategy="sports_odds", queries=2, tags=["odds_available", "unpredictable"],
    reasons=["Motorsport outcomes highly dependent on race-day conditions"])
 
+_r(r"\b(tennis|atp|wta|grand\s+slam|wimbledon|roland\s+garros|french\s+open|australian\s+open|us\s+open\s+tennis|masters\s+\d{4}|rolex\s+masters|monte\s+carlo\s+masters|indian\s+wells|miami\s+open|davis\s+cup)\b",
+   "SPORTS", "game_outcome",
+   researchability=50, sources=["ESPN", "ATP Tour", "Sportsbooks"],
+   strategy="sports_odds", queries=3, tags=["odds_available", "unpredictable"],
+   reasons=["Tennis match odds available from sharp sportsbooks"])
+
+_r(r"\b(golf|pga|lpga|masters\s+tournament|the\s+open|ryder\s+cup|british\s+open)\b",
+   "SPORTS", "game_outcome",
+   researchability=42, sources=["ESPN", "PGA Tour", "Sportsbooks"],
+   strategy="sports_odds", queries=2, tags=["odds_available", "unpredictable"],
+   reasons=["Golf tournament odds available but high variance"])
+
+_r(r"\b(cricket|ipl|ashes|test\s+match|t20|one\s+day\s+international|odi)\b",
+   "SPORTS", "game_outcome",
+   researchability=50, sources=["ESPN Cricinfo", "Sportsbooks"],
+   strategy="sports_odds", queries=3, tags=["odds_available", "unpredictable"],
+   reasons=["Cricket match odds available from sharp sportsbooks"])
+
+_r(r"\b(rugby|six\s+nations|rugby\s+world\s+cup)\b",
+   "SPORTS", "game_outcome",
+   researchability=45, sources=["ESPN", "Sportsbooks"],
+   strategy="sports_odds", queries=2, tags=["odds_available", "unpredictable"],
+   reasons=["Rugby match odds available from sportsbooks"])
+
 _r(r"\b(serie\s*[ab]|calcio|ligue\s*1|bundesliga|eredivisie|primeira\s*liga|la\s+liga|el\s+clasico|mls|liga\s+mx)\b",
    "SPORTS", "game_outcome",
    researchability=50, sources=["ESPN", "Sportsbooks"],
@@ -381,6 +405,15 @@ _r(r"\b(win\b.*\bvs\.?|vs\.?\s+\w+.*\bwin|score|win\s+game|playoff|championship)
    researchability=40, sources=["ESPN"],
    strategy="sports_odds", queries=2, tags=["odds_available", "unpredictable"],
    reasons=["Game outcome predictions require sportsbook reference odds"])
+
+# Broad "X vs Y" catch-all — Polymarket sports markets typically use
+# "Tournament: Player A vs Player B" or "Team A vs Team B" format.
+# This must be the LAST sports rule to avoid catching non-sports "vs" usages.
+_r(r"^[^?]*:\s*[A-Z][\w\s.'-]+\bvs\.?\s+[A-Z][\w\s.'-]+$",
+   "SPORTS", "game_outcome",
+   researchability=40, sources=["ESPN", "Sportsbooks"],
+   strategy="sports_odds", queries=2, tags=["odds_available", "unpredictable"],
+   reasons=["Matchup format (X vs Y) typically indicates sports event"])
 
 # ── WEATHER ──────────────────────────────────────────────────────────
 

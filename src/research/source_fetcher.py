@@ -86,11 +86,38 @@ class SourceFetcher:
         if not self._connectors:
             return []
 
+        # Filter to relevant connectors, then run concurrently with a hard timeout
+        relevant = [
+            conn for conn in self._connectors
+            if market_type in conn.relevant_categories()
+            or conn.is_relevant(question, market_type)
+        ]
+        if not relevant:
+            return []
+
+        tasks = [conn.fetch(question, market_type) for conn in relevant]
+        try:
+            outcomes = await asyncio.wait_for(
+                asyncio.gather(*tasks, return_exceptions=True),
+                timeout=20.0,
+            )
+        except asyncio.TimeoutError:
+            log.warning(
+                "source_fetcher.structured_sources_timeout",
+                connectors=len(relevant),
+            )
+            return []
+
         results: list[FetchedSource] = []
-        for conn in self._connectors:
-            if market_type in conn.relevant_categories() or conn.is_relevant(question, market_type):
-                sources = await conn.fetch(question, market_type)
-                results.extend(sources)
+        for conn, outcome in zip(relevant, outcomes):
+            if isinstance(outcome, BaseException):
+                log.warning(
+                    "source_fetcher.connector_failed",
+                    connector=conn.name,
+                    error=str(outcome),
+                )
+                continue
+            results.extend(outcome)
         return results
 
     async def fetch_sources(

@@ -53,6 +53,23 @@ _SPORT_KEYWORDS: dict[str, str] = {
     "f1": "motorsport_formula_one",
     "formula 1": "motorsport_formula_one",
     "nascar": "motorsport_nascar",
+    "atp": "tennis_atp",
+    "wta": "tennis_wta",
+    "tennis": "tennis_atp",
+    "wimbledon": "tennis_atp",
+    "roland garros": "tennis_atp",
+    "french open": "tennis_atp",
+    "australian open": "tennis_atp",
+    "us open tennis": "tennis_atp",
+    "monte carlo masters": "tennis_atp",
+    "indian wells": "tennis_atp",
+    "miami open": "tennis_atp",
+    "pga": "golf_pga",
+    "golf": "golf_pga",
+    "masters tournament": "golf_masters",
+    "cricket": "cricket",
+    "ipl": "cricket_ipl",
+    "rugby": "rugby_union",
 }
 
 # ── Team extraction regex ────────────────────────────────────────────
