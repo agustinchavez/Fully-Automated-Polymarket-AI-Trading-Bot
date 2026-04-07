@@ -619,7 +619,7 @@ class TestPlatformMetadata:
             "Will Elon Musk post 400 tweets?",
             raw={"feeType": "culture_fees"},
         )
-        assert c.category == "SOCIAL_MEDIA"
+        assert c.category == "CULTURE"
         assert c.confidence == 0.95
 
     def test_feetype_finance(self):
@@ -627,7 +627,7 @@ class TestPlatformMetadata:
             "Will WTI Crude Oil hit $20?",
             raw={"feeType": "finance_prices_fees"},
         )
-        assert c.category == "CORPORATE"
+        assert c.category == "MACRO"
 
     def test_feetype_tech(self):
         c = classify_market(
@@ -942,3 +942,152 @@ class TestPlatformMetadata:
             },
         )
         assert c.category == "SPORTS"  # series slug wins
+
+    # ── Fix B: feeType mapping corrections ────────────────────────
+
+    def test_finance_prices_fees_maps_to_macro(self):
+        """finance_prices_fees → MACRO/commodity (not CORPORATE)."""
+        c = classify_market(
+            "Will Natural Gas (NG) hit $2.00?",
+            raw={"feeType": "finance_prices_fees"},
+        )
+        assert c.category == "MACRO"
+        assert c.subcategory == "commodity"
+
+    def test_culture_fees_maps_to_culture(self):
+        """culture_fees → CULTURE/entertainment (not SOCIAL_MEDIA)."""
+        c = classify_market(
+            "Will The Weeknd have the most monthly Spotify listeners?",
+            raw={"feeType": "culture_fees"},
+        )
+        assert c.category == "CULTURE"
+        assert c.subcategory == "entertainment"
+
+    # ── Fix C: tag-based classification ────────────────────────────
+
+    def test_geopolitics_tag_classification(self):
+        """Event with tags=[{slug:'geopolitics'}] → GEOPOLITICS."""
+        c = classify_market(
+            "Will Israel take military action in Gaza?",
+            raw={
+                "events": [{
+                    "tags": [{"slug": "geopolitics"}],
+                }],
+            },
+        )
+        assert c.category == "GEOPOLITICS"
+        assert c.subcategory == "international"
+
+    def test_middle_east_tag_classification(self):
+        """Event with tags=[{slug:'middle-east'}] → GEOPOLITICS/conflict."""
+        c = classify_market(
+            "Will Israel conduct military action in Beirut?",
+            raw={
+                "events": [{
+                    "tags": [{"slug": "middle-east"}],
+                }],
+            },
+        )
+        assert c.category == "GEOPOLITICS"
+        assert c.subcategory == "conflict"
+
+    def test_science_tag_classification(self):
+        """Event with tags=[{slug:'science'}] → SCIENCE/general."""
+        c = classify_market(
+            "Will there be exactly 2 earthquakes of magnitude 6.5?",
+            raw={
+                "events": [{
+                    "tags": [{"slug": "science"}],
+                }],
+            },
+        )
+        assert c.category == "SCIENCE"
+        assert c.subcategory == "general"
+
+    def test_earthquakes_tag_classification(self):
+        """Event with tags=[{slug:'earthquakes'}] → SCIENCE/seismic."""
+        c = classify_market(
+            "How many earthquakes will there be?",
+            raw={
+                "events": [{
+                    "tags": [{"slug": "earthquakes"}],
+                }],
+            },
+        )
+        assert c.category == "SCIENCE"
+        assert c.subcategory == "seismic"
+
+    def test_culture_music_tag_classification(self):
+        """Event with tags=[{slug:'music'}] → CULTURE/music."""
+        c = classify_market(
+            "Will Spotify listeners reach 100M?",
+            raw={
+                "events": [{
+                    "tags": [{"slug": "music"}],
+                }],
+            },
+        )
+        assert c.category == "CULTURE"
+        assert c.subcategory == "music"
+
+    def test_elections_tag_classification(self):
+        """Event with tags=[{slug:'elections'}] → ELECTION/general."""
+        c = classify_market(
+            "Will voter turnout be 74-77%?",
+            raw={
+                "events": [{
+                    "tags": [{"slug": "elections"}],
+                }],
+            },
+        )
+        assert c.category == "ELECTION"
+        assert c.subcategory == "general"
+
+    def test_economics_tag_classification(self):
+        """Event with tags=[{slug:'economics'}] → MACRO/economic_data."""
+        c = classify_market(
+            "Will GDP growth exceed 3%?",
+            raw={
+                "events": [{
+                    "tags": [{"slug": "economics"}],
+                }],
+            },
+        )
+        assert c.category == "MACRO"
+        assert c.subcategory == "economic_data"
+
+    def test_commodities_tag_classification(self):
+        """Event with tags=[{slug:'commodities'}] → MACRO/commodity."""
+        c = classify_market(
+            "Will WTI Crude Oil hit $150?",
+            raw={
+                "events": [{
+                    "tags": [{"slug": "commodities"}],
+                }],
+            },
+        )
+        assert c.category == "MACRO"
+        assert c.subcategory == "commodity"
+
+    def test_tag_fallback_after_higher_priority(self):
+        """Tags are only checked when feeType/sportsMarketType/series/category are absent."""
+        c = classify_market(
+            "Match?",
+            raw={
+                "feeType": "sports_fees_v2",
+                "events": [{"tags": [{"slug": "science"}]}],
+            },
+        )
+        assert c.category == "SPORTS"  # feeType wins over tags
+
+    def test_tag_label_fallback(self):
+        """Tags can use 'label' when 'slug' is missing."""
+        c = classify_market(
+            "Military operation?",
+            raw={
+                "events": [{
+                    "tags": [{"label": "Geopolitics"}],
+                }],
+            },
+        )
+        assert c.category == "GEOPOLITICS"

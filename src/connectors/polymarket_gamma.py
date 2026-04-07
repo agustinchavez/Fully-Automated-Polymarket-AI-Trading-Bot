@@ -29,24 +29,51 @@ _TYPE_KEYWORDS: dict[str, list[str]] = {
         "cpi", "inflation", "unemployment", "gdp", "interest rate", "fed",
         "fomc", "ecb", "bls", "nonfarm", "payroll", "pce", "treasury",
         "yield", "rate cut", "rate hike", "recession", "jobs report",
+        "natural gas", "crude oil", "wti", "(ng)", "brent",
+        "oil price", "gold price", "silver", "commodity",
+    ],
+    "GEOPOLITICS": [
+        "military action", "military strike", "military operation",
+        "war", "invasion", "ceasefire", "sanctions", "diplomacy",
+        "gaza", "beirut", "ukraine", "nato", "treaty",
     ],
     "ELECTION": [
         "election", "vote", "president", "governor", "senate", "congress",
         "primary", "nominee", "ballot", "electoral", "poll", "caucus",
+        "parliament", "coalition", "referendum", "turnout",
     ],
     "CORPORATE": [
-        "ipo", "merger", "acquisition", "sec", "earnings", "stock",
-        "company", "ceo", "board", "filing", "shares", "revenue",
-        "fda approval", "antitrust",
+        "ipo", "merger", "acquisition", "sec", "earnings",
+        "ceo", "board", "filing", "shares", "antitrust", "layoff",
+    ],
+    "CULTURE": [
+        "spotify", "listeners", "monthly listeners", "streaming",
+        "grammy", "oscar", "emmy", "billboard", "box office",
     ],
     "WEATHER": [
-        "hurricane", "temperature", "noaa", "storm", "weather", "climate",
-        "wildfire", "flood", "earthquake", "tornado",
+        "hurricane", "temperature", "noaa", "storm", "weather",
+        "wildfire", "flood", "tornado", "rainfall", "celsius", "fahrenheit",
+    ],
+    "SCIENCE": [
+        "earthquake", "magnitude", "seismic", "richter",
+        "volcano", "eruption", "nasa", "asteroid",
     ],
     "SPORTS": [
         "super bowl", "nfl", "nba", "mlb", "world cup", "olympics",
-        "championship", "playoffs", "mvp", "score",
+        "championship", "playoffs", "mvp",
+        "rolex", "monte carlo", "atp", "wta", "wimbledon",
+        "us open", "french open", "australian open",
+        " vs. ", " vs ", "spread:", "o/u ", "moneyline",
+        "fc ", " fc", "bundesliga", "premier league",
     ],
+}
+
+# Higher-priority categories win ties (e.g. GEOPOLITICS beats ELECTION
+# when both "military" and "vote" appear in a question).
+_CATEGORY_PRIORITY: dict[str, int] = {
+    "GEOPOLITICS": 10, "SCIENCE": 9, "CULTURE": 8, "MACRO": 7,
+    "SPORTS": 6, "WEATHER": 5, "CRYPTO": 4, "CORPORATE": 3,
+    "TECH": 2, "ELECTION": 1,
 }
 
 
@@ -67,7 +94,7 @@ class GammaMarket(BaseModel):
     question: str = ""
     description: str = ""
     category: str = ""
-    market_type: str = ""  # MACRO | ELECTION | CORPORATE | WEATHER | SPORTS | UNKNOWN
+    market_type: str = ""  # MACRO | ELECTION | CORPORATE | WEATHER | SPORTS | GEOPOLITICS | CULTURE | SCIENCE | UNKNOWN
     end_date: dt.datetime | None = None
     created_at: dt.datetime | None = None  # When the market started trading
     active: bool = True
@@ -121,7 +148,11 @@ class GammaMarket(BaseModel):
 # ── Classification ───────────────────────────────────────────────────
 
 def classify_market_type(question: str, category: str = "", description: str = "") -> str:
-    """Classify a market into a type based on keywords."""
+    """Classify a market into a type based on keywords.
+
+    When multiple categories tie on keyword count, the higher-priority
+    category wins (e.g. GEOPOLITICS beats ELECTION).
+    """
     text = f"{question} {category} {description}".lower()
     scores: dict[str, int] = {}
     for mtype, keywords in _TYPE_KEYWORDS.items():
@@ -130,7 +161,9 @@ def classify_market_type(question: str, category: str = "", description: str = "
             scores[mtype] = score
     if not scores:
         return "UNKNOWN"
-    return max(scores, key=scores.get)  # type: ignore[arg-type]
+    max_score = max(scores.values())
+    top = [c for c, s in scores.items() if s == max_score]
+    return max(top, key=lambda c: _CATEGORY_PRIORITY.get(c, 0))
 
 
 # ── Client ───────────────────────────────────────────────────────────

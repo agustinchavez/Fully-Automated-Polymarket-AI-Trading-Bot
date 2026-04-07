@@ -205,6 +205,31 @@ class TestClassifyMarketType:
     def test_unknown_market(self) -> None:
         assert classify_market_type("Something completely unrelated") == "UNKNOWN"
 
+    # ── Fix D: new categories and improved keywords ──────────────
+
+    def test_natural_gas_is_macro(self) -> None:
+        assert classify_market_type("Will Natural Gas (NG) hit $2.00 in April?") == "MACRO"
+
+    def test_crude_oil_is_macro(self) -> None:
+        assert classify_market_type("Will WTI Crude Oil hit $150?") == "MACRO"
+
+    def test_earthquake_is_science(self) -> None:
+        assert classify_market_type("Will there be 2 earthquakes of magnitude 6.5?") == "SCIENCE"
+
+    def test_geopolitics_military(self) -> None:
+        assert classify_market_type("Will Israel take military action in Gaza?") == "GEOPOLITICS"
+
+    def test_culture_spotify(self) -> None:
+        assert classify_market_type("Will The Weeknd have the most Spotify listeners?") == "CULTURE"
+
+    def test_sports_tennis(self) -> None:
+        assert classify_market_type("Rolex Monte Carlo Masters: Player A vs Player B") == "SPORTS"
+
+    def test_geopolitics_beats_election_on_tie(self) -> None:
+        """When both GEOPOLITICS and ELECTION match, GEOPOLITICS wins by priority."""
+        result = classify_market_type("Will the vote on sanctions pass?")
+        assert result == "GEOPOLITICS"  # sanctions (GEOPOLITICS) + vote (ELECTION), geopolitics priority wins
+
 
 class TestCreatedAtParsing:
     """Test created_at / age_hours parsing from Gamma API raw data."""

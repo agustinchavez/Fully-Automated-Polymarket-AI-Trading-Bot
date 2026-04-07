@@ -505,3 +505,40 @@ class TestPipelineRunner:
 
         assert hasattr(TradingEngine, "_record_performance_log")
         assert hasattr(TradingEngine, "_maybe_run_post_mortem")
+
+    def test_log_candidate_uses_classification(self) -> None:
+        """_log_candidate with classification writes classification.category, not market.market_type."""
+        runner = self._make_runner()
+        market = MagicMock()
+        market.id = "m-1"
+        market.question = "Will it rain?"
+        market.market_type = "UNKNOWN"
+        market.best_bid = 0.5
+
+        classification = MagicMock()
+        classification.category = "WEATHER"
+
+        runner._log_candidate(
+            cycle_id=1, market=market, decision="SKIP", reason="test",
+            classification=classification,
+        )
+
+        runner._db.insert_candidate.assert_called_once()
+        assert runner._db.insert_candidate.call_args.kwargs["market_type"] == "WEATHER"
+
+    def test_log_candidate_fallback_to_market_type(self) -> None:
+        """_log_candidate with classification=None writes market.market_type (backward compat)."""
+        runner = self._make_runner()
+        market = MagicMock()
+        market.id = "m-2"
+        market.question = "Will BTC hit 100k?"
+        market.market_type = "CRYPTO"
+        market.best_bid = 0.4
+
+        runner._log_candidate(
+            cycle_id=2, market=market, decision="SKIP", reason="test",
+            classification=None,
+        )
+
+        runner._db.insert_candidate.assert_called_once()
+        assert runner._db.insert_candidate.call_args.kwargs["market_type"] == "CRYPTO"

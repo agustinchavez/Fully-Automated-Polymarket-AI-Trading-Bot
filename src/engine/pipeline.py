@@ -127,7 +127,8 @@ class PipelineRunner:
                 retry_after=cb.time_until_retry(),
             )
             self._log_candidate(ctx.cycle_id, ctx.market, decision="SKIP",
-                                reason="Research circuit breaker open")
+                                reason="Research circuit breaker open",
+                                classification=ctx.classification)
             return False
 
         from src.research.query_builder import build_queries
@@ -161,7 +162,8 @@ class PipelineRunner:
             cb.record_failure()
             log.error("engine.research_failed", market_id=ctx.market_id, error=str(e))
             self._log_candidate(ctx.cycle_id, ctx.market, decision="SKIP",
-                                reason=f"Research failed: {e}")
+                                reason=f"Research failed: {e}",
+                                classification=ctx.classification)
             return False
         finally:
             try:
@@ -964,6 +966,7 @@ class PipelineRunner:
                 evidence=ctx.evidence, edge_result=ctx.edge_result,
                 decision="NO TRADE", reason="Stake too small",
                 stake=ctx.position.stake_usd,
+                classification=ctx.classification,
             )
             ctx.position = None
 
@@ -1003,6 +1006,7 @@ class PipelineRunner:
                 ctx.cycle_id, market, forecast=forecast, evidence=ctx.evidence,
                 edge_result=edge_result, decision="NO TRADE",
                 reason="No token ID available",
+                classification=ctx.classification,
             )
             return
 
@@ -1073,6 +1077,7 @@ class PipelineRunner:
                             evidence=ctx.evidence, edge_result=edge_result,
                             decision="NO TRADE",
                             reason=f"Patience cancelled: {patience_result.reason}",
+                            classification=ctx.classification,
                         )
                         return
                     elif patience_result.entry_price > 0:
@@ -1365,6 +1370,7 @@ class PipelineRunner:
             decision="TRADE", reason="All checks passed",
             stake=ctx.position.stake_usd if ctx.position else 0.0,
             order_status=order_statuses[0] if order_statuses else "",
+            classification=ctx.classification,
         )
         if self._db:
             mode = (
@@ -1413,14 +1419,23 @@ class PipelineRunner:
         edge_result: Any = None,
         decision: str = "SKIP", reason: str = "",
         stake: float = 0.0, order_status: str = "",
+        classification: Any = None,
     ) -> None:
         if not self._db:
             return
         try:
+            # Prefer rich classifier category over legacy market_type
+            effective_type = (
+                classification.category
+                if classification
+                and getattr(classification, "category", "UNKNOWN")
+                not in ("UNKNOWN", "")
+                else market.market_type
+            )
             self._db.insert_candidate(
                 cycle_id=cycle_id, market_id=market.id,
                 question=market.question[:200],
-                market_type=market.market_type,
+                market_type=effective_type,
                 implied_prob=(getattr(forecast, "implied_probability", market.best_bid)
                               if forecast else market.best_bid),
                 model_prob=(getattr(forecast, "model_probability", 0.0)

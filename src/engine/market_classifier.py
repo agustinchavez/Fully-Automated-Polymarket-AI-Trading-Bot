@@ -578,8 +578,8 @@ _FEE_TYPE_CATEGORY_MAP: dict[str, tuple[str, str]] = {
     "sports_fees_v2": ("SPORTS", "game_outcome"),
     "weather_fees": ("WEATHER", "forecast"),
     "crypto_fees_v2": ("CRYPTO", "price"),
-    "culture_fees": ("SOCIAL_MEDIA", "social_posts"),
-    "finance_prices_fees": ("CORPORATE", "earnings"),
+    "culture_fees": ("CULTURE", "entertainment"),
+    "finance_prices_fees": ("MACRO", "commodity"),
     "tech_fees": ("TECH", "ai"),
 }
 
@@ -699,6 +699,33 @@ _PLATFORM_SCIENCE_CONFIG = {
     "reasons": ["Classified via Polymarket platform metadata (event.category)"],
 }
 
+_PLATFORM_MACRO_CONFIG = {
+    "researchability": 75,
+    "sources": ["FRED", "BLS", "World Bank"],
+    "strategy": "official_data",
+    "queries": 5,
+    "tags": ["economic_data", "platform_classified"],
+    "reasons": ["Classified via Polymarket platform metadata (feeType)"],
+}
+
+_PLATFORM_GEOPOLITICS_CONFIG = {
+    "researchability": 70,
+    "sources": ["Reuters", "AP News", "Foreign Affairs"],
+    "strategy": "news_analysis",
+    "queries": 5,
+    "tags": ["political", "platform_classified"],
+    "reasons": ["Classified via Polymarket platform metadata (tags)"],
+}
+
+_PLATFORM_CULTURE_CONFIG = {
+    "researchability": 55,
+    "sources": ["Variety", "Billboard", "Box Office Mojo"],
+    "strategy": "news_analysis",
+    "queries": 4,
+    "tags": ["entertainment", "platform_classified"],
+    "reasons": ["Classified via Polymarket platform metadata (feeType/tags)"],
+}
+
 _PLATFORM_CONFIGS: dict[str, dict[str, Any]] = {
     "SPORTS": _PLATFORM_SPORTS_CONFIG,
     "WEATHER": _PLATFORM_WEATHER_CONFIG,
@@ -708,6 +735,52 @@ _PLATFORM_CONFIGS: dict[str, dict[str, Any]] = {
     "TECH": _PLATFORM_TECH_CONFIG,
     "ELECTION": _PLATFORM_ELECTION_CONFIG,
     "SCIENCE": _PLATFORM_SCIENCE_CONFIG,
+    "MACRO": _PLATFORM_MACRO_CONFIG,
+    "GEOPOLITICS": _PLATFORM_GEOPOLITICS_CONFIG,
+    "CULTURE": _PLATFORM_CULTURE_CONFIG,
+}
+
+# ── Event tags[] slug → (category, subcategory) mapping ──────────
+# Maps Polymarket's event.tags[].slug to our taxonomy.
+# This is the richest classification signal Polymarket provides,
+# covering geopolitics, culture, science, and many edge cases that
+# other metadata fields miss.
+_TAG_SLUG_MAP: dict[str, tuple[str, str]] = {
+    # Geopolitics
+    "geopolitics":       ("GEOPOLITICS", "international"),
+    "middle-east":       ("GEOPOLITICS", "conflict"),
+    "ukraine":           ("GEOPOLITICS", "conflict"),
+    "military":          ("GEOPOLITICS", "conflict"),
+    "nato":              ("GEOPOLITICS", "diplomacy"),
+    # Science
+    "science":           ("SCIENCE", "general"),
+    "space":             ("SCIENCE", "space"),
+    "climate":           ("SCIENCE", "environment"),
+    "earthquakes":       ("SCIENCE", "seismic"),
+    # Culture / Entertainment
+    "culture":           ("CULTURE", "entertainment"),
+    "music":             ("CULTURE", "music"),
+    "entertainment":     ("CULTURE", "entertainment"),
+    "celebrities":       ("CULTURE", "celebrity"),
+    "social-media":      ("SOCIAL_MEDIA", "metrics"),
+    "streaming":         ("CULTURE", "entertainment"),
+    # Politics / Elections
+    "elections":         ("ELECTION", "general"),
+    "politics":          ("ELECTION", "general"),
+    "us-politics":       ("ELECTION", "general"),
+    "global-politics":   ("ELECTION", "international"),
+    "europe":            ("ELECTION", "international"),
+    # Economics / Macro
+    "economics":         ("MACRO", "economic_data"),
+    "finance":           ("MACRO", "financial"),
+    "commodities":       ("MACRO", "commodity"),
+    # Tech
+    "technology":        ("TECH", "ai"),
+    "ai":                ("TECH", "ai"),
+    # Crypto
+    "crypto":            ("CRYPTO", "price"),
+    "bitcoin":           ("CRYPTO", "btc_price"),
+    "ethereum":          ("CRYPTO", "eth_price"),
 }
 
 
@@ -721,6 +794,7 @@ def _classify_from_platform_metadata(
       2. ``feeType`` — fee schedule category (sports/weather/crypto)
       3. Event ``series`` slug — sport refinement
       4. Event ``category`` — legacy category string (older markets)
+      5. Event ``tags[]`` slugs — broadest coverage (geopolitics, culture, etc.)
 
     Returns None if no platform metadata yields a classification,
     allowing the caller to fall back to regex rules.
@@ -761,6 +835,17 @@ def _classify_from_platform_metadata(
             ev_cat = event.get("category", "") or ""
             if ev_cat in _EVENT_CATEGORY_MAP:
                 category, subcategory = _EVENT_CATEGORY_MAP[ev_cat]
+                break
+
+    # 5. Event tags — richest signal, covers geopolitics/culture/science
+    if category is None:
+        for event in raw.get("events", []):
+            for tag in event.get("tags", []):
+                slug = tag.get("slug", "") or tag.get("label", "").lower()
+                if slug in _TAG_SLUG_MAP:
+                    category, subcategory = _TAG_SLUG_MAP[slug]
+                    break
+            if category:
                 break
 
     if category is None or subcategory is None:
