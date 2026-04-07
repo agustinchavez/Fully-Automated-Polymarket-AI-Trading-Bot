@@ -31,7 +31,7 @@ _MIN_SIMILARITY = 0.50
 # Regex to extract artist names from common Polymarket question patterns
 _ARTIST_PATTERNS = [
     # "Will Drake be #1 on Spotify monthly listeners?"
-    re.compile(r"(?:Will|Does|Is|Has)\s+(.+?)\s+(?:be|become|have|reach|hit|stay|remain)\b", re.IGNORECASE),
+    re.compile(r"(?:Will|Does|Is|Has)\s+(.+?)\s+(?:be|become|have|reach|hit|stay|remain|retain|keep|maintain)\b", re.IGNORECASE),
     # "Drake Spotify monthly listeners"
     re.compile(r"^(.+?)\s+(?:spotify|monthly\s+listeners|streaming)", re.IGNORECASE),
     # "most Spotify monthly listeners" — extract from "Will X have the most..."
@@ -166,6 +166,13 @@ class SpotifyChartsConnector(BaseResearchConnector):
             )
             resp.raise_for_status()
             data = self._parse_listeners_html(resp.text)
+            if not data and len(resp.text) > 1000:
+                log.warning(
+                    "spotify_charts.parse_empty",
+                    url=_LISTENERS_URL,
+                    html_bytes=len(resp.text),
+                    msg="Parser returned no results — kworb.net HTML structure may have changed",
+                )
             self._listeners_cache = data
             self._listeners_cache_time = now
         except Exception as exc:
@@ -193,6 +200,13 @@ class SpotifyChartsConnector(BaseResearchConnector):
             )
             resp.raise_for_status()
             data = self._parse_daily_html(resp.text)
+            if not data and len(resp.text) > 1000:
+                log.warning(
+                    "spotify_charts.parse_empty",
+                    url=_DAILY_CHART_URL,
+                    html_bytes=len(resp.text),
+                    msg="Parser returned no results — kworb.net HTML structure may have changed",
+                )
             self._daily_cache = data
             self._daily_cache_time = now
         except Exception as exc:
@@ -323,11 +337,20 @@ class SpotifyChartsConnector(BaseResearchConnector):
             match = pattern.search(question)
             if match:
                 artist = match.group(1).strip()
-                # Remove common filler words
+                # Strip trailing action verbs that leaked into the capture
                 artist = re.sub(
-                    r"\b(the|a|an|have|has|had|get|most|more|top)\b",
+                    r"\s+(retain|remain|stay|become|lead|top|hit|reach"
+                    r"|have|has|get|keep|maintain)\b.*$",
                     "", artist, flags=re.IGNORECASE,
                 ).strip()
+                # Remove mid-string filler words but preserve leading 'The'
+                # (important for 'The Weeknd', 'The 1975', 'The Killers')
+                artist = re.sub(
+                    r"(?<=\s)\b(a|an|have|has|had|get|most|more|top)\b",
+                    "", artist, flags=re.IGNORECASE,
+                ).strip()
+                # Collapse any double spaces from removals
+                artist = re.sub(r"\s{2,}", " ", artist)
                 if artist and len(artist) > 1:
                     return artist
 

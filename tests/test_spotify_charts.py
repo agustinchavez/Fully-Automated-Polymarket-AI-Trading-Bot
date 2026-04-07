@@ -120,7 +120,7 @@ class TestExtractArtist:
         artist = SpotifyChartsConnector._extract_artist(
             "Will The Weeknd have the most Spotify monthly listeners?"
         )
-        assert "Weeknd" in artist
+        assert "The Weeknd" in artist  # 'The' is preserved for artist names
 
     def test_will_reach_pattern(self):
         artist = SpotifyChartsConnector._extract_artist(
@@ -133,6 +133,18 @@ class TestExtractArtist:
             "Will Bad Bunny stay in the top 5 Spotify artists?"
         )
         assert "Bad Bunny" in artist
+
+    def test_retain_verb_stripped(self):
+        artist = SpotifyChartsConnector._extract_artist(
+            "Will Bad Bunny retain the top spot on Spotify?"
+        )
+        assert artist == "Bad Bunny"
+
+    def test_the_1975_preserved(self):
+        artist = SpotifyChartsConnector._extract_artist(
+            "Will The 1975 be #1 on Spotify monthly listeners?"
+        )
+        assert "The 1975" in artist
 
     def test_fallback_proper_nouns(self):
         artist = SpotifyChartsConnector._extract_artist(

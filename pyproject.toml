@@ -7,7 +7,7 @@ name = "polymarket-bot"
 version = "0.2.0"
 description = "Polymarket Trading Bot — Autonomous AI prediction market bot with multi-model ensemble forecasting, automated research, whale tracking, and real-time dashboard"
 readme = "README.md"
-requires-python = ">=3.9"
+requires-python = ">=3.10"
 license = { text = "MIT" }
 keywords = [
     "polymarket",
@@ -28,7 +28,6 @@ classifiers = [
     "Intended Audience :: Financial and Insurance Industry",
     "License :: OSI Approved :: MIT License",
     "Programming Language :: Python :: 3",
-    "Programming Language :: Python :: 3.9",
     "Programming Language :: Python :: 3.10",
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
@@ -55,7 +54,6 @@ dependencies = [
     "beautifulsoup4>=4.12",
     "lxml>=5.0",
     "apscheduler>=3.10",
-    "eval-type-backport>=0.2.0; python_version < '3.10'",
     "aiohttp>=3.9",
     "sentry-sdk[flask]>=1.40",
     "ddgs>=7.0",
@@ -85,7 +83,7 @@ include = ["src*"]
 
 [tool.ruff]
 line-length = 100
-target-version = "py39"
+target-version = "py310"
 
 [tool.ruff.lint]
 select = ["E", "F", "W", "I", "N", "UP", "B", "SIM"]
@@ -95,6 +93,6 @@ testpaths = ["tests"]
 asyncio_mode = "auto"
 
 [tool.mypy]
-python_version = "3.9"
+python_version = "3.10"
 strict = true
 warn_return_any = true
