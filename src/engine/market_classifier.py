@@ -154,6 +154,14 @@ _r(r"\b(treasury|bond\s+yield|yield\s+curve|10.year|2.year|t.bill)\b",
    strategy="official_data", queries=6, tags=["real_time_data"],
    reasons=["Treasury yields are publicly available real-time"])
 
+_r(r"\b(natural\s+gas|crude\s+oil|wti|brent|\(ng\)|\(wti\)|oil\s+price|gas\s+price|commodity\s+price|gold\s+price|silver\s+price|copper\s+price)\b",
+   "MACRO", "commodity",
+   researchability=75, sources=["EIA", "CME Group", "FRED", "Reuters"],
+   strategy="official_data", queries=5, tags=["real_time_data", "commodity"],
+   reasons=["EIA provides weekly natural gas storage and crude inventory reports",
+            "CME futures prices are the canonical reference for commodity markets",
+            "FRED tracks commodity price indices over time"])
+
 # ── ELECTION ─────────────────────────────────────────────────────────
 
 _r(r"\b(president(ial)?|white\s+house)\b.*\b(win|elect|nominee|race|202[4-9])\b|\b(win|elect|nominee|race|202[4-9])\b.*\b(president(ial)?|white\s+house)\b",
@@ -529,6 +537,13 @@ _r(r"\b(oscar|emmy|grammy|golden\s+globe|award\s+show|box\s+office|movie\s+gross
    researchability=55, sources=["Box Office Mojo", "Variety", "Hollywood Reporter"],
    strategy="news_analysis", queries=4, tags=["entertainment"],
    reasons=["Award shows have nomination data; box office has tracking data"])
+
+_r(r"\b(spotify|apple\s+music|streaming|monthly\s+listeners|billboard|charts|number\s+one|top\s+artist)\b",
+   "CULTURE", "streaming",
+   researchability=60, sources=["Spotify Charts", "Billboard", "MusicWatch"],
+   strategy="news_analysis", queries=4, tags=["entertainment", "data_available"],
+   reasons=["Spotify and Billboard publish public charts data",
+            "Wikipedia tracks artist popularity trends"])
 
 _r(r"\b(meme\s+coin|meme\s+stock|dog\s+race|eating\s+contest|hot\s+dog|challenge|stunt|prank)\b",
    "CULTURE", "novelty",

@@ -93,7 +93,7 @@ class WikipediaPageviewsConnector(BaseResearchConnector):
         return {
             "MACRO", "ELECTION", "CORPORATE", "LEGAL", "TECHNOLOGY",
             "SCIENCE", "GEOPOLITICS", "CRYPTO", "WEATHER", "SPORTS",
-            "ENTERTAINMENT", "TECH", "REGULATION", "UNKNOWN",
+            "ENTERTAINMENT", "TECH", "REGULATION", "CULTURE", "UNKNOWN",
         }
 
     async def _fetch_impl(

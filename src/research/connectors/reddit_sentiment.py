@@ -84,7 +84,7 @@ class RedditSentimentConnector(BaseResearchConnector):
         return {
             "MACRO", "ELECTION", "CORPORATE", "LEGAL", "TECHNOLOGY",
             "SCIENCE", "GEOPOLITICS", "CRYPTO", "WEATHER", "SPORTS",
-            "ENTERTAINMENT", "TECH", "REGULATION", "UNKNOWN",
+            "ENTERTAINMENT", "TECH", "REGULATION", "CULTURE", "UNKNOWN",
         }
 
     # ── Core fetch ───────────────────────────────────────────────────

@@ -9,6 +9,7 @@ Output format matches the strict JSON schema required by the bot.
 
 from __future__ import annotations
 
+import asyncio
 import json
 from dataclasses import dataclass, field
 from typing import Any
@@ -186,21 +187,24 @@ class LLMForecaster:
 
         try:
             await rate_limiter.get("openai").acquire()
-            resp = await self._llm.chat.completions.create(
-                model=self._config.llm_model,
-                temperature=self._config.llm_temperature,
-                max_tokens=self._config.llm_max_tokens,
-                messages=[
-                    {
-                        "role": "system",
-                        "content": (
-                            "You are a calibrated probabilistic forecaster. "
-                            "You never claim certainty. You express epistemic humility. "
-                            "Return only valid JSON."
-                        ),
-                    },
-                    {"role": "user", "content": prompt},
-                ],
+            resp = await asyncio.wait_for(
+                self._llm.chat.completions.create(
+                    model=self._config.llm_model,
+                    temperature=self._config.llm_temperature,
+                    max_tokens=self._config.llm_max_tokens,
+                    messages=[
+                        {
+                            "role": "system",
+                            "content": (
+                                "You are a calibrated probabilistic forecaster. "
+                                "You never claim certainty. You express epistemic humility. "
+                                "Return only valid JSON."
+                            ),
+                        },
+                        {"role": "user", "content": prompt},
+                    ],
+                ),
+                timeout=60,
             )
             raw_text = resp.choices[0].message.content or "{}"
             usage = getattr(resp, "usage", None)

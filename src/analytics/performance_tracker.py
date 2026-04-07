@@ -309,10 +309,10 @@ class PerformanceTracker:
             std_ret = math.sqrt(sum((p - mean_ret) ** 2 for p in pnls) / (n - 1))
             snap.sharpe_ratio = (mean_ret / std_ret * math.sqrt(252)) if std_ret > 0 else 0.0
 
-            # Sortino (only downside deviation)
+            # Sortino (only downside deviation, sample std for consistency with Sharpe)
             downside = [p for p in pnls if p < 0]
             if downside:
-                down_std = math.sqrt(sum(p ** 2 for p in downside) / len(downside))
+                down_std = math.sqrt(sum(p ** 2 for p in downside) / max(len(downside) - 1, 1))
                 snap.sortino_ratio = (mean_ret / down_std * math.sqrt(252)) if down_std > 0 else 0.0
 
     # ── Forecast Metrics ─────────────────────────────────────────────
@@ -587,7 +587,7 @@ class PerformanceTracker:
             downside = [p for p in pnls if p < 0]
             if downside:
                 down_std = math.sqrt(
-                    sum(p ** 2 for p in downside) / len(downside)
+                    sum(p ** 2 for p in downside) / max(len(downside) - 1, 1)
                 )
                 if down_std > 0:
                     snap.sortino_ratio = mean_ret / down_std * math.sqrt(252)

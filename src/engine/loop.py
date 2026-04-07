@@ -1024,7 +1024,8 @@ class TradingEngine:
         forecast_ok = await pipeline.stage_forecast(ctx)
         if not forecast_ok:
             pipeline._log_candidate(ctx.cycle_id, ctx.market, decision="SKIP",
-                                    reason="Forecast failed or circuit open")
+                                    reason="Forecast failed or circuit open",
+                                    classification=ctx.classification)
             return ctx.result
 
         # ── Stage 3b: Apply Calibration ──────────────────────────────
@@ -1060,6 +1061,7 @@ class TradingEngine:
                 cycle_id, market, forecast=ctx.forecast, evidence=ctx.evidence,
                 edge_result=ctx.edge_result, decision="NO TRADE",
                 reason="; ".join(ctx.risk_result.violations),
+                classification=ctx.classification,
             )
             if self._audit:
                 self._audit.record_trade_decision(

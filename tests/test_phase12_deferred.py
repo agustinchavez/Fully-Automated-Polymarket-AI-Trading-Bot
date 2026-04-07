@@ -542,3 +542,23 @@ class TestPipelineRunner:
 
         runner._db.insert_candidate.assert_called_once()
         assert runner._db.insert_candidate.call_args.kwargs["market_type"] == "CRYPTO"
+
+    def test_loop_log_candidate_calls_pass_classification(self) -> None:
+        """Bug 1: loop.py _log_candidate calls must include classification= kwarg."""
+        import inspect
+        from src.engine.loop import TradingEngine
+        source = inspect.getsource(TradingEngine._process_candidate)
+        # Split source at _log_candidate calls (excluding definition)
+        # Each call block should contain classification= before the next statement
+        parts = source.split("_log_candidate(")
+        # First part is before any call; skip it
+        call_parts = parts[1:]
+        assert len(call_parts) >= 2, (
+            f"Expected >=2 _log_candidate calls, found {len(call_parts)}"
+        )
+        for i, part in enumerate(call_parts):
+            # Get text up to the matching close paren (rough: up to next dedent)
+            block = part[:500]  # enough context for the full call
+            assert "classification=" in block, (
+                f"_log_candidate call #{i+1} missing classification="
+            )

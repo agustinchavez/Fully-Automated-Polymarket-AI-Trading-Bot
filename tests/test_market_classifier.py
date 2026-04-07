@@ -1091,3 +1091,85 @@ class TestPlatformMetadata:
             },
         )
         assert c.category == "GEOPOLITICS"
+
+
+# ═══════════════════════════════════════════════════════════════
+#  CODE REVIEW V11 TESTS
+# ═══════════════════════════════════════════════════════════════
+
+
+class TestCommodityRegex:
+    """Bug 3: Commodity regex in rich classifier (no platform metadata)."""
+
+    def test_natural_gas_without_metadata(self):
+        c = classify_market("Will Natural Gas (NG) hit $2.00?")
+        assert c.category == "MACRO"
+        assert c.subcategory == "commodity"
+
+    def test_crude_oil_without_metadata(self):
+        c = classify_market("Will WTI Crude Oil hit $150?")
+        assert c.category == "MACRO"
+        assert c.subcategory == "commodity"
+
+    def test_gold_price_without_metadata(self):
+        c = classify_market("Will gold price exceed $3000?")
+        assert c.category == "MACRO"
+        assert c.subcategory == "commodity"
+
+    def test_commodity_researchability(self):
+        c = classify_market("Will Brent crude hit $100?")
+        assert c.researchability == 75
+        assert "EIA" in c.primary_sources
+
+
+class TestStreamingRegex:
+    """Opt 1: Streaming/Spotify regex rule for CULTURE."""
+
+    def test_spotify_streaming(self):
+        c = classify_market("Will The Weeknd have the most Spotify monthly listeners?")
+        assert c.category == "CULTURE"
+        assert c.subcategory == "streaming"
+
+    def test_billboard_charts(self):
+        c = classify_market("Will Olivia Rodrigo reach number one on Billboard?")
+        assert c.category == "CULTURE"
+        assert c.subcategory == "streaming"
+
+    def test_streaming_researchability(self):
+        c = classify_market("Will Spotify top artist change this month?")
+        assert c.researchability == 60
+        assert c.search_strategy == "news_analysis"
+
+
+class TestCultureConnectorRelevance:
+    """Bug 2: CULTURE must be in broad connector relevant_categories."""
+
+    def test_manifold_includes_culture(self):
+        from src.research.connectors.manifold import ManifoldConnector
+        c = ManifoldConnector()
+        assert "CULTURE" in c.relevant_categories()
+
+    def test_metaculus_includes_culture(self):
+        from src.research.connectors.metaculus import MetaculusConnector
+        c = MetaculusConnector()
+        assert "CULTURE" in c.relevant_categories()
+
+    def test_wikipedia_includes_culture(self):
+        from src.research.connectors.wikipedia_pageviews import WikipediaPageviewsConnector
+        c = WikipediaPageviewsConnector()
+        assert "CULTURE" in c.relevant_categories()
+
+    def test_kalshi_includes_culture(self):
+        from src.research.connectors.kalshi_prior import KalshiPriorConnector
+        c = KalshiPriorConnector()
+        assert "CULTURE" in c.relevant_categories()
+
+    def test_google_trends_includes_culture(self):
+        from src.research.connectors.google_trends import GoogleTrendsConnector
+        c = GoogleTrendsConnector()
+        assert "CULTURE" in c.relevant_categories()
+
+    def test_reddit_includes_culture(self):
+        from src.research.connectors.reddit_sentiment import RedditSentimentConnector
+        c = RedditSentimentConnector()
+        assert "CULTURE" in c.relevant_categories()

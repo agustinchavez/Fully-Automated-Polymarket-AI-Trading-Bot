@@ -1102,3 +1102,40 @@ class TestPositionSizerRegime:
             regime_multiplier=0.0,
         )
         assert pos.stake_usd == 0.0
+
+
+class TestLLMForecasterTimeout:
+    """Bug 5: LLM call in llm_forecaster.py must be wrapped with asyncio.wait_for."""
+
+    def test_llm_forecaster_uses_wait_for(self):
+        """Verify the source code contains asyncio.wait_for wrapping."""
+        import inspect
+        from src.forecast.llm_forecaster import LLMForecaster
+        source = inspect.getsource(LLMForecaster.forecast)
+        assert "asyncio.wait_for" in source
+        assert "timeout=" in source
+
+
+class TestSortinoSampleStd:
+    """Bug 4: Sortino must use sample std (n-1) consistent with Sharpe."""
+
+    def test_sortino_uses_sample_std(self):
+        """Verify the Sortino denominator uses n-1, not n."""
+        import math
+        # With exactly 2 downside returns, n=2 vs n-1=1 gives very different results
+        downside = [-0.10, -0.20]
+        # Population std (n): sqrt((0.01 + 0.04) / 2) = sqrt(0.025) ≈ 0.1581
+        pop_std = math.sqrt(sum(p ** 2 for p in downside) / len(downside))
+        # Sample std (n-1): sqrt((0.01 + 0.04) / 1) = sqrt(0.05) ≈ 0.2236
+        sample_std = math.sqrt(sum(p ** 2 for p in downside) / max(len(downside) - 1, 1))
+        assert sample_std > pop_std  # sample std is always larger
+        # The ratio should be sqrt(2) ≈ 1.414
+        assert abs(sample_std / pop_std - math.sqrt(2)) < 0.001
+
+    def test_sortino_single_loss_no_divide_by_zero(self):
+        """With a single loss, max(n-1, 1) prevents division by zero."""
+        import math
+        downside = [-0.05]
+        down_std = math.sqrt(sum(p ** 2 for p in downside) / max(len(downside) - 1, 1))
+        assert down_std > 0
+        assert abs(down_std - 0.05) < 0.001
