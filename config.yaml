@@ -17,7 +17,7 @@ scanning:
   filter_min_score: 25
   filter_blocked_types:
     - UNKNOWN
-    - SPORTS
+    # - SPORTS
   research_cooldown_minutes: 60
 research:
   max_sources: 10
@@ -52,10 +52,10 @@ research:
   google_trends_enabled: false # needs SERPAPI_KEY or TAVILY_API_KEY with quota
   reddit_sentiment_enabled: false
   pubmed_enabled: true
-  sports_odds_enabled: false  # needs ODDS_API_KEY
-  sports_stats_enabled: false  # needs API_FOOTBALL_KEY
-  manifold_enabled: false
-  predictit_enabled: false
+  sports_odds_enabled: true # needs ODDS_API_KEY
+  sports_stats_enabled: true # needs API_FOOTBALL_KEY
+  manifold_enabled: true
+  predictit_enabled: true
   primary_domains:
     MACRO:
       - bls.gov

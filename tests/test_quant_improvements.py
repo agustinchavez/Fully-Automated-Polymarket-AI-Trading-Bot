@@ -279,21 +279,19 @@ class TestManifoldConnector:
         from src.research.connectors.manifold import ManifoldConnector
         cfg = MagicMock()
         conn = ManifoldConnector(cfg)
-        with patch("aiohttp.ClientSession") as mock_session:
-            mock_resp = AsyncMock()
-            mock_resp.status = 200
-            mock_resp.json = AsyncMock(return_value=[])
-            mock_ctx = AsyncMock()
-            mock_ctx.__aenter__ = AsyncMock(return_value=mock_resp)
-            mock_ctx.__aexit__ = AsyncMock(return_value=False)
-            mock_session_inst = MagicMock()
-            mock_session_inst.get.return_value = mock_ctx
-            mock_session_inst.__aenter__ = AsyncMock(return_value=mock_session_inst)
-            mock_session_inst.__aexit__ = AsyncMock(return_value=False)
-            mock_session.return_value = mock_session_inst
 
+        mock_resp = MagicMock()
+        mock_resp.json.return_value = []
+        mock_resp.raise_for_status = MagicMock()
+
+        mock_client = AsyncMock()
+        mock_client.get = AsyncMock(return_value=mock_resp)
+        conn._client = mock_client
+
+        with patch("src.research.connectors.manifold.rate_limiter") as mock_rl:
+            mock_rl.get.return_value.acquire = AsyncMock()
             result = await conn._fetch_impl("Will X happen?", "MACRO")
-            assert result == []
+        assert result == []
 
 
 class TestPredictItConnector:

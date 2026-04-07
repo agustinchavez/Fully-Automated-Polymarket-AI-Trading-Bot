@@ -10,8 +10,6 @@ import time
 from difflib import SequenceMatcher
 from typing import Any
 
-import aiohttp
-
 from src.connectors.rate_limiter import rate_limiter
 from src.observability.logger import get_logger
 from src.research.connectors.base import BaseResearchConnector
@@ -50,9 +48,10 @@ class PredictItConnector(BaseResearchConnector):
         market, contract, prob = best
         url = market.get("url", "")
 
-        return [FetchedSource(
+        return [self._make_source(
             url=url,
             title=market.get("name", ""),
+            snippet=f"PredictIt: {prob:.1%}",
             publisher="PredictIt",
             content=f"PredictIt: {prob:.1%}",
             authority_score=0.68,
@@ -74,12 +73,10 @@ class PredictItConnector(BaseResearchConnector):
             return PredictItConnector._cache_data
 
         try:
-            async with aiohttp.ClientSession() as session:
-                async with session.get(
-                    _ALL_MARKETS_URL,
-                    timeout=aiohttp.ClientTimeout(total=15),
-                ) as resp:
-                    data = await resp.json()
+            client = self._get_client()
+            resp = await client.get(_ALL_MARKETS_URL)
+            resp.raise_for_status()
+            data = resp.json()
             PredictItConnector._cache_data = data.get("markets", [])
             PredictItConnector._cache_time = now
         except Exception as exc:

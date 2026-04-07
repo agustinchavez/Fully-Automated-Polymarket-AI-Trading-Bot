@@ -9,8 +9,6 @@ from __future__ import annotations
 
 from typing import Any
 
-import aiohttp
-
 from src.connectors.rate_limiter import rate_limiter
 from src.observability.logger import get_logger
 from src.research.connectors.base import BaseResearchConnector
@@ -43,21 +41,18 @@ class ManifoldConnector(BaseResearchConnector):
     ) -> list[FetchedSource]:
         await rate_limiter.get("manifold").acquire()
 
-        params = {"term": question[:120], "limit": "5", "sort": "relevance"}
+        client = self._get_client()
+        resp = await client.get(
+            f"{_BASE}/search-markets",
+            params={"term": question[:120], "limit": "5"},
+        )
+        resp.raise_for_status()
+        data = resp.json()
 
-        try:
-            async with aiohttp.ClientSession() as session:
-                async with session.get(
-                    f"{_BASE}/search-markets",
-                    params=params,
-                    timeout=aiohttp.ClientTimeout(total=10),
-                ) as resp:
-                    data = await resp.json()
-        except Exception as exc:
-            log.warning("manifold.fetch_failed", error=str(exc))
+        if not isinstance(data, list):
             return []
 
-        for m in data or []:
+        for m in data:
             if m.get("isResolved"):
                 continue
             if m.get("outcomeType") != "BINARY":
@@ -71,9 +66,10 @@ class ManifoldConnector(BaseResearchConnector):
             creator = m.get("creatorUsername", "")
             url = f"https://manifold.markets/{creator}/{slug}" if slug else ""
 
-            return [FetchedSource(
+            return [self._make_source(
                 url=url,
                 title=m.get("question", ""),
+                snippet=f"Manifold: {prob:.1%} ({traders} traders)",
                 publisher="Manifold Markets",
                 content=f"Manifold community: {prob:.1%} ({traders} traders)",
                 authority_score=0.72,
