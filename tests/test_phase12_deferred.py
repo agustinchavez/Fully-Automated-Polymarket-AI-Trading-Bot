@@ -544,21 +544,26 @@ class TestPipelineRunner:
         assert runner._db.insert_candidate.call_args.kwargs["market_type"] == "CRYPTO"
 
     def test_loop_log_candidate_calls_pass_classification(self) -> None:
-        """Bug 1: loop.py _log_candidate calls must include classification= kwarg."""
+        """Bug 1: _log_candidate calls must include classification= kwarg.
+
+        After the Phase 1/Phase 2 split, the calls live in _run_phase1
+        and _run_phase2 instead of _process_candidate.
+        """
         import inspect
         from src.engine.loop import TradingEngine
-        source = inspect.getsource(TradingEngine._process_candidate)
-        # Split source at _log_candidate calls (excluding definition)
-        # Each call block should contain classification= before the next statement
-        parts = source.split("_log_candidate(")
-        # First part is before any call; skip it
+
+        # Check both phase methods for _log_candidate calls
+        source_p1 = inspect.getsource(TradingEngine._run_phase1)
+        source_p2 = inspect.getsource(TradingEngine._run_phase2)
+        combined = source_p1 + source_p2
+
+        parts = combined.split("_log_candidate(")
         call_parts = parts[1:]
         assert len(call_parts) >= 2, (
             f"Expected >=2 _log_candidate calls, found {len(call_parts)}"
         )
         for i, part in enumerate(call_parts):
-            # Get text up to the matching close paren (rough: up to next dedent)
-            block = part[:500]  # enough context for the full call
+            block = part[:500]
             assert "classification=" in block, (
                 f"_log_candidate call #{i+1} missing classification="
             )

@@ -98,6 +98,8 @@ class ResearchConfig(BaseModel):
         "pinnacle": 0.40, "betfair": 0.30, "draftkings": 0.20, "fanduel": 0.10,
     })
     sports_min_books: int = 2             # min sportsbooks needed for consensus
+    # Spotify charts (kworb.net scraper, no key needed)
+    spotify_charts_enabled: bool = False
     # Improvement 6: Additional consensus connectors
     manifold_enabled: bool = False
     predictit_enabled: bool = False

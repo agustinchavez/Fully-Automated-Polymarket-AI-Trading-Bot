@@ -164,6 +164,13 @@ def get_enabled_connectors(config: Any) -> list[BaseResearchConnector]:
         except Exception as e:
             log.warning("registry.sports_stats_load_failed", error=str(e))
 
+    if getattr(config, "spotify_charts_enabled", False):
+        try:
+            from src.research.connectors.spotify_charts import SpotifyChartsConnector
+            connectors.append(SpotifyChartsConnector(config))
+        except Exception as e:
+            log.warning("registry.spotify_charts_load_failed", error=str(e))
+
     log.debug(
         "registry.connectors_loaded",
         count=len(connectors),

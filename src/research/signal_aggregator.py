@@ -65,6 +65,12 @@ class SignalStack:
     sportsbook_sharp_price: float | None = None  # Pinnacle-specific
     sports_context: str = ""  # form/H2H summary
 
+    # ── Spotify charts (CULTURE) ────────────────────────────────
+    spotify_artist: str = ""
+    spotify_listeners_rank: int | None = None
+    spotify_daily_rank: int | None = None
+    spotify_monthly_listeners: str = ""
+
     # ── Calendar events (Improvement 8) ────────────────────────
     calendar_events: list[Any] = field(default_factory=list)
 
@@ -149,6 +155,14 @@ def build_signal_stack(
 
             elif sig_source == "sports_stats" and sig_type == "sports_context":
                 stack.sports_context = source.content or ""
+
+            elif sig_source == "spotify_charts" and sig_type == "chart_position":
+                stack.spotify_artist = bs.get("artist", "")
+                rank = bs.get("monthly_listeners_rank")
+                stack.spotify_listeners_rank = int(rank) if rank is not None else None
+                daily = bs.get("daily_chart_rank")
+                stack.spotify_daily_rank = int(daily) if daily is not None else None
+                stack.spotify_monthly_listeners = bs.get("monthly_listeners", "")
 
     # ── Microstructure signals (Improvement 2) ────────────────────
     if micro_signals is not None:
@@ -299,6 +313,15 @@ def render_signal_stack(stack: SignalStack) -> str:
         behavioral_lines.append(
             f"- Sports context: {stack.sports_context[:300]}"
         )
+    if stack.spotify_listeners_rank is not None or stack.spotify_daily_rank is not None:
+        parts = [f"Spotify Charts: {stack.spotify_artist}"]
+        if stack.spotify_listeners_rank is not None:
+            parts.append(f"#{stack.spotify_listeners_rank} monthly listeners")
+            if stack.spotify_monthly_listeners:
+                parts.append(f"({stack.spotify_monthly_listeners})")
+        if stack.spotify_daily_rank is not None:
+            parts.append(f"#{stack.spotify_daily_rank} daily chart")
+        behavioral_lines.append(f"- {' '.join(parts)}")
 
     if behavioral_lines:
         sections.append(

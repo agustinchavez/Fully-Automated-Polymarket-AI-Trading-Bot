@@ -843,36 +843,55 @@ class TradingEngine:
                 self._pipeline._positions = self._positions
                 self._pipeline._latest_scan_result = self._latest_scan_result
 
-            for candidate in filtered:
+            # ── Phase 1: Research + Forecast (parallel) ─────────────
+            # These stages are read-only and stateless per candidate.
+            # Running them concurrently cuts cycle time by ~N×.
+            phase1_tasks = [
+                asyncio.wait_for(
+                    self._run_phase1(candidate, cycle.cycle_id),
+                    timeout=300,
+                )
+                for candidate in filtered
+            ]
+            phase1_results = await asyncio.gather(
+                *phase1_tasks, return_exceptions=True,
+            )
+
+            # ── Phase 2: Risk + Execution (sequential) ────────────
+            # These stages read/write shared portfolio state.
+            for candidate, p1 in zip(filtered, phase1_results):
+                mid = getattr(candidate, "id", "?")
+                self._research_cache.mark_researched(
+                    getattr(candidate, "id", ""),
+                )
+
+                if isinstance(p1, asyncio.TimeoutError):
+                    log.warning("engine.candidate_timeout", market_id=mid)
+                    cycle.errors.append(f"Timeout: {mid[:8]}")
+                    continue
+                if isinstance(p1, BaseException):
+                    log.error("engine.candidate_error", market_id=mid,
+                              error=str(p1))
+                    cycle.errors.append(str(p1))
+                    traceback.print_exc()
+                    continue
+
+                ctx = p1  # PipelineContext from Phase 1
+                if ctx is None:
+                    # Phase 1 returned None → early exit (duplicate/skip)
+                    continue
+
                 try:
-                    result = await asyncio.wait_for(
-                        self._process_candidate(candidate, cycle.cycle_id),
-                        timeout=300,  # 5 minutes max per market
-                    )
-                    # Mark as researched so it's skipped for cooldown period
-                    self._research_cache.mark_researched(
-                        getattr(candidate, "id", ""),
-                    )
+                    result = await self._run_phase2(ctx, cycle.cycle_id)
                     if result.get("has_edge"):
                         cycle.edges_found += 1
                     if result.get("trade_attempted"):
                         cycle.trades_attempted += 1
                     if result.get("trade_executed"):
                         cycle.trades_executed += 1
-                except asyncio.TimeoutError:
-                    log.warning(
-                        "engine.candidate_timeout",
-                        market_id=getattr(candidate, "id", "?"),
-                    )
-                    cycle.errors.append(
-                        f"Timeout: {getattr(candidate, 'id', '?')[:8]}"
-                    )
                 except Exception as e:
-                    log.error(
-                        "engine.candidate_error",
-                        market_id=getattr(candidate, "id", "?"),
-                        error=str(e),
-                    )
+                    log.error("engine.candidate_error", market_id=mid,
+                              error=str(e))
                     cycle.errors.append(str(e))
                     traceback.print_exc()
 
@@ -978,82 +997,95 @@ class TradingEngine:
 
     # ── Full Pipeline ────────────────────────────────────────────────
 
-    async def _process_candidate(self, market: Any, cycle_id: int) -> dict[str, Any]:
-        """Process a single market through the full research-to-trade pipeline.
+    async def _run_phase1(
+        self, market: Any, cycle_id: int,
+    ) -> PipelineContext | None:
+        """Phase 1: classify → research → features → forecast.
 
-        Orchestrates stages via PipelineContext and PipelineRunner.
+        Stateless per candidate — safe to run concurrently.
+        Returns a PipelineContext ready for Phase 2, or None if
+        the candidate should be skipped.
         """
         ctx = PipelineContext(market=market, cycle_id=cycle_id,
                               market_id=market.id, question=market.question)
 
-        # ── Early exit: skip if we already hold a position or have a pending order
+        # ── Early exit: skip if we already hold a position or pending order
         if self._db:
             existing = [p for p in (self._db.get_open_positions())
                         if p.market_id == market.id]
             if existing:
                 log.info("engine.duplicate_skip", market_id=market.id[:8],
                          msg="Already have open position — skipping")
-                ctx.result["skipped"] = "duplicate_position"
-                return ctx.result
+                return None
 
-            # Also skip if there's already a submitted/pending order for this market
             try:
                 if self._db.has_active_order_for_market(market.id):
                     log.info("engine.duplicate_order_skip", market_id=market.id[:8],
                              msg="Already have pending order — skipping")
-                    ctx.result["skipped"] = "duplicate_order"
-                    return ctx.result
+                    return None
             except Exception:
-                pass  # If open_orders query fails, proceed anyway
+                pass
 
         pipeline = self._pipeline
 
-        # ── Stage 0: Classification ──────────────────────────────────
+        # ── Stage 0: Classification
         pipeline.stage_classify(ctx)
 
-        # ── Stage 1: Research ────────────────────────────────────────
+        # ── Stage 1: Research
         ok = await pipeline.stage_research(ctx)
         if not ok:
-            return ctx.result
+            return None
 
-        # ── Stage 2: Build Features ──────────────────────────────────
+        # ── Stage 2: Build Features
         from src.forecast.feature_builder import build_features
         ctx.features = build_features(market=market, evidence=ctx.evidence)
 
-        # ── Stage 3: Forecast ────────────────────────────────────────
+        # ── Stage 3: Forecast
         forecast_ok = await pipeline.stage_forecast(ctx)
         if not forecast_ok:
             pipeline._log_candidate(ctx.cycle_id, ctx.market, decision="SKIP",
                                     reason="Forecast failed or circuit open",
                                     classification=ctx.classification)
-            return ctx.result
+            return None
 
-        # ── Stage 3b: Apply Calibration ──────────────────────────────
+        return ctx
+
+    async def _run_phase2(
+        self, ctx: PipelineContext, cycle_id: int,
+    ) -> dict[str, Any]:
+        """Phase 2: calibrate → edge → risk → execute.
+
+        Reads/writes shared portfolio state — must run sequentially.
+        """
+        pipeline = self._pipeline
+        market = ctx.market
+
+        # ── Stage 3b: Apply Calibration
         pipeline.stage_calibrate(ctx)
 
-        # ── Stage 4: Edge Calculation + Whale Adjustment ─────────────
+        # ── Stage 4: Edge Calculation + Whale Adjustment
         pipeline.stage_edge_calc(ctx)
 
-        # ── Stage 4b: Edge Uncertainty Adjustment ─────────────────
+        # ── Stage 4b: Edge Uncertainty Adjustment
         pipeline.stage_uncertainty_adjustment(ctx)
         ctx.result["has_edge"] = ctx.has_edge
 
-        # ── Stage 5: Risk Checks ─────────────────────────────────────
+        # ── Stage 5: Risk Checks
         pipeline.stage_risk_checks(ctx)
 
-        # ── Persist forecast to DB ───────────────────────────────────
+        # ── Persist forecast to DB
         pipeline.stage_persist_forecast(ctx)
 
-        # ── Portfolio Correlation Check ──────────────────────────────
+        # ── Portfolio Correlation Check
         pipeline.stage_correlation_check(ctx)
 
-        # ── Portfolio VaR Gate ─────────────────────────────────────
+        # ── Portfolio VaR Gate
         pipeline.stage_var_gate(ctx)
 
-        # ── UMA Dispute Check ─────────────────────────────────────
+        # ── UMA Dispute Check
         await pipeline.stage_uma_check(ctx)
 
-        # ── Decision Gate ────────────────────────────────────────────
+        # ── Decision Gate
         if not ctx.risk_result.allowed:
             log.info("engine.no_trade", market_id=ctx.market_id,
                      violations=ctx.risk_result.violations)
@@ -1075,20 +1107,32 @@ class TradingEngine:
                 )
             return ctx.result
 
-        # ── Stage 6: Position Sizing ─────────────────────────────────
+        # ── Stage 6: Position Sizing
         pipeline.stage_position_sizing(ctx)
         if ctx.position is None:
             return ctx.result
 
         ctx.result["trade_attempted"] = True
 
-        # ── Stage 7: Build & Route Order ─────────────────────────────
+        # ── Stage 7: Build & Route Order
         await pipeline.stage_execute_order(ctx)
 
-        # ── Stage 8: Audit + Log ─────────────────────────────────────
+        # ── Stage 8: Audit + Log
         pipeline.stage_audit_and_log(ctx)
 
         return ctx.result
+
+    async def _process_candidate(self, market: Any, cycle_id: int) -> dict[str, Any]:
+        """Process a single market through the full research-to-trade pipeline.
+
+        Backward-compatible wrapper that runs Phase 1 + Phase 2 sequentially.
+        The main cycle loop uses the parallel Phase 1 / sequential Phase 2
+        split directly.
+        """
+        ctx = await self._run_phase1(market, cycle_id)
+        if ctx is None:
+            return {"has_edge": False, "trade_attempted": False, "trade_executed": False}
+        return await self._run_phase2(ctx, cycle_id)
 
     # ── Pipeline stage methods — moved to src/engine/pipeline.py ──────
     # Thin delegation wrappers kept for backward compatibility (tests, _finalize_exit).

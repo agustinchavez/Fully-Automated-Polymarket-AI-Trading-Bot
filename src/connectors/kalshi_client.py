@@ -253,7 +253,7 @@ class KalshiClient:
         client = self._ensure_client()
 
         headers = {}
-        if self._api_key_id and not self._paper_mode:
+        if self._api_key_id:
             headers = self._build_auth_headers("GET", path)
 
         with track_latency("kalshi"):
@@ -274,7 +274,7 @@ class KalshiClient:
         client = self._ensure_client()
 
         headers = {"Content-Type": "application/json"}
-        if self._api_key_id and not self._paper_mode:
+        if self._api_key_id:
             headers.update(self._build_auth_headers("POST", path))
 
         with track_latency("kalshi"):
