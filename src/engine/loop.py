@@ -1275,6 +1275,51 @@ class TradingEngine:
                         market = await client.get_market(pos.market_id)
                     mkt_record = self._db.get_market(pos.market_id)
 
+                    # ── Event Monitor: volume, resolution, whale triggers ──
+                    try:
+                        mkt_volume = float(getattr(market, "volume", 0) or 0)
+                        if mkt_volume > 0:
+                            vol_trigger = self._event_monitor.check_volume_spike(
+                                pos.market_id, mkt_volume,
+                            )
+                            if vol_trigger:
+                                self._research_cache.invalidate(pos.market_id)
+                    except (TypeError, ValueError):
+                        pass
+
+                    try:
+                        mkt_end = getattr(market, "end_date", None)
+                        if mkt_end is not None and hasattr(mkt_end, "timestamp"):
+                            import datetime as _dt
+                            now = _dt.datetime.now(_dt.timezone.utc)
+                            if mkt_end.tzinfo is None:
+                                mkt_end = mkt_end.replace(tzinfo=_dt.timezone.utc)
+                            hours_remaining = (mkt_end - now).total_seconds() / 3600
+                            if hours_remaining > 0:
+                                res_trigger = self._event_monitor.check_resolution_approaching(
+                                    pos.market_id, hours_remaining,
+                                )
+                                if res_trigger:
+                                    self._research_cache.invalidate(pos.market_id)
+                    except (TypeError, ValueError, AttributeError):
+                        pass
+
+                    try:
+                        if self._latest_scan_result and isinstance(self._latest_scan_result, dict):
+                            whale_signals = self._latest_scan_result.get("signals", [])
+                            for ws in whale_signals:
+                                if ws.get("market_id") == pos.market_id:
+                                    whale_trigger = self._event_monitor.check_whale_activity(
+                                        pos.market_id,
+                                        whale_count=ws.get("whale_count", 0),
+                                        whale_volume_pct=ws.get("whale_volume_pct", 0.0),
+                                    )
+                                    if whale_trigger:
+                                        self._research_cache.invalidate(pos.market_id)
+                                    break
+                    except (TypeError, ValueError):
+                        pass
+
                     # ── Determine exit reason (if any) ───────────────
                     sl_pct = getattr(self.config.risk, "stop_loss_pct", 0.0)
                     tp_pct = getattr(self.config.risk, "take_profit_pct", 0.0)

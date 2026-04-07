@@ -22,7 +22,11 @@ scanning:
 research:
   max_sources: 10
   source_timeout_secs: 15
-  search_provider: fallback # fallback chain: duckduckgo → tavily → serpapi
+  # Default: duckduckgo → tavily → serpapi fallback chain
+  # To use SearXNG (unlimited, no API key, self-hosted):
+  #   1. docker compose --profile searxng up
+  #   2. Change search_provider below to: searxng
+  search_provider: fallback
   fetch_full_content: true
   max_content_length: 20000
   content_fetch_top_n: 8

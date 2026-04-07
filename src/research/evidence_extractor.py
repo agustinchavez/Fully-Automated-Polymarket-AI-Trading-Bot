@@ -308,9 +308,9 @@ Return ONLY valid JSON, no markdown fences.
 class EvidenceExtractor:
     """Extract structured evidence from sources using an LLM."""
 
-    def __init__(self, config: ForecastingConfig):
+    def __init__(self, config: ForecastingConfig, llm: AsyncOpenAI | None = None):
         self._config = config
-        self._llm = AsyncOpenAI()
+        self._llm = llm if llm is not None else AsyncOpenAI()
 
     async def extract(
         self,
