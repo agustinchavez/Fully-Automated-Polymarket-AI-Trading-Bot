@@ -6504,6 +6504,18 @@ def api_latency() -> Any:
     return jsonify(latency)
 
 
+# ─── API: Event Monitor Triggers ──────────────────────────────────
+
+@app.route("/api/event-triggers")
+def api_event_triggers() -> Any:
+    """Return recent event monitor triggers."""
+    triggers: list[dict] = []
+    if _engine_instance and hasattr(_engine_instance, "_event_monitor"):
+        for t in _engine_instance._event_monitor.get_all_triggers():
+            triggers.append(t.to_dict())
+    return jsonify({"triggers": triggers[-50:]})  # last 50
+
+
 # ─── API: Invariant Checks ─────────────────────────────────────────
 
 @app.route("/api/invariant-checks")

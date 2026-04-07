@@ -153,6 +153,9 @@ class EnsembleConfig(BaseModel):
     deepseek_excluded_categories: list[str] = Field(
         default_factory=lambda: ["GEOPOLITICS", "ELECTION"]
     )
+    evidence_model_gating_enabled: bool = False
+    evidence_low_quality_threshold: float = 0.25   # below this: use 2 models
+    evidence_medium_quality_threshold: float = 0.50  # below this: use 3 models
     longshot: LongshotConfig = Field(default_factory=LongshotConfig)
 
     @model_validator(mode="after")

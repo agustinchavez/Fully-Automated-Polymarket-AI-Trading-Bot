@@ -49,6 +49,7 @@ if TYPE_CHECKING:
     from src.storage.audit import AuditTrail
     from src.storage.database import Database
 
+from src.engine.event_monitor import EventMonitor
 from src.engine.pipeline import PipelineRunner
 from src.policy.drawdown import DrawdownManager
 from src.policy.portfolio_risk import PortfolioRiskManager, PositionSnapshot
@@ -212,6 +213,9 @@ class TradingEngine:
                 self._specialist_router = SpecialistRouter(self.config.specialists)
             except Exception as e:
                 log.warning("engine.specialist_router_init_error", error=str(e))
+
+        # ── Event Monitor (triggers re-research on price/volume/whale changes) ──
+        self._event_monitor = EventMonitor()
 
         # ── Phase 12: Pipeline Runner (initialized in start() after DB) ──
         self._pipeline: PipelineRunner | None = None
@@ -843,6 +847,22 @@ class TradingEngine:
                 self._pipeline._positions = self._positions
                 self._pipeline._latest_scan_result = self._latest_scan_result
 
+            # ── Per-cycle dedup: skip duplicate market IDs ──────────
+            seen_ids: set[str] = set()
+            deduped: list[Any] = []
+            for c in filtered:
+                mid = getattr(c, "id", "")
+                if mid and mid not in seen_ids:
+                    seen_ids.add(mid)
+                    deduped.append(c)
+            if len(deduped) < len(filtered):
+                log.info(
+                    "engine.cycle_dedup",
+                    original=len(filtered),
+                    deduped=len(deduped),
+                )
+            filtered = deduped
+
             # ── Phase 1: Research + Forecast (parallel) ─────────────
             # These stages are read-only and stateless per candidate.
             # Running them concurrently cuts cycle time by ~N×.
@@ -1242,6 +1262,13 @@ class TradingEngine:
                     self._db.update_position_price(
                         pos.market_id, current_price, round(pnl, 4),
                     )
+
+                    # ── Event Monitor: check for re-research triggers ──
+                    trigger = self._event_monitor.check_price_move(
+                        pos.market_id, current_price,
+                    )
+                    if trigger:
+                        self._research_cache.invalidate(pos.market_id)
 
                     # Fetch market metadata (needed for snapshots + exit trades)
                     if market is None:

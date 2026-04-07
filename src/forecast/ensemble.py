@@ -678,6 +678,7 @@ class EnsembleForecaster:
         base_rate_info: Any | None = None,
         prompt_version: str = "v1",
         signal_stack: Any | None = None,
+        evidence_quality: float | None = None,
     ) -> EnsembleResult:
         """Query all configured models in parallel and aggregate."""
         prompt = _build_prompt(features, evidence, base_rate_info, prompt_version, signal_stack=signal_stack)
@@ -691,6 +692,31 @@ class EnsembleForecaster:
             m for m in self._ensemble.models
             if not (_route_model(m) == "deepseek" and market_category in deepseek_excluded)
         ]
+
+        # Evidence-tiered model gating — reduce model count for low evidence
+        if (
+            evidence_quality is not None
+            and getattr(self._ensemble, "evidence_model_gating_enabled", False)
+            and len(active_models) > 2
+        ):
+            low_thresh = getattr(self._ensemble, "evidence_low_quality_threshold", 0.25)
+            med_thresh = getattr(self._ensemble, "evidence_medium_quality_threshold", 0.50)
+            if evidence_quality < low_thresh:
+                active_models = active_models[:2]
+                log.info(
+                    "ensemble.evidence_model_gate",
+                    evidence_quality=round(evidence_quality, 3),
+                    tier="low",
+                    model_count=2,
+                )
+            elif evidence_quality < med_thresh and len(active_models) > 3:
+                active_models = active_models[:3]
+                log.info(
+                    "ensemble.evidence_model_gate",
+                    evidence_quality=round(evidence_quality, 3),
+                    tier="medium",
+                    model_count=3,
+                )
 
         # Query all models concurrently
         timeout = self._ensemble.timeout_per_model_secs

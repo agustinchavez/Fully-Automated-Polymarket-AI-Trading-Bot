@@ -149,6 +149,7 @@ ensemble:
   min_models_required: 1
   fallback_model: gpt-4o
   timeout_per_model_secs: 30
+  evidence_model_gating_enabled: false  # reduce model count for low evidence quality
   longshot:
     enabled: true
     low_threshold: 0.12

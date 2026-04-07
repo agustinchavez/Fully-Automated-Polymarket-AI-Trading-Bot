@@ -103,6 +103,10 @@ class ResearchCache:
     def mark_researched(self, market_id: str) -> None:
         self._cache[market_id] = time.time()
 
+    def invalidate(self, market_id: str) -> None:
+        """Remove a market from the cache so it can be re-researched."""
+        self._cache.pop(market_id, None)
+
     def clear_stale(self) -> int:
         """Remove entries older than 2× cooldown.  Returns count removed."""
         cutoff = time.time() - (self._cooldown_secs * 2)

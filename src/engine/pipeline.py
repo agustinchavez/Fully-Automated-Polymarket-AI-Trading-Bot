@@ -428,12 +428,14 @@ class PipelineRunner:
                 except Exception as e:
                     log.warning("engine.decomposition_error", error=str(e))
 
+            evidence_quality = ctx.evidence.quality_score if ctx.evidence else 0.5
             ens_result = await ens_forecaster.forecast(
                 features=ctx.features,
                 evidence=ctx.evidence,
                 base_rate_info=base_rate_info,
                 prompt_version=self.config.forecasting.prompt_version,
                 signal_stack=getattr(ctx, "_signal_stack", None),
+                evidence_quality=evidence_quality,
             )
             from src.forecast.llm_forecaster import ForecastResult
             ctx.forecast = ForecastResult(
