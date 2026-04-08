@@ -101,6 +101,39 @@ class PipelineRunner:
             except Exception:
                 log.debug("engine.event_calendar_init_skipped")
 
+        # Research infrastructure — singleton, reused across all market evals.
+        # Previously recreated on every stage_research() call (561ms overhead).
+        try:
+            from src.connectors.web_search import create_search_provider
+            from src.research.source_fetcher import SourceFetcher
+            from src.research.evidence_extractor import EvidenceExtractor
+
+            self._search_provider = create_search_provider(
+                config.research.search_provider
+            )
+            self._source_fetcher = SourceFetcher(
+                self._search_provider, config.research
+            )
+            self._evidence_extractor = EvidenceExtractor(config.forecasting)
+        except Exception:
+            log.debug("engine.research_infra_init_skipped")
+            self._search_provider = None
+            self._source_fetcher = None
+            self._evidence_extractor = None
+
+    async def close(self) -> None:
+        """Close shared research infrastructure — called at engine shutdown."""
+        if self._source_fetcher is not None:
+            try:
+                await self._source_fetcher.close()
+            except Exception:
+                log.warning("engine.source_fetcher_close_error", exc_info=True)
+        if self._search_provider is not None:
+            try:
+                await self._search_provider.close()
+            except Exception:
+                log.warning("engine.search_provider_close_error", exc_info=True)
+
     # ── Pipeline Stage Methods ────────────────────────────────────────
 
     def stage_classify(self, ctx: PipelineContext) -> None:
@@ -132,12 +165,20 @@ class PipelineRunner:
             return False
 
         from src.research.query_builder import build_queries
-        from src.research.source_fetcher import SourceFetcher
-        from src.research.evidence_extractor import EvidenceExtractor
-        from src.connectors.web_search import create_search_provider
 
-        search_provider = create_search_provider(self.config.research.search_provider)
-        source_fetcher = SourceFetcher(search_provider, self.config.research)
+        # Use shared singleton instances (initialised in __init__)
+        source_fetcher = self._source_fetcher
+        extractor = self._evidence_extractor
+
+        if source_fetcher is None or extractor is None:
+            # Lazy fallback if singleton init failed
+            from src.connectors.web_search import create_search_provider
+            from src.research.source_fetcher import SourceFetcher
+            from src.research.evidence_extractor import EvidenceExtractor
+
+            search_provider = create_search_provider(self.config.research.search_provider)
+            source_fetcher = SourceFetcher(search_provider, self.config.research)
+            extractor = EvidenceExtractor(self.config.forecasting)
 
         try:
             max_q = ctx.classification.recommended_queries
@@ -152,7 +193,6 @@ class PipelineRunner:
                 max_sources=self.config.research.max_sources,
                 market_question=ctx.question,
             )
-            extractor = EvidenceExtractor(self.config.forecasting)
             ctx.evidence = await extractor.extract(
                 market_id=ctx.market_id, question=ctx.question,
                 sources=ctx.sources, market_type=ctx.market.market_type,
@@ -165,15 +205,6 @@ class PipelineRunner:
                                 reason=f"Research failed: {e}",
                                 classification=ctx.classification)
             return False
-        finally:
-            try:
-                await source_fetcher.close()
-            except Exception:
-                log.warning("engine.source_fetcher_close_error", exc_info=True)
-            try:
-                await search_provider.close()
-            except Exception:
-                log.warning("engine.search_provider_close_error", exc_info=True)
 
         # Build signal stack from research sources + conviction + calendar
         try:
