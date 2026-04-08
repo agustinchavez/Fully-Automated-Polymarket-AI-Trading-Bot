@@ -238,7 +238,7 @@ class TestExpandedFredSeries:
     def test_macro_keywords_include_new_terms(self) -> None:
         """_MACRO_KEYWORDS includes new terms for relevance matching."""
         from src.research.connectors.fred import _MACRO_KEYWORDS
-        for term in ["pce", "manufacturing", "oil", "crude", "retail sales",
+        for term in ["pce", "manufacturing employment", "oil", "crude", "retail sales",
                      "jobless claims", "money supply", "t-bill"]:
             assert term in _MACRO_KEYWORDS
 

@@ -69,7 +69,7 @@ _KEYWORD_SERIES: list[tuple[list[str], list[str], str]] = [
         "PCE Price Index",
     ),
     (
-        ["manufacturing", "industrial", "factory", "pmi"],
+        ["manufacturing employment", "factory workers", "manufacturing jobs"],
         ["MANEMP"],
         "Manufacturing Employment",
     ),
@@ -105,7 +105,7 @@ _MACRO_KEYWORDS: list[str] = [
     "federal reserve", "fed", "mortgage", "treasury", "yield",
     "recession", "consumer price", "rate cut", "rate hike",
     "jobs", "jobless", "consumer sentiment", "stock market",
-    "pce", "manufacturing", "oil", "crude", "retail sales",
+    "pce", "manufacturing employment", "oil", "crude", "retail sales",
     "jobless claims", "money supply", "t-bill",
 ]
 

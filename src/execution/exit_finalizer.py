@@ -323,5 +323,67 @@ class ExitFinalizer:
                 forecast=round(record.forecast_prob, 3),
                 outcome=actual_outcome,
             )
+
+            # ── Evidence source quality tracking ─────────────────────
+            if cl_cfg and getattr(cl_cfg, "evidence_tracking_enabled", False) and fc:
+                self._record_evidence_quality(
+                    fc, actual_outcome, record.forecast_prob,
+                )
         except Exception as e:
             log.warning("exit_finalizer.calibration_error", error=str(e))
+
+    def _record_evidence_quality(
+        self,
+        fc: Any,
+        actual_outcome: float,
+        forecast_prob: float,
+    ) -> None:
+        """Track evidence source domain quality on resolution."""
+        try:
+            import json
+            from urllib.parse import urlparse
+
+            from src.analytics.evidence_quality import EvidenceQualityTracker
+
+            raw_json = getattr(fc, "research_evidence_json", "{}") or "{}"
+            research = json.loads(raw_json)
+            evidence_list = research.get("evidence", [])
+            if not evidence_list:
+                return
+
+            was_correct = (
+                (forecast_prob > 0.5 and actual_outcome == 1.0)
+                or (forecast_prob < 0.5 and actual_outcome == 0.0)
+            )
+            eq = getattr(fc, "evidence_quality", 0.0)
+
+            tracker = EvidenceQualityTracker(self._db._conn)
+            seen: set[str] = set()
+            for bullet in evidence_list:
+                citation = bullet.get("citation", {})
+                url = citation.get("url", "")
+                if not url:
+                    continue
+                try:
+                    domain = urlparse(url).netloc.lower()
+                    if domain.startswith("www."):
+                        domain = domain[4:]
+                except Exception:
+                    continue
+                if not domain or domain in seen:
+                    continue
+                seen.add(domain)
+                tracker.record_source_outcome(
+                    domain=domain,
+                    was_correct=was_correct,
+                    evidence_quality=eq,
+                    authority=bullet.get("confidence", 0.0),
+                )
+
+            if seen:
+                log.info(
+                    "exit_finalizer.evidence_quality_recorded",
+                    domains=len(seen),
+                )
+        except Exception as e:
+            log.warning("exit_finalizer.evidence_tracking_error", error=str(e))
