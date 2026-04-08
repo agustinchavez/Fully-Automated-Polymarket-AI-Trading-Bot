@@ -6910,20 +6910,16 @@ def api_admin() -> Any:
         search_calls = counters.get("search.calls", 0)
         api_errors = counters.get("api.errors", 0)
 
-        # Rough cost estimates (per 1M tokens)
-        cost_per_1m_input = {
-            "gpt-4o": 2.50,
-            "claude-sonnet-4-6": 3.00, "claude-3-5-sonnet-20241022": 3.00,
-            "gemini-2.0-flash": 0.10, "gemini-1.5-pro": 1.25,
-        }
-        cost_per_1m_output = {
-            "gpt-4o": 10.00,
-            "claude-sonnet-4-6": 15.00, "claude-3-5-sonnet-20241022": 15.00,
-            "gemini-2.0-flash": 0.40, "gemini-1.5-pro": 5.00,
-        }
+        # Per-token costs from CostTracker (single source of truth)
+        from src.observability.metrics import cost_tracker as _ct
         model = cfg.forecasting.llm_model
-        input_cost_rate = cost_per_1m_input.get(model, 2.50)
-        output_cost_rate = cost_per_1m_output.get(model, 10.00)
+        _tok = _ct._token_costs.get(model)
+        if _tok:
+            input_cost_rate = _tok[0] * 1_000_000   # per-token -> per-1M
+            output_cost_rate = _tok[1] * 1_000_000
+        else:
+            input_cost_rate = 2.50
+            output_cost_rate = 10.00
         est_llm_cost = (llm_input_tokens * input_cost_rate / 1_000_000) + (llm_output_tokens * output_cost_rate / 1_000_000)
         est_search_cost = search_calls * 0.001  # rough estimate
 

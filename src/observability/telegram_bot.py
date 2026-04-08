@@ -27,6 +27,13 @@ log = get_logger(__name__)
 TELEGRAM_MAX_MESSAGE_LEN = 4096
 
 
+def _escape_md(text: str) -> str:
+    """Escape Telegram MarkdownV1 special characters."""
+    for ch in ("*", "_", "`", "["):
+        text = text.replace(ch, f"\\{ch}")
+    return text
+
+
 class TelegramKillBot:
     """Lightweight long-polling Telegram bot for kill switch control."""
 
@@ -44,6 +51,14 @@ class TelegramKillBot:
         self._offset = 0
         self._base_url = f"https://api.telegram.org/bot{token}"
         self._scheduler: Any = None
+        self._http: Any = None  # shared httpx.AsyncClient
+
+    async def _get_http(self) -> Any:
+        """Return shared httpx.AsyncClient, creating lazily on first call."""
+        if self._http is None:
+            import httpx
+            self._http = httpx.AsyncClient(timeout=40)
+        return self._http
 
     # ── Public API ────────────────────────────────────────────────
 
@@ -71,6 +86,13 @@ class TelegramKillBot:
                 self._scheduler.shutdown(wait=False)
             except Exception:
                 pass
+        # Schedule shared client cleanup
+        if self._http is not None:
+            try:
+                asyncio.ensure_future(self._http.aclose())
+            except Exception:
+                pass
+            self._http = None
         log.info("telegram_bot.stopped")
 
     def _start_scheduler(self) -> None:
@@ -106,7 +128,7 @@ class TelegramKillBot:
     async def _get_updates(self) -> list[dict]:
         """Fetch updates via long polling."""
         try:
-            import httpx
+            import httpx  # noqa: F401 — ensure available
         except ImportError:
             log.warning("telegram_bot.httpx_not_installed")
             await asyncio.sleep(30)
@@ -115,9 +137,9 @@ class TelegramKillBot:
         url = f"{self._base_url}/getUpdates"
         params = {"offset": self._offset, "timeout": 30}
 
-        async with httpx.AsyncClient(timeout=40) as client:
-            resp = await client.get(url, params=params)
-            data = resp.json()
+        client = await self._get_http()
+        resp = await client.get(url, params=params)
+        data = resp.json()
 
         if not data.get("ok"):
             return []
@@ -161,24 +183,27 @@ class TelegramKillBot:
     async def _send_message(self, text: str) -> bool:
         """Send a message to the configured chat, splitting if needed."""
         try:
-            import httpx
+            import httpx  # noqa: F401 — ensure available
         except ImportError:
             return False
+
+        # Escape Markdown special chars to prevent HTTP 400 from Telegram API
+        text = _escape_md(text)
 
         url = f"{self._base_url}/sendMessage"
         chunks = _split_message(text, TELEGRAM_MAX_MESSAGE_LEN)
 
         try:
-            async with httpx.AsyncClient(timeout=10) as client:
-                for chunk in chunks:
-                    payload = {
-                        "chat_id": self._chat_id,
-                        "text": chunk,
-                        "parse_mode": "Markdown",
-                    }
-                    resp = await client.post(url, json=payload)
-                    if resp.status_code != 200:
-                        return False
+            client = await self._get_http()
+            for chunk in chunks:
+                payload = {
+                    "chat_id": self._chat_id,
+                    "text": chunk,
+                    "parse_mode": "Markdown",
+                }
+                resp = await client.post(url, json=payload)
+                if resp.status_code != 200:
+                    return False
             return True
         except Exception as e:
             log.warning("telegram_bot.send_error", error=str(e))

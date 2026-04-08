@@ -496,6 +496,14 @@ class TradingEngine:
                 await asyncio.sleep(interval)
 
         log.info("engine.stopped", total_cycles=self._cycle_count)
+
+        # Close shared research infrastructure (httpx clients, etc.)
+        if self._pipeline:
+            try:
+                await self._pipeline.close()
+            except Exception:
+                log.warning("engine.pipeline_close_error", exc_info=True)
+
         if self._db:
             self._db.insert_alert("info", "\U0001f6d1 Trading engine stopped", "system")
             self._persist_engine_state({"running": False})

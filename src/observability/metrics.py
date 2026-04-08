@@ -133,7 +133,6 @@ def track_latency(endpoint: str) -> Generator[None, None, None]:
 _DEFAULT_COSTS: dict[str, float] = {
     "gpt-4o": 0.005,                    # ~$5/1M input tokens, ~1K tokens/call
     "gpt-4o-mini": 0.0005,
-    "claude-3-5-sonnet-20241022": 0.005,
     "claude-sonnet-4-6": 0.008,
     "gemini-1.5-pro": 0.003,
     "gemini-2.0-flash": 0.0003,
