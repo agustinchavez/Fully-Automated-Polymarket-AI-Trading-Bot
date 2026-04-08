@@ -115,6 +115,7 @@ class ForecastingConfig(BaseModel):
     low_evidence_penalty: float = 0.15
     min_evidence_quality: float = 0.55
     min_confidence_level: str = "MEDIUM"  # Reject LOW confidence trades
+    category_min_confidence: dict[str, str] = Field(default_factory=dict)  # per-category override
     # Phase 2: Structured forecasting
     prompt_version: str = "v1"  # v1 (legacy) or v2 (structured reasoning chain)
     base_rate_enabled: bool = False  # inject base rates into prompt

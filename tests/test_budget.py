@@ -118,7 +118,7 @@ class TestBudgetConfig:
         from src.config import load_config
         cfg = load_config()
         assert cfg.budget.enabled is True
-        assert cfg.budget.daily_limit_usd == 5.0
+        assert cfg.budget.daily_limit_usd == 15.0
 
 
 class TestTokenBasedCost:

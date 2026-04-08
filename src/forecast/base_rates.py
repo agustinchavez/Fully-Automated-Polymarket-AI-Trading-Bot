@@ -6,7 +6,7 @@ anchor on historical frequency data before adjusting improves
 calibration significantly.
 
 Features:
-  - 68 seed patterns with regex matching across 10 categories
+  - 73 seed patterns with regex matching across 10 categories
   - Self-updating empirical rates from resolved markets
   - Category-level fallback when no pattern matches
   - Confidence scoring for match quality
@@ -416,29 +416,14 @@ _SEED_PATTERNS: list[dict[str, Any]] = [
         "sample_size": 30,
     },
 
-    # ── SPORTS (6 patterns) ──────────────────────────────────────────
+    # ── SPORTS (11 patterns) ─────────────────────────────────────────
+    # Conceptual patterns
     {
         "pattern": r"(home team|home.*(win|advantage))",
         "category": "SPORTS",
         "description": "Home team wins the game",
         "base_rate": 0.55,
         "source": "Major US sports home win rate composite",
-        "sample_size": 50000,
-    },
-    {
-        "pattern": r"(favorite|favoured).*(win|cover|beat).*spread",
-        "category": "SPORTS",
-        "description": "Favorite covers the spread",
-        "base_rate": 0.50,
-        "source": "NFL/NBA spread coverage rate (by design ~50%)",
-        "sample_size": 50000,
-    },
-    {
-        "pattern": r"(over|total).*(hit|exceed|above|over).*\d+",
-        "category": "SPORTS",
-        "description": "Game total goes over set line",
-        "base_rate": 0.50,
-        "source": "NFL/NBA over/under hit rate (by design ~50%)",
         "sample_size": 50000,
     },
     {
@@ -464,6 +449,63 @@ _SEED_PATTERNS: list[dict[str, Any]] = [
         "base_rate": 0.50,
         "source": "NFL/NBA/MLB playoff qualification rates",
         "sample_size": 5000,
+    },
+    # Polymarket-format patterns (real phrasings)
+    {
+        "pattern": r"[A-Z][a-z]+ vs\.? [A-Z][a-z]+",
+        "category": "SPORTS",
+        "description": "Head-to-head match winner (binary)",
+        "base_rate": 0.50,
+        "source": "Binary H2H outcome (by design ~50%)",
+        "sample_size": 50000,
+    },
+    {
+        "pattern": r"(?i)spread.*\([-+]\d+\.?\d*\)",
+        "category": "SPORTS",
+        "description": "Favourite covers point spread",
+        "base_rate": 0.50,
+        "source": "NFL/NBA spread coverage rate (by design ~50%)",
+        "sample_size": 50000,
+    },
+    {
+        "pattern": r"(?i)(o/u|over[/ ]under|total)[:\s]*\d+\.?\d*",
+        "category": "SPORTS",
+        "description": "Game total goes over/under set line",
+        "base_rate": 0.50,
+        "source": "NFL/NBA over/under hit rate (by design ~50%)",
+        "sample_size": 50000,
+    },
+    {
+        "pattern": r"(?i)both teams? to score",
+        "category": "SPORTS",
+        "description": "Both teams score in soccer match",
+        "base_rate": 0.55,
+        "source": "European soccer BTTS rate 2015-2024",
+        "sample_size": 10000,
+    },
+    {
+        "pattern": r"(?i)(lol|cs2?|counter.strike|valorant|dota|e.?sports?).*vs",
+        "category": "SPORTS",
+        "description": "Esports match winner (binary)",
+        "base_rate": 0.50,
+        "source": "Esports binary match outcome",
+        "sample_size": 5000,
+    },
+    {
+        "pattern": r"(?i)(moneyline|money line|ml)[:\s]",
+        "category": "SPORTS",
+        "description": "Moneyline bet winner",
+        "base_rate": 0.50,
+        "source": "Moneyline outcome (by design ~50%)",
+        "sample_size": 50000,
+    },
+    {
+        "pattern": r"(?i)(win|beat|defeat).*\b(game|match|series|set)\b",
+        "category": "SPORTS",
+        "description": "Team wins specific game or match",
+        "base_rate": 0.50,
+        "source": "Generic sports H2H binary",
+        "sample_size": 50000,
     },
 
     # ── CRYPTO (4 patterns) ──────────────────────────────────────────

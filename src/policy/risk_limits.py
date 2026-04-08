@@ -175,8 +175,10 @@ def check_risk_limits(
         )
 
     # 9. Confidence level filter — reject LOW confidence trades
+    #    Supports per-category overrides (e.g. GEOPOLITICS/ELECTION → LOW)
     _CONF_RANK = {"LOW": 0, "MEDIUM": 1, "HIGH": 2}
-    min_conf = forecast_config.min_confidence_level if hasattr(forecast_config, "min_confidence_level") else "LOW"
+    cat_overrides = getattr(forecast_config, "category_min_confidence", {}) or {}
+    min_conf = cat_overrides.get(market_type, forecast_config.min_confidence_level if hasattr(forecast_config, "min_confidence_level") else "LOW")
     if _CONF_RANK.get(confidence_level, 0) < _CONF_RANK.get(min_conf, 0):
         violations.append(
             f"LOW_CONFIDENCE: {confidence_level} < minimum {min_conf}"

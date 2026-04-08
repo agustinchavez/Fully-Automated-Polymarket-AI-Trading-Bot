@@ -184,7 +184,8 @@ def test_score_preferred_type():
 def test_score_sports_type():
     m = FakeMarket(market_type="SPORTS")
     score, bd = _score_market(m)
-    assert bd["market_type"] == -5
+    # SPORTS is no longer penalised — gets 0 (not in default preferred list)
+    assert bd["market_type"] == 0
 
 
 def test_score_resolution_source():

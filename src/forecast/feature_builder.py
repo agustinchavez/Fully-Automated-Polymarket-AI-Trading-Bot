@@ -156,8 +156,14 @@ def build_features(
             features.resolution_urgency = max(0.0, 0.3 - features.days_to_expiry / 100)
 
         # Time decay multiplier for position sizing
+        # Near-resolution boost (≤7 days) + long-horizon discount (>30 days)
         if features.days_to_expiry <= 7:
             features.time_decay_multiplier = min(1.5, 1.0 + (7 - features.days_to_expiry) / 14)
+        elif features.days_to_expiry > 90:
+            features.time_decay_multiplier = 0.7
+        elif features.days_to_expiry > 30:
+            # Linear interpolation: 1.0 at 30d → 0.7 at 90d
+            features.time_decay_multiplier = 1.0 - 0.3 * (features.days_to_expiry - 30) / 60
         else:
             features.time_decay_multiplier = 1.0
 

@@ -295,11 +295,11 @@ class TestBaseRateCoverage:
         assert match.category == "SCIENCE"
 
     def test_total_pattern_count(self) -> None:
-        """Registry now has 68 seed patterns."""
+        """Registry now has 73 seed patterns (68 + 5 new SPORTS format)."""
         from src.forecast.base_rates import BaseRateRegistry
 
         registry = BaseRateRegistry()
-        assert registry.pattern_count == 68
+        assert registry.pattern_count == 73
 
     def test_crypto_category_base_rate(self) -> None:
         """CRYPTO has a category-level fallback base rate."""

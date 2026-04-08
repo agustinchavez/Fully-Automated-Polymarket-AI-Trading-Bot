@@ -150,20 +150,14 @@ class SourceFetcher:
         secondary = self._config.secondary_domains
         blocked = self._config.blocked_domains
 
-        # Run queries concurrently with a hard timeout to prevent hangs
-        # (DDGS threads can't be cancelled by asyncio, so we need an outer deadline)
-        tasks = [self._run_query(q) for q in queries]
-        try:
-            results_per_query = await asyncio.wait_for(
-                asyncio.gather(*tasks, return_exceptions=True),
-                timeout=45.0,
-            )
-        except asyncio.TimeoutError:
-            log.warning(
-                "source_fetcher.query_gather_timeout",
-                queries=len(queries),
-            )
-            results_per_query = []
+        # Run queries concurrently — each query has its own timeout so
+        # one slow DDGS query doesn't cancel all others
+        per_query_timeout = self._config.source_timeout_secs  # 15s default
+        tasks = [
+            asyncio.wait_for(self._run_query(q), timeout=per_query_timeout)
+            for q in queries
+        ]
+        results_per_query = await asyncio.gather(*tasks, return_exceptions=True)
 
         for query, results in zip(queries, results_per_query):
             if isinstance(results, BaseException):

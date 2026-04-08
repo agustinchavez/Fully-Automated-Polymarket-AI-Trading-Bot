@@ -1,7 +1,7 @@
 scanning:
   min_volume_usd: 1000
-  min_liquidity_usd: 500
-  max_spread: 0.08
+  min_liquidity_usd: 2000
+  max_spread: 0.06
   max_days_to_expiry: 120
   max_market_age_hours: 720
   batch_size: 100
@@ -12,6 +12,7 @@ scanning:
     - LEGAL
     - TECHNOLOGY
     - SCIENCE
+    - SPORTS
   restricted_types:
     - WEATHER
   filter_min_score: 25
@@ -27,7 +28,7 @@ scanning:
     ELECTION: 90
 research:
   max_sources: 10
-  source_timeout_secs: 15
+  source_timeout_secs: 22
   # Default: duckduckgo → tavily → serpapi fallback chain
   # To use SearXNG (unlimited, no API key, self-hosted):
   #   1. docker compose --profile searxng up
@@ -149,6 +150,9 @@ forecasting:
   prompt_version: v2
   base_rate_enabled: true
   min_confidence_level: MEDIUM
+  category_min_confidence:
+    GEOPOLITICS: LOW
+    ELECTION: LOW
 ensemble:
   enabled: true
   models:
@@ -265,7 +269,7 @@ scanner:
     endpoints: []
 budget:
   enabled: true
-  daily_limit_usd: 5.0
+  daily_limit_usd: 15.0
   warning_pct: 0.8
 model_tiers:
   enabled: true

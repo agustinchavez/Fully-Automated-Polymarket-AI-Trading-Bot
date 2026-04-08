@@ -274,8 +274,6 @@ def _score_market(market: Any, preferred_types: list[str] | None = None,
     prefs = preferred_types or ["MACRO", "ELECTION", "CORPORATE"]
     if mtype in prefs:
         breakdown["market_type"] = 15
-    elif mtype == "SPORTS":
-        breakdown["market_type"] = -5
     else:
         breakdown["market_type"] = 0
 
