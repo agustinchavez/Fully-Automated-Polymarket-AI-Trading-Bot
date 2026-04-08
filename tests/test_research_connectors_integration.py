@@ -285,6 +285,7 @@ class TestSourceFetcherIntegration:
 
         fetcher = SourceFetcher.__new__(SourceFetcher)
         fetcher._connectors = [mock_connector]
+        fetcher._config = MagicMock(source_timeout_secs=15)
         result = asyncio.run(
             fetcher.fetch_structured_sources("test question", "MACRO")
         )
@@ -302,6 +303,7 @@ class TestSourceFetcherIntegration:
 
         fetcher = SourceFetcher.__new__(SourceFetcher)
         fetcher._connectors = [mock_connector]
+        fetcher._config = MagicMock(source_timeout_secs=15)
         result = asyncio.run(
             fetcher.fetch_structured_sources("test question", "CRYPTO")
         )
@@ -335,6 +337,7 @@ class TestSourceFetcherIntegration:
 
         fetcher = SourceFetcher.__new__(SourceFetcher)
         fetcher._connectors = [mock_bad, mock_good]
+        fetcher._config = MagicMock(source_timeout_secs=15)
         result = asyncio.run(
             fetcher.fetch_structured_sources("test", "MACRO")
         )

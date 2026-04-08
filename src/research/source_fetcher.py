@@ -95,18 +95,15 @@ class SourceFetcher:
         if not relevant:
             return []
 
-        tasks = [conn.fetch(question, market_type) for conn in relevant]
-        try:
-            outcomes = await asyncio.wait_for(
-                asyncio.gather(*tasks, return_exceptions=True),
-                timeout=20.0,
+        per_conn_timeout = self._config.source_timeout_secs  # 15s default
+        tasks = [
+            asyncio.wait_for(
+                conn.fetch(question, market_type),
+                timeout=per_conn_timeout,
             )
-        except asyncio.TimeoutError:
-            log.warning(
-                "source_fetcher.structured_sources_timeout",
-                connectors=len(relevant),
-            )
-            return []
+            for conn in relevant
+        ]
+        outcomes = await asyncio.gather(*tasks, return_exceptions=True)
 
         results: list[FetchedSource] = []
         for conn, outcome in zip(relevant, outcomes):

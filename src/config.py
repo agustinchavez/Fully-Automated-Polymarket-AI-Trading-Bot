@@ -37,6 +37,7 @@ class ScanningConfig(BaseModel):
     filter_min_score: int = 25
     filter_blocked_types: list[str] = Field(default_factory=lambda: ["UNKNOWN"])
     research_cooldown_minutes: int = 60
+    category_cooldown_minutes: dict[str, int] = Field(default_factory=dict)
 
 
 class ResearchConfig(BaseModel):
@@ -233,7 +234,7 @@ class RiskConfig(BaseModel):
     uncertainty_enabled: bool = False          # penalize edge based on forecast uncertainty
     uncertainty_penalty_factor: float = 0.5    # how much uncertainty penalizes edge (0-1)
     # Cost model: convert percentage-of-stake into probability space (cost_pct * price)
-    use_probability_space_costs: bool = False
+    use_probability_space_costs: bool = True
     # Improvement 3: TWAP edge reference
     use_twap_edge: bool = False
     twap_window_hours: float = 2.0

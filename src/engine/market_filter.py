@@ -82,8 +82,15 @@ class FilterStats:
 class ResearchCache:
     """In-memory cache tracking when each market was last researched."""
 
-    def __init__(self, cooldown_minutes: int = 30):
+    def __init__(
+        self,
+        cooldown_minutes: int = 30,
+        category_cooldown_minutes: Dict[str, int] | None = None,
+    ):
         self._cooldown_secs = cooldown_minutes * 60
+        self._category_cooldown_secs: Dict[str, int] = {
+            k: v * 60 for k, v in (category_cooldown_minutes or {}).items()
+        }
         self._cache: Dict[str, float] = {}  # market_id → timestamp
 
     @property
@@ -94,11 +101,12 @@ class ResearchCache:
     def cooldown_minutes(self, value: int) -> None:
         self._cooldown_secs = value * 60
 
-    def was_recently_researched(self, market_id: str) -> bool:
+    def was_recently_researched(self, market_id: str, category: str = "") -> bool:
         ts = self._cache.get(market_id)
         if ts is None:
             return False
-        return (time.time() - ts) < self._cooldown_secs
+        cooldown = self._category_cooldown_secs.get(category, self._cooldown_secs)
+        return (time.time() - ts) < cooldown
 
     def mark_researched(self, market_id: str) -> None:
         self._cache[market_id] = time.time()
@@ -407,7 +415,8 @@ def filter_markets(
             continue
 
         # Research cooldown check
-        if research_cache and research_cache.was_recently_researched(fr.market_id):
+        _cat = fr.classification.category if fr.classification else ""
+        if research_cache and research_cache.was_recently_researched(fr.market_id, category=_cat):
             stats.cooldown_skipped += 1
             stats.rejection_reasons["cooldown"] = (
                 stats.rejection_reasons.get("cooldown", 0) + 1

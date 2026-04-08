@@ -129,6 +129,7 @@ class TradingEngine:
         # Pre-research filter
         self._research_cache = ResearchCache(
             cooldown_minutes=self.config.scanning.research_cooldown_minutes,
+            category_cooldown_minutes=self.config.scanning.category_cooldown_minutes,
         )
         self._last_filter_stats: FilterStats | None = None
 

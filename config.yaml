@@ -19,6 +19,12 @@ scanning:
     - UNKNOWN
     # - SPORTS
   research_cooldown_minutes: 60
+  category_cooldown_minutes:
+    SPORTS: 20
+    CULTURE: 30
+    MACRO: 90
+    GEOPOLITICS: 120
+    ELECTION: 90
 research:
   max_sources: 10
   source_timeout_secs: 15
@@ -140,6 +146,8 @@ forecasting:
   llm_max_tokens: 4096
   low_evidence_penalty: 0.15
   min_evidence_quality: 0.55
+  prompt_version: v2
+  base_rate_enabled: true
   min_confidence_level: MEDIUM
 ensemble:
   enabled: true
@@ -187,9 +195,15 @@ risk:
   volatility_high_min_mult: 0.4
   volatility_med_min_mult: 0.6
   category_stake_multipliers:
+    SPORTS: 1.3
     MACRO: 1.0
+    SCIENCE: 1.1
+    TECH: 0.9
+    CULTURE: 0.8
     CORPORATE: 0.75
-    ELECTION: 0.5
+    CRYPTO: 0.7
+    ELECTION: 0.6
+    GEOPOLITICS: 0.6
   kill_switch: false
 drawdown:
   enabled: true
