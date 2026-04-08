@@ -202,22 +202,15 @@ class SourceFetcher:
         top = all_sources[:max_sources]
 
         # Fetch full page content for top N sources
+        # Each fetch_page_content has its own httpx timeout (source_timeout_secs).
+        # No shared outer timeout — slow pages fail individually without
+        # cancelling fast ones (same pattern as per-connector/per-query fixes).
         if self._config.fetch_full_content:
             fetch_n = min(self._config.content_fetch_top_n, len(top))
             content_tasks = [
                 self.fetch_page_content(src.url) for src in top[:fetch_n]
             ]
-            try:
-                contents = await asyncio.wait_for(
-                    asyncio.gather(*content_tasks, return_exceptions=True),
-                    timeout=30.0,
-                )
-            except asyncio.TimeoutError:
-                log.warning(
-                    "source_fetcher.content_fetch_timeout",
-                    pages=fetch_n,
-                )
-                contents = []
+            contents = await asyncio.gather(*content_tasks, return_exceptions=True)
             for i, content in enumerate(contents):
                 if isinstance(content, str) and content:
                     top[i].content = content

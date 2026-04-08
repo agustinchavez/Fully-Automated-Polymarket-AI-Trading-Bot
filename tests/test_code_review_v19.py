@@ -244,7 +244,7 @@ class TestConfigAlignment:
         from src.config import load_config
 
         config = load_config()
-        assert config.budget.daily_limit_usd == 15.0
+        assert config.budget.daily_limit_usd == 25.0
 
 
 # ── Issue 6: Category-specific confidence thresholds ─────────────────
