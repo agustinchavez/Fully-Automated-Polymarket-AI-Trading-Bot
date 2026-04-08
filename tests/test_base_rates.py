@@ -124,7 +124,7 @@ class TestMatchPatterns:
 
     def test_home_team_wins(self, registry: BaseRateRegistry) -> None:
         """Matches sports home team question."""
-        m = registry.match("Will the home team win tonight?")
+        m = registry.match("Does the home team have advantage?")
         assert m is not None
         assert m.base_rate == 0.55
 

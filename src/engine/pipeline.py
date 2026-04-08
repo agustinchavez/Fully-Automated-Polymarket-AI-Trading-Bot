@@ -905,8 +905,22 @@ class PipelineRunner:
 
         from src.policy.correlation import EventCorrelationScorer
         from src.policy.portfolio_risk import check_var_gate, PositionSnapshot
+        from src.policy.position_sizer import calculate_position_size
 
         scorer = EventCorrelationScorer(self.config.portfolio)
+
+        # Preliminary Kelly estimate for VaR sizing (replaces hardcoded 50.0)
+        estimated_size = 50.0
+        if ctx.edge_result and ctx.forecast:
+            try:
+                prelim = calculate_position_size(
+                    edge=ctx.edge_result,
+                    risk_config=self.config.risk,
+                    confidence_level=getattr(ctx.forecast, "confidence_level", "LOW"),
+                )
+                estimated_size = max(1.0, prelim.stake_usd)
+            except Exception:
+                pass  # fall back to 50.0 on any error
 
         new_pos = PositionSnapshot(
             market_id=ctx.market_id,
@@ -914,7 +928,7 @@ class PipelineRunner:
             category=ctx.classification.category if ctx.classification else "",
             event_slug=getattr(ctx.market, "slug", "") or "",
             side=ctx.edge_result.direction.replace("BUY_", "") if ctx.edge_result else "YES",
-            size_usd=50.0,  # estimate; actual size computed later
+            size_usd=estimated_size,
             entry_price=ctx.edge_result.implied_probability if ctx.edge_result else 0.5,
             current_price=ctx.edge_result.implied_probability if ctx.edge_result else 0.5,
         )

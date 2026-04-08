@@ -6,7 +6,7 @@ anchor on historical frequency data before adjusting improves
 calibration significantly.
 
 Features:
-  - 73 seed patterns with regex matching across 10 categories
+  - 74 seed patterns with regex matching across 10 categories
   - Self-updating empirical rates from resolved markets
   - Category-level fallback when no pattern matches
   - Confidence scoring for match quality
@@ -416,7 +416,7 @@ _SEED_PATTERNS: list[dict[str, Any]] = [
         "sample_size": 30,
     },
 
-    # ── SPORTS (11 patterns) ─────────────────────────────────────────
+    # ── SPORTS (12 patterns) ─────────────────────────────────────────
     # Conceptual patterns
     {
         "pattern": r"(home team|home.*(win|advantage))",
@@ -506,6 +506,14 @@ _SEED_PATTERNS: list[dict[str, Any]] = [
         "base_rate": 0.50,
         "source": "Generic sports H2H binary",
         "sample_size": 50000,
+    },
+    {
+        "pattern": r"(?i)will\s+\w[\w\s]+(win|beat|defeat|advance|qualify)",
+        "category": "SPORTS",
+        "description": "Single team wins or advances (question format)",
+        "base_rate": 0.50,
+        "source": "Binary outcome base rate",
+        "sample_size": 10000,
     },
 
     # ── CRYPTO (4 patterns) ──────────────────────────────────────────

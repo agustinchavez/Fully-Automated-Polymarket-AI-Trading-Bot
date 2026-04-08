@@ -160,7 +160,11 @@ def build_features(
         if features.days_to_expiry <= 7:
             features.time_decay_multiplier = min(1.5, 1.0 + (7 - features.days_to_expiry) / 14)
         elif features.days_to_expiry > 90:
-            features.time_decay_multiplier = 0.7
+            # Continue discounting: 0.70 at 90d → 0.40 at 365d → 0.30 floor
+            features.time_decay_multiplier = max(
+                0.30,
+                0.70 - 0.30 * (features.days_to_expiry - 90) / 275,
+            )
         elif features.days_to_expiry > 30:
             # Linear interpolation: 1.0 at 30d → 0.7 at 90d
             features.time_decay_multiplier = 1.0 - 0.3 * (features.days_to_expiry - 30) / 60

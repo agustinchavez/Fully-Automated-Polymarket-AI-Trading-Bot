@@ -183,19 +183,19 @@ class TestSportsBaseRatePatterns:
         assert match is not None
 
     def test_total_pattern_count(self) -> None:
-        """Registry has 73 total patterns (68 + 5 new SPORTS format)."""
+        """Registry has 74 total patterns (68 + 6 new SPORTS format)."""
         from src.forecast.base_rates import BaseRateRegistry
 
         registry = BaseRateRegistry()
-        assert registry.pattern_count == 73
+        assert registry.pattern_count == 74
 
     def test_sports_pattern_count(self) -> None:
-        """SPORTS category has 11 patterns (4 conceptual + 7 format)."""
+        """SPORTS category has 12 patterns (4 conceptual + 8 format)."""
         from src.forecast.base_rates import BaseRateRegistry
 
         registry = BaseRateRegistry()
         sports_patterns = [p for p in registry.patterns if p.category == "SPORTS"]
-        assert len(sports_patterns) == 11
+        assert len(sports_patterns) == 12
 
 
 # ── Issues 4/5/7: Config value alignment ─────────────────────────────
@@ -410,14 +410,14 @@ class TestLongHorizonDiscount:
         assert 0.80 <= features.time_decay_multiplier <= 0.90
 
     def test_90_day_discount(self) -> None:
-        """At ≥90 days, multiplier is 0.7."""
+        """At 90 days, multiplier is ~0.7 (boundary of linear segment)."""
         features = self._build_features_with_days(90)
         assert features.time_decay_multiplier == pytest.approx(0.7, abs=0.01)
 
     def test_120_day_discount(self) -> None:
-        """At 120 days (>90), multiplier is capped at 0.7."""
+        """At 120 days (>90), multiplier continues below 0.7."""
         features = self._build_features_with_days(120)
-        assert features.time_decay_multiplier == 0.7
+        assert features.time_decay_multiplier < 0.70
 
     def test_monotonic_decrease(self) -> None:
         """Multiplier decreases monotonically from 30→90 days."""

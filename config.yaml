@@ -165,7 +165,7 @@ ensemble:
   min_models_required: 1
   fallback_model: gpt-4o
   timeout_per_model_secs: 30
-  evidence_model_gating_enabled: false # reduce model count for low evidence quality
+  evidence_model_gating_enabled: true # reduce model count for low evidence quality
   longshot:
     enabled: true
     low_threshold: 0.12
@@ -293,7 +293,7 @@ circuit_breakers:
   default_recovery_timeout_secs: 30.0
 engine:
   scan_interval_minutes: 10
-  max_markets_per_cycle: 10
+  max_markets_per_cycle: 5
   auto_start: true
   paper_mode: true
   cycle_interval_secs: 180
