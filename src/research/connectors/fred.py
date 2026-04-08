@@ -63,6 +63,41 @@ _KEYWORD_SERIES: list[tuple[list[str], list[str], str]] = [
         ["SP500"],
         "S&P 500 Index",
     ),
+    (
+        ["pce", "personal consumption", "pce inflation"],
+        ["PCEPI"],
+        "PCE Price Index",
+    ),
+    (
+        ["manufacturing", "industrial", "factory", "pmi"],
+        ["MANEMP"],
+        "Manufacturing Employment",
+    ),
+    (
+        ["oil", "crude", "petroleum", "wti", "energy price"],
+        ["DCOILWTICO"],
+        "Crude Oil Price (WTI)",
+    ),
+    (
+        ["retail sales", "consumer spending", "retail"],
+        ["MRTSSM44X72USS"],
+        "Retail Sales",
+    ),
+    (
+        ["jobless claims", "initial claims", "weekly claims"],
+        ["ICSA"],
+        "Initial Jobless Claims",
+    ),
+    (
+        ["money supply", "m2", "monetary"],
+        ["M2SL"],
+        "M2 Money Supply",
+    ),
+    (
+        ["t-bill", "30-day", "short-term rate", "3-month treasury"],
+        ["DTB3"],
+        "3-Month Treasury Bill Rate",
+    ),
 ]
 
 _MACRO_KEYWORDS: list[str] = [
@@ -70,6 +105,8 @@ _MACRO_KEYWORDS: list[str] = [
     "federal reserve", "fed", "mortgage", "treasury", "yield",
     "recession", "consumer price", "rate cut", "rate hike",
     "jobs", "jobless", "consumer sentiment", "stock market",
+    "pce", "manufacturing", "oil", "crude", "retail sales",
+    "jobless claims", "money supply", "t-bill",
 ]
 
 

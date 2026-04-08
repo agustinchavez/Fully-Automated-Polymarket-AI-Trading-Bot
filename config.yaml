@@ -176,7 +176,7 @@ risk:
   max_stake_per_market: 50.0
   max_daily_loss: 500.0
   max_open_positions: 25
-  min_edge: 0.04
+  min_edge: 0.06
   min_liquidity: 2000
   min_volume: 1000
   max_spread: 0.06
@@ -269,7 +269,7 @@ scanner:
     endpoints: []
 budget:
   enabled: true
-  daily_limit_usd: 15.0
+  daily_limit_usd: 25.0
   warning_pct: 0.8
 model_tiers:
   enabled: true
@@ -322,3 +322,7 @@ calendar:
   pre_event_size_reduction: 0.5
   refresh_interval_hours: 6
   lookahead_days: 14
+continuous_learning:
+  post_mortem_enabled: true
+  weekly_summary_enabled: true
+  evidence_tracking_enabled: true

@@ -1,17 +1,14 @@
 """Reddit sentiment connector — crowd sentiment signal from subreddit discussions.
 
-Uses the ``praw`` library (optional dependency) to search subreddits for
-recent posts matching a market question, then scores overall sentiment
-based on bullish/bearish keyword frequency weighted by post score.
+Uses Reddit's public JSON API (no library or credentials required) to search
+subreddits for recent posts matching a market question, then scores overall
+sentiment based on bullish/bearish keyword frequency weighted by post score.
 
-The connector is safe to load even when ``praw`` is not installed — it
-returns ``[]`` immediately in that case.
+Rate-limited at 60 requests/minute via the ``reddit`` rate limiter bucket.
 """
 
 from __future__ import annotations
 
-import asyncio
-import os
 import time as _time
 from typing import Any
 
@@ -20,26 +17,23 @@ from src.observability.logger import get_logger
 from src.research.connectors.base import BaseResearchConnector
 from src.research.source_fetcher import FetchedSource
 
-try:
-    import praw  # type: ignore[import-untyped]
-
-    _HAS_PRAW = True
-except ImportError:
-    _HAS_PRAW = False
-
 log = get_logger(__name__)
 
 # ── Subreddit routing ────────────────────────────────────────────────
 
 _SUBREDDIT_MAP: dict[str, list[str]] = {
-    "ELECTION": ["politics"],
-    "CRYPTO": ["cryptocurrency"],
+    "ELECTION": ["politics", "PoliticalDiscussion"],
+    "CRYPTO": ["cryptocurrency", "Bitcoin", "ethereum", "CryptoMarkets"],
     "MACRO": ["economics", "investing"],
     "SCIENCE": ["science"],
     "CORPORATE": ["stocks"],
     "LEGAL": ["law"],
     "TECHNOLOGY": ["technology"],
     "TECH": ["technology"],
+    "SPORTS": ["nba", "soccer", "nfl", "mlb", "tennis", "leagueoflegends"],
+    "GEOPOLITICS": ["worldnews", "geopolitics", "CredibleDefense"],
+    "CULTURE": ["Music", "popheads", "movies", "hiphopheads"],
+    "WEATHER": ["weather", "climatology"],
 }
 
 _DEFAULT_SUBREDDITS: list[str] = ["polymarket"]
@@ -66,13 +60,14 @@ _STOP_WORDS: set[str] = {
 # 48 hours in seconds
 _48H_SECS = 48 * 3600
 
+_USER_AGENT = "polymarket-bot/1.0"
+
 
 class RedditSentimentConnector(BaseResearchConnector):
-    """Fetch crowd sentiment from Reddit discussions."""
+    """Fetch crowd sentiment from Reddit discussions via public JSON API."""
 
     def __init__(self, config: Any = None) -> None:
         super().__init__(config)
-        self._reddit: Any = None  # praw.Reddit instance (lazy)
 
     # ── Identity ─────────────────────────────────────────────────────
 
@@ -94,35 +89,13 @@ class RedditSentimentConnector(BaseResearchConnector):
         question: str,
         market_type: str,
     ) -> list[FetchedSource]:
-        if not _HAS_PRAW:
-            return []
-
-        client_id = getattr(self._config, "reddit_client_id", "") or os.getenv("REDDIT_CLIENT_ID", "")
-        client_secret = getattr(self._config, "reddit_client_secret", "") or os.getenv("REDDIT_CLIENT_SECRET", "")
-
-        if not client_id or not client_secret:
-            return []
-
-        # Lazy-init the praw.Reddit instance
-        if self._reddit is None:
-            self._reddit = praw.Reddit(
-                client_id=client_id,
-                client_secret=client_secret,
-                user_agent="PolymarketBot/1.0",
-            )
-
         search_query = self._extract_search_query(question)
         if not search_query:
             return []
 
         subreddits = _SUBREDDIT_MAP.get(market_type, _DEFAULT_SUBREDDITS)
 
-        await rate_limiter.get("reddit").acquire()
-
-        # praw is synchronous — run in thread to avoid blocking the event loop
-        posts = await asyncio.to_thread(
-            self._search_subreddits, subreddits, search_query,
-        )
+        posts = await self._search_subreddits(subreddits, search_query)
 
         if not posts:
             return []
@@ -137,32 +110,47 @@ class RedditSentimentConnector(BaseResearchConnector):
             subreddits=subreddits,
         )
 
-    # ── Synchronous helpers (run via asyncio.to_thread) ──────────────
+    # ── Async Reddit JSON API search ─────────────────────────────────
 
-    def _search_subreddits(
+    async def _search_subreddits(
         self,
         subreddits: list[str],
         query: str,
     ) -> list[dict[str, Any]]:
-        """Search subreddits and return post dicts within 48h window."""
+        """Search subreddits via Reddit's public JSON API, filter to 48h window."""
         now = _time.time()
         cutoff = now - _48H_SECS
         posts: list[dict[str, Any]] = []
 
+        client = self._get_client(timeout=15.0)
+
         for sub_name in subreddits:
             try:
-                subreddit = self._reddit.subreddit(sub_name)
-                results = subreddit.search(query, time_filter="week", limit=50)
-                for submission in results:
-                    if submission.created_utc < cutoff:
+                await rate_limiter.get("reddit").acquire()
+
+                url = f"https://www.reddit.com/r/{sub_name}/search.json"
+                resp = await client.get(
+                    url,
+                    params={"q": query, "sort": "new", "limit": 25, "t": "week",
+                            "restrict_sr": "on"},
+                    headers={"User-Agent": _USER_AGENT},
+                )
+                resp.raise_for_status()
+                data = resp.json()
+
+                children = data.get("data", {}).get("children", [])
+                for child in children:
+                    post_data = child.get("data", {})
+                    created_utc = post_data.get("created_utc", 0)
+                    if created_utc < cutoff:
                         continue
                     posts.append({
-                        "title": submission.title,
-                        "selftext": submission.selftext or "",
-                        "score": submission.score,
-                        "upvote_ratio": submission.upvote_ratio,
-                        "created_utc": submission.created_utc,
-                        "url": f"https://reddit.com{submission.permalink}",
+                        "title": post_data.get("title", ""),
+                        "selftext": post_data.get("selftext", ""),
+                        "score": post_data.get("score", 1),
+                        "upvote_ratio": post_data.get("upvote_ratio", 0.5),
+                        "created_utc": created_utc,
+                        "url": f"https://reddit.com{post_data.get('permalink', '')}",
                         "subreddit": sub_name,
                     })
             except Exception as exc:
@@ -248,7 +236,7 @@ class RedditSentimentConnector(BaseResearchConnector):
             f"Subreddits: {subs_display}",
             f"Posts analysed (48h window): {post_count}",
             f"Sentiment score: {sentiment_score:+.4f} ({direction.upper()})",
-            f"Source: Reddit (via PRAW)",
+            f"Source: Reddit (public JSON API)",
         ]
         content = "\n".join(content_lines)
         snippet = (
