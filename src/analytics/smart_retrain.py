@@ -183,6 +183,7 @@ class SmartRetrainManager:
     def retrain_with_ab_test(
         self,
         trigger: RetrainTrigger,
+        alert_callback: Any | None = None,
     ) -> ABTestResult:
         """Retrain calibrator with A/B holdout validation."""
         test_id = f"ab-{uuid.uuid4().hex[:8]}"
@@ -279,6 +280,24 @@ class SmartRetrainManager:
             cal_brier=round(cal_brier, 4),
             uncal_brier=round(uncal_brier, 4),
         )
+
+        # Send alert if callback provided
+        if alert_callback:
+            try:
+                verdict = "IMPROVED" if helps else "NO IMPROVEMENT"
+                alert_callback(
+                    level="info" if helps else "warning",
+                    title=f"Calibration Retrain — {verdict}",
+                    message=(
+                        f"Trigger: {trigger.reason}\n"
+                        f"Calibrated Brier: {cal_brier:.4f}\n"
+                        f"Uncalibrated Brier: {uncal_brier:.4f}\n"
+                        f"Delta: {delta:+.4f} ({'better' if helps else 'worse'})\n"
+                        f"Train: {len(train_data)}, Holdout: {len(holdout_data)}"
+                    ),
+                )
+            except Exception as e:
+                log.warning("smart_retrain.alert_error", error=str(e))
 
         return result
 

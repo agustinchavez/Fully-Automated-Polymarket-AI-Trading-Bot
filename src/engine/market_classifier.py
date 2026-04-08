@@ -234,7 +234,7 @@ _r(r"\b(bitcoin|crypto|ethereum)\b.{0,50}\b(halving|merge|upgrade|fork|launch)\b
    reasons=["Protocol upgrades have known schedules"])
 
 # General crypto fallback
-_r(r"\b(crypto|bitcoin|btc|ethereum|eth|blockchain|defi|nft\b)",
+_r(r"\b(crypto|bitcoin|btc|ethereum|eth|blockchain|defi|nft)\b",
    "CRYPTO", "general",
    researchability=55, sources=["CoinDesk", "CoinGecko"],
    strategy="market_data", queries=4, tags=["volatile"],
@@ -453,6 +453,18 @@ _r(r"\b(sanctions?|embargo|diplomacy|treaty|summit|nato|un\s+vote|g[78]|g20)\b",
    researchability=65, sources=["Reuters", "AP News", "Foreign Affairs"],
    strategy="news_analysis", queries=5, tags=["political"],
    reasons=["Diplomatic events have press coverage and schedules"])
+
+_r(r"\b(nuclear\s+(weapon|test|warhead|missile|bomb)|weapon\s+test|arms\s+control|icbm|nonproliferation)\b",
+   "GEOPOLITICS", "conflict",
+   researchability=60, sources=["Reuters", "AP News", "Arms Control Association"],
+   strategy="news_analysis", queries=5, tags=["political", "security"],
+   reasons=["Nuclear/weapons events are major geopolitical news"])
+
+_r(r"\b(assembly|parliament(ary)?|coalition)\b.{0,30}\b(election|vote|govern(ment)?|dissolv)\b",
+   "ELECTION", "international",
+   researchability=75, sources=["Reuters", "AP News", "BBC"],
+   strategy="news_analysis", queries=5, tags=["polling_data"],
+   reasons=["Parliamentary elections are well-covered internationally"])
 
 # ── STRUCTURAL SPORTS (format-based, catches markets no keyword can) ─
 # These fire after all keyword-based SPORTS rules but before catch-all

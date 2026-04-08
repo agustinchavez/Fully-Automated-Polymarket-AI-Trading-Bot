@@ -338,6 +338,9 @@ class TradingEngine:
         try:
             from src.observability.alerts import AlertManager
             self._alert_manager = AlertManager(self.config)
+            # Wire alert manager into exit finalizer for retrain notifications
+            if self._exit_finalizer:
+                self._exit_finalizer._alert_manager = self._alert_manager
         except Exception as e:
             log.warning("engine.alert_manager_init_error", error=str(e))
 
@@ -610,6 +613,15 @@ class TradingEngine:
                 self._persist_kill_switch(reason, "daily_pnl_auto")
                 if self._db:
                     self._db.insert_alert("critical", reason, "risk")
+                if self._alert_manager:
+                    try:
+                        import asyncio as _aio
+                        _aio.ensure_future(self._alert_manager.send(
+                            "critical", "Kill Switch — Daily P&L", reason,
+                            cooldown_key="kill_daily_pnl", cooldown_secs=600,
+                        ))
+                    except Exception:
+                        pass
                 return True
         except Exception as e:
             log.warning("engine.daily_pnl_kill_check_error", error=str(e))
@@ -721,6 +733,14 @@ class TradingEngine:
                     _inv_metrics.incr(f"invariant.violations_by_severity.{v.severity}")
                     if v.severity == "critical":
                         self._db.insert_alert("critical", v.message, "invariant_checker")
+                        if self._alert_manager:
+                            try:
+                                import asyncio as _aio
+                                _aio.ensure_future(self._alert_manager.error_alert(
+                                    v.message, context="invariant_checker",
+                                ))
+                            except Exception:
+                                pass
         except Exception as e:
             log.warning("engine.invariant_check_error", error=str(e))
 
@@ -751,6 +771,24 @@ class TradingEngine:
                 # Persist kill switch to DB if drawdown killed
                 if self.drawdown.state.is_killed:
                     self._persist_kill_switch(dd_reason, "drawdown_auto")
+                    if self._alert_manager:
+                        try:
+                            await self._alert_manager.drawdown_alert(
+                                drawdown_pct=self.drawdown.state.current_drawdown,
+                                heat_level=self.drawdown.state.heat_level,
+                                is_killed=True,
+                            )
+                        except Exception:
+                            pass
+                elif self._alert_manager:
+                    try:
+                        await self._alert_manager.drawdown_alert(
+                            drawdown_pct=self.drawdown.state.current_drawdown,
+                            heat_level=self.drawdown.state.heat_level,
+                            is_killed=False,
+                        )
+                    except Exception:
+                        pass
                 self._finish_cycle(cycle)
                 return cycle
 
@@ -1557,7 +1595,19 @@ class TradingEngine:
                 close_reason=exit_reason,
                 mkt_record=mkt_record,
             )
-        else:
+        # Send P&L alert to all configured channels
+        _am = getattr(self, "_alert_manager", None)
+        if _am:
+            try:
+                import asyncio as _aio
+                _aio.ensure_future(_am.pnl_alert(
+                    pnl=pnl,
+                    market_id=pos.market_id,
+                    reason=exit_reason,
+                ))
+            except Exception:
+                pass
+        if not self._exit_finalizer:
             # Fallback (e.g. tests that skip start())
             self._db.archive_position(
                 pos=pos,

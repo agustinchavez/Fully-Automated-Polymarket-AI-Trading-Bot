@@ -82,6 +82,7 @@ class AdaptiveModelWeighter:
         self,
         conn: sqlite3.Connection,
         category: str,
+        alert_callback: Any | None = None,
     ) -> AdaptiveWeightResult:
         """Get adaptive weights for models in the given category.
 
@@ -156,6 +157,24 @@ class AdaptiveModelWeighter:
             blend=round(blend, 3),
             weights={k: round(v, 3) for k, v in final_weights.items()},
         )
+
+        # Alert when learned weights significantly override defaults (blend > 0.3)
+        if alert_callback and blend > 0.3:
+            try:
+                weight_lines = "\n".join(
+                    f"  {d.model_name}: {d.weight:.1%} ({d.source}, Brier={d.brier_score:.3f})"
+                    for d in details
+                )
+                alert_callback(
+                    level="info",
+                    title=f"Model Weights Shifted — {category}",
+                    message=(
+                        f"Blend factor: {blend:.0%} learned\n"
+                        f"Min samples: {min_samples}\n{weight_lines}"
+                    ),
+                )
+            except Exception as e:
+                log.warning("adaptive_weights.alert_error", error=str(e))
 
         return AdaptiveWeightResult(
             category=category,

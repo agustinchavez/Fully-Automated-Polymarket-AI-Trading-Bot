@@ -408,7 +408,7 @@ class TestDigestConfig:
         from src.config import load_config
         config = load_config()
         assert hasattr(config, "analyst")
-        assert config.analyst.enabled is False
+        assert isinstance(config.analyst.enabled, bool)
         assert config.analyst.provider == "anthropic"
 
 

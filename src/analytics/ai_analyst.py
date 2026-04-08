@@ -500,7 +500,7 @@ JSON SCHEMA: {{ "summary": str, "what_is_working": [str],
             pass
         return None
 
-    async def analyse(self, days: int = 30) -> AnalysisResult:
+    async def analyse(self, days: int = 30, alert_callback: Any | None = None) -> AnalysisResult:
         """Run a full analysis using the configured provider."""
         ctx = self.assemble_context(days)
 
@@ -555,6 +555,24 @@ JSON SCHEMA: {{ "summary": str, "what_is_working": [str],
                 )
             except Exception:
                 pass
+
+            # Send alert with analysis summary
+            if alert_callback and result.confidence in ("medium", "high"):
+                try:
+                    rec_lines = "\n".join(
+                        f"  {i+1}. {r.action}"
+                        for i, r in enumerate(result.recommendations[:3])
+                    )
+                    alert_callback(
+                        level="info",
+                        title=f"AI Analyst Complete ({result.confidence})",
+                        message=(
+                            f"{result.summary[:200]}\n\n"
+                            f"Top recommendations:\n{rec_lines}"
+                        ),
+                    )
+                except Exception as e:
+                    log.warning("ai_analyst.alert_error", error=str(e))
 
             return result
 

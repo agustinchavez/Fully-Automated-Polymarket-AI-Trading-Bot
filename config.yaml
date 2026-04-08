@@ -58,7 +58,7 @@ research:
   pubmed_enabled: true
   sports_odds_enabled: true # needs ODDS_API_KEY
   sports_stats_enabled: true # needs API_FOOTBALL_KEY
-  spotify_charts_enabled: true  # no API key needed (kworb.net)
+  spotify_charts_enabled: true # no API key needed (kworb.net)
   manifold_enabled: true
   predictit_enabled: true
   primary_domains:
@@ -153,7 +153,7 @@ ensemble:
   min_models_required: 1
   fallback_model: gpt-4o
   timeout_per_model_secs: 30
-  evidence_model_gating_enabled: false  # reduce model count for low evidence quality
+  evidence_model_gating_enabled: false # reduce model count for low evidence quality
   longshot:
     enabled: true
     low_threshold: 0.12
@@ -230,6 +230,11 @@ alerts:
   alert_on_kill_switch: true
   daily_summary_enabled: true
   daily_summary_hour: 18
+  # Email alerts via SMTP (set credentials in .env: SMTP_HOST, SMTP_PORT,
+  # SMTP_USER, SMTP_PASS, ALERT_EMAIL_FROM, ALERT_EMAIL_TO)
+  # Gmail: smtp.gmail.com:587 with App Password
+  # Outlook: smtp.office365.com:587
+  # iCloud: smtp.mail.me.com:587 with App-Specific Password
 wallet_scanner:
   enabled: true
   whale_in_prompt: true
@@ -281,7 +286,7 @@ digest:
   lookback_days: 7
   min_data_days: 3
 analyst:
-  enabled: false
+  enabled: true
   provider: anthropic
   model: claude-sonnet-4-6
   max_tokens: 1500

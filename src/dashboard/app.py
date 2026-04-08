@@ -8381,7 +8381,22 @@ def api_insights_ai_analysis_post() -> Any:
         import asyncio
         loop = asyncio.new_event_loop()
         try:
-            result = loop.run_until_complete(analyst.analyse(days=30))
+            # Build alert callback that uses the event loop
+            from src.observability.alerts import AlertManager
+            _am = AlertManager(cfg)
+
+            def _analyst_alert(level: str, title: str, message: str, **kw: Any) -> None:
+                try:
+                    loop.run_until_complete(_am.send(
+                        level, title, message,
+                        cooldown_key="ai_analyst", cooldown_secs=3600,
+                    ))
+                except Exception:
+                    pass
+
+            result = loop.run_until_complete(
+                analyst.analyse(days=30, alert_callback=_analyst_alert),
+            )
         finally:
             loop.close()
         return jsonify(result.to_dict())

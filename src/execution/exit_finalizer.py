@@ -21,9 +21,10 @@ log = get_logger(__name__)
 class ExitFinalizer:
     """Consolidates the 5-step exit finalization into a single class."""
 
-    def __init__(self, db: object, config: object):
+    def __init__(self, db: object, config: object, alert_manager: object = None):
         self._db = db
         self._config = config
+        self._alert_manager = alert_manager
 
     def finalize(
         self,
@@ -78,6 +79,12 @@ class ExitFinalizer:
             )
         except Exception as e:
             log.warning("exit_finalizer.alert_error", error=str(e))
+
+        # Step 5b: Trade journal entry
+        self._record_journal_entry(pos, exit_price, rounded_pnl, close_reason, mkt_record)
+
+        # Step 5c: Calibration feedback (self-learning)
+        self._record_calibration(pos, exit_price, rounded_pnl, mkt_record)
 
     def _record_performance_log(
         self,
@@ -184,3 +191,137 @@ class ExitFinalizer:
                 )
         except Exception as e:
             log.warning("exit_finalizer.post_mortem_error", error=str(e))
+
+    def _record_journal_entry(
+        self,
+        pos: Any,
+        exit_price: float,
+        pnl: float,
+        close_reason: str,
+        mkt_record: Any = None,
+    ) -> None:
+        """Write a trade journal entry for the Trade Journal dashboard tab."""
+        if not self._db:
+            return
+        try:
+            question = (
+                getattr(mkt_record, "question", "")
+                if mkt_record else getattr(pos, "question", "")
+            )
+            direction = getattr(pos, "direction", "BUY")
+            self._db.insert_journal_entry(
+                market_id=pos.market_id,
+                question=question,
+                direction=direction,
+                entry_price=pos.entry_price,
+                exit_price=exit_price,
+                stake_usd=pos.stake_usd,
+                pnl=pnl,
+                annotation=close_reason,
+            )
+            log.info(
+                "exit_finalizer.journal_recorded",
+                market_id=pos.market_id[:8],
+                pnl=pnl,
+            )
+        except Exception as e:
+            log.warning("exit_finalizer.journal_error", error=str(e))
+
+    def _record_calibration(
+        self,
+        pos: Any,
+        exit_price: float,
+        pnl: float,
+        mkt_record: Any = None,
+    ) -> None:
+        """Feed the calibration self-learning system with resolution data."""
+        if not self._db:
+            return
+        # Determine actual outcome from exit price
+        actual_outcome: float | None = None
+        if exit_price >= 0.98:
+            actual_outcome = 1.0
+        elif exit_price <= 0.02:
+            actual_outcome = 0.0
+        if actual_outcome is None:
+            # Market not resolved (early exit) — skip calibration
+            return
+        try:
+            from src.analytics.calibration_feedback import (
+                CalibrationFeedbackLoop,
+                ResolutionRecord,
+            )
+
+            # Look up forecast for this market
+            forecasts = self._db.get_forecasts(market_id=pos.market_id, limit=1)
+            fc = forecasts[0] if forecasts else None
+            if not fc:
+                return
+
+            # Compute holding hours
+            import datetime as _dt
+            holding_hours = 0.0
+            try:
+                opened = _dt.datetime.fromisoformat(
+                    pos.opened_at.replace("Z", "+00:00")
+                )
+                now = _dt.datetime.now(_dt.timezone.utc)
+                holding_hours = (now - opened).total_seconds() / 3600
+            except Exception:
+                pass
+
+            category = "UNKNOWN"
+            if mkt_record and getattr(mkt_record, "category", None):
+                category = mkt_record.category
+            elif fc and getattr(fc, "market_type", None):
+                category = fc.market_type
+
+            record = ResolutionRecord(
+                market_id=pos.market_id,
+                question=getattr(mkt_record, "question", "") if mkt_record else getattr(pos, "question", ""),
+                category=category,
+                forecast_prob=fc.model_probability if fc else 0.0,
+                actual_outcome=actual_outcome,
+                edge_at_entry=fc.edge if fc else 0.0,
+                confidence=fc.confidence_level if fc else "LOW",
+                evidence_quality=fc.evidence_quality if fc else 0.0,
+                stake_usd=pos.stake_usd,
+                entry_price=pos.entry_price,
+                exit_price=exit_price,
+                pnl=pnl,
+                holding_hours=round(holding_hours, 2),
+            )
+
+            cl_cfg = getattr(self._config, "continuous_learning", None)
+            smart_retrain = bool(cl_cfg and getattr(cl_cfg, "smart_retrain_enabled", False))
+
+            # Build sync alert callback if alert_manager is available
+            _alert_cb = None
+            if self._alert_manager:
+                import asyncio as _aio
+
+                def _alert_cb(level: str, title: str, message: str, **kw: Any) -> None:
+                    try:
+                        _aio.ensure_future(self._alert_manager.send(
+                            level, title, message,
+                            cooldown_key=f"retrain_{title[:20]}",
+                            cooldown_secs=3600,
+                        ))
+                    except Exception:
+                        pass
+
+            cal_loop = CalibrationFeedbackLoop()
+            cal_loop.record_resolution(
+                self._db._conn,
+                record,
+                smart_retrain_enabled=smart_retrain,
+                alert_callback=_alert_cb,
+            )
+            log.info(
+                "exit_finalizer.calibration_recorded",
+                market_id=pos.market_id[:8],
+                forecast=round(record.forecast_prob, 3),
+                outcome=actual_outcome,
+            )
+        except Exception as e:
+            log.warning("exit_finalizer.calibration_error", error=str(e))
