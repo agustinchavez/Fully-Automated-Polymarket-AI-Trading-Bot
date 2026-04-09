@@ -78,17 +78,17 @@ class TestContinuousLearningEnabled:
         config = load_config()
         assert config.continuous_learning.evidence_tracking_enabled is True
 
-    def test_smart_retrain_still_disabled(self) -> None:
-        """smart_retrain needs 30 trades — stays disabled for now."""
+    def test_smart_retrain_enabled(self) -> None:
+        """smart_retrain enabled (no-ops until 30 resolved trades)."""
         from src.config import load_config
         config = load_config()
-        assert config.continuous_learning.smart_retrain_enabled is False
+        assert config.continuous_learning.smart_retrain_enabled is True
 
-    def test_param_optimizer_still_disabled(self) -> None:
-        """param_optimizer needs 30 trades — stays disabled for now."""
+    def test_param_optimizer_enabled(self) -> None:
+        """param_optimizer enabled (dashboard endpoints unlocked)."""
         from src.config import load_config
         config = load_config()
-        assert config.continuous_learning.param_optimizer_enabled is False
+        assert config.continuous_learning.param_optimizer_enabled is True
 
 
 # ── Item 4: Reddit uses public JSON API ────────────────────────────

@@ -96,7 +96,7 @@ _SEED_PATTERNS: list[dict[str, Any]] = [
         "sample_size": 408,
     },
     {
-        "pattern": r"recession.*within.*(year|12 month|next year)",
+        "pattern": r"recession.*(within|by|before|end of).*(year|12 month|next year|q[1-4]|quarter)",
         "category": "MACRO",
         "description": "Economy enters recession within 12 months",
         "base_rate": 0.15,

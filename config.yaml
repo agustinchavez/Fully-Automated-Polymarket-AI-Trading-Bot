@@ -326,3 +326,5 @@ continuous_learning:
   post_mortem_enabled: true
   weekly_summary_enabled: true
   evidence_tracking_enabled: true
+  smart_retrain_enabled: true
+  param_optimizer_enabled: true
