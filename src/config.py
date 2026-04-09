@@ -101,6 +101,8 @@ class ResearchConfig(BaseModel):
     sports_min_books: int = 2             # min sportsbooks needed for consensus
     # Spotify charts (kworb.net scraper, no key needed)
     spotify_charts_enabled: bool = False
+    # Kronos crypto price forecast (requires torch, einops, safetensors)
+    kronos_enabled: bool = False
     # Improvement 6: Additional consensus connectors
     manifold_enabled: bool = False
     predictit_enabled: bool = False

@@ -64,11 +64,11 @@ class TestRecessionPatternBroadened:
         match = registry.match("Will the US enter recession within 12 months?", "MACRO")
         assert match is not None
 
-    def test_total_pattern_count_unchanged(self) -> None:
-        """Pattern count stays at 83 (regex changed, not added)."""
+    def test_total_pattern_count_84(self) -> None:
+        """Pattern count is 84 (v24 added directional MACRO pattern)."""
         from src.forecast.base_rates import BaseRateRegistry
         registry = BaseRateRegistry()
-        assert registry.pattern_count == 83
+        assert registry.pattern_count == 84
 
 
 # ── Fix 2: smart_retrain + param_optimizer enabled ──────────────────

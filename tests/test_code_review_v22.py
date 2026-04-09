@@ -298,7 +298,7 @@ class TestMacroUpsidePatterns:
         from src.forecast.base_rates import BaseRateRegistry
         registry = BaseRateRegistry()
         macro = [p for p in registry.patterns if p.category == "MACRO"]
-        assert len(macro) == 15
+        assert len(macro) == 16
 
 
 # ── Gap 2: GEOPOLITICS base rate patterns ─────────────────────────
@@ -400,4 +400,4 @@ class TestTotalPatternCount:
     def test_total_count(self) -> None:
         from src.forecast.base_rates import BaseRateRegistry
         registry = BaseRateRegistry()
-        assert registry.pattern_count == 83
+        assert registry.pattern_count == 84

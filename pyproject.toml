@@ -66,6 +66,13 @@ dependencies = [
 discord = ["discord.py>=2.3"]
 slack = ["slack-bolt>=1.18", "slack-sdk>=3.27"]
 prod = ["gunicorn>=21.2"]
+kronos = [
+    "pandas>=2.0",
+    "torch>=2.0",
+    "einops>=0.8",
+    "safetensors>=0.4",
+    "huggingface_hub>=0.20",
+]
 dev = [
     "pytest>=8.0",
     "pytest-asyncio>=0.23",

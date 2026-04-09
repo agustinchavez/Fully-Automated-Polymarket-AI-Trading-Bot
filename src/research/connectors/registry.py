@@ -171,6 +171,13 @@ def get_enabled_connectors(config: Any) -> list[BaseResearchConnector]:
         except Exception as e:
             log.warning("registry.spotify_charts_load_failed", error=str(e))
 
+    if getattr(config, "kronos_enabled", False):
+        try:
+            from src.research.connectors.kronos_connector import KronosConnector
+            connectors.append(KronosConnector(config))
+        except Exception as e:
+            log.warning("registry.kronos_load_failed", error=str(e))
+
     log.debug(
         "registry.connectors_loaded",
         count=len(connectors),

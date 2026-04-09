@@ -71,6 +71,11 @@ class SignalStack:
     spotify_daily_rank: int | None = None
     spotify_monthly_listeners: str = ""
 
+    # ── Kronos crypto price forecast ─────────────────────────────
+    kronos_upside_prob: float | None = None
+    kronos_volatility_prob: float | None = None
+    kronos_symbol: str = ""
+
     # ── Calendar events (Improvement 8) ────────────────────────
     calendar_events: list[Any] = field(default_factory=list)
 
@@ -163,6 +168,11 @@ def build_signal_stack(
                 daily = bs.get("daily_chart_rank")
                 stack.spotify_daily_rank = int(daily) if daily is not None else None
                 stack.spotify_monthly_listeners = bs.get("monthly_listeners", "")
+
+            elif sig_source == "kronos" and sig_type == "crypto_price_forecast":
+                stack.kronos_upside_prob = bs.get("upside_probability")
+                stack.kronos_volatility_prob = bs.get("volatility_amplification")
+                stack.kronos_symbol = bs.get("symbol", "")
 
     # ── Microstructure signals (Improvement 2) ────────────────────
     if micro_signals is not None:
@@ -322,6 +332,19 @@ def render_signal_stack(stack: SignalStack) -> str:
         if stack.spotify_daily_rank is not None:
             parts.append(f"#{stack.spotify_daily_rank} daily chart")
         behavioral_lines.append(f"- {' '.join(parts)}")
+
+    if stack.kronos_upside_prob is not None:
+        symbol_str = f" for {stack.kronos_symbol}" if stack.kronos_symbol else ""
+        vol_str = (
+            f", volatility amplification: {stack.kronos_volatility_prob:.0%}"
+            if stack.kronos_volatility_prob is not None
+            else ""
+        )
+        behavioral_lines.append(
+            f"- Kronos foundation model{symbol_str}"
+            f" (24h forecast, N=10 Monte Carlo paths):"
+            f" upside probability {stack.kronos_upside_prob:.0%}{vol_str}"
+        )
 
     if behavioral_lines:
         sections.append(
