@@ -16,6 +16,7 @@ import structlog
 
 
 _CONFIGURED = False
+_FILE_HANDLER_ATTACHED = False
 
 # Fields that must NEVER appear in logs
 _REDACTED_FIELDS = frozenset({
@@ -43,24 +44,30 @@ def configure_logging(
     fmt: str = "json",
     log_file: str | None = None,
 ) -> None:
-    """Configure structured logging for the application."""
-    global _CONFIGURED
-    if _CONFIGURED:
+    """Configure structured logging for the application.
+
+    May be called twice: once early (no log_file, from get_logger fallback)
+    and once from CLI with log_file.  The second call attaches file handlers
+    that were missing on the first pass.
+    """
+    global _CONFIGURED, _FILE_HANDLER_ATTACHED
+
+    # Already fully configured (console + file handlers attached)
+    if _CONFIGURED and (_FILE_HANDLER_ATTACHED or log_file is None):
         return
 
     log_level = getattr(logging, level.upper(), logging.INFO)
-
-    # Standard-library root logger
     root = logging.getLogger()
     root.setLevel(log_level)
 
-    # Console handler
-    console = logging.StreamHandler(sys.stderr)
-    console.setLevel(log_level)
-    root.addHandler(console)
+    # Console handler — only add once
+    if not _CONFIGURED:
+        console = logging.StreamHandler(sys.stderr)
+        console.setLevel(log_level)
+        root.addHandler(console)
 
     # File handler with rotation (optional)
-    if log_file:
+    if log_file and not _FILE_HANDLER_ATTACHED:
         log_path = Path(log_file)
         log_path.parent.mkdir(parents=True, exist_ok=True)
         fh = logging.handlers.RotatingFileHandler(
@@ -82,6 +89,7 @@ def configure_logging(
         )
         efh.setLevel(logging.WARNING)
         root.addHandler(efh)
+        _FILE_HANDLER_ATTACHED = True
 
     # structlog pipeline
     shared_processors: list[structlog.types.Processor] = [
