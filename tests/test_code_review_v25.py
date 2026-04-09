@@ -112,6 +112,33 @@ class TestKronosFarFutureGate:
             "Will BTC reach 80000 by Q3?", "CRYPTO"
         )
 
+    def test_far_future_2026_skipped(self) -> None:
+        """2026 is far enough for a 24h forecast to be irrelevant."""
+        from src.research.connectors.kronos_connector import KronosConnector
+
+        c = KronosConnector(config=None)
+        assert not c.is_relevant(
+            "Will BTC reach 100k by end of 2026?", "CRYPTO"
+        )
+
+    def test_far_future_end_of_year_skipped(self) -> None:
+        """'end of year' is too far for a 24h forecast."""
+        from src.research.connectors.kronos_connector import KronosConnector
+
+        c = KronosConnector(config=None)
+        assert not c.is_relevant(
+            "Will ETH hit 5000 by end of year?", "CRYPTO"
+        )
+
+    def test_far_future_before_end_of_year_skipped(self) -> None:
+        """'before end of year' is also far-future."""
+        from src.research.connectors.kronos_connector import KronosConnector
+
+        c = KronosConnector(config=None)
+        assert not c.is_relevant(
+            "Will SOL reach 300 before end of year?", "CRYPTO"
+        )
+
     def test_max_resolution_days_constant_exists(self) -> None:
         """_MAX_RESOLUTION_DAYS constant is still defined."""
         from src.research.connectors.kronos_connector import _MAX_RESOLUTION_DAYS

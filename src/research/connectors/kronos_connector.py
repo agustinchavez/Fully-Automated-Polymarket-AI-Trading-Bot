@@ -160,7 +160,7 @@ class KronosConnector(BaseResearchConnector):
 
     # Regex to detect far-future resolution dates where a 24h forecast is irrelevant
     _FAR_FUTURE_RE = re.compile(
-        r"(by|before|end of).*(q[34]|oct|nov|dec|2027|2028|2029|2030)",
+        r"(by|before|end of).*(q[34]|oct|nov|dec|end of year|2026|2027|2028|2029|2030)",
         re.IGNORECASE,
     )
 
