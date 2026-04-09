@@ -146,15 +146,23 @@ class TestKronosSingleton:
     def test_singleton_returns_none_when_not_installed(self) -> None:
         from src.research.connectors.kronos_connector import _KronosSingleton
         _KronosSingleton.reset()
-        # model module not installed, so get_predictor returns None
-        result = _KronosSingleton.get_predictor()
+        # Simulate Kronos repo not available by patching _ensure_kronos_on_path
+        with patch(
+            "src.research.connectors.kronos_connector._ensure_kronos_on_path",
+            return_value=False,
+        ):
+            result = _KronosSingleton.get_predictor()
         assert result is None
         assert _KronosSingleton._loaded is True  # prevents retry
 
     def test_singleton_no_retry_after_failure(self) -> None:
         from src.research.connectors.kronos_connector import _KronosSingleton
         _KronosSingleton.reset()
-        _KronosSingleton.get_predictor()  # fails, sets _loaded=True
+        with patch(
+            "src.research.connectors.kronos_connector._ensure_kronos_on_path",
+            return_value=False,
+        ):
+            _KronosSingleton.get_predictor()  # fails, sets _loaded=True
         # Second call should not retry
         assert _KronosSingleton._loaded is True
         assert _KronosSingleton._predictor is None

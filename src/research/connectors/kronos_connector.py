@@ -5,7 +5,11 @@ Uses the Kronos financial foundation model (AAAI 2026, MIT licensed) to generate
 K-line sequences.  Only runs for short-dated CRYPTO markets (<=7 days to resolution).
 
 The model is lazy-loaded on first use.  Requires ``kronos`` extras:
-  pip install torch einops safetensors huggingface_hub
+  pip install -e ".[kronos]"
+
+On first load, the Kronos repo (github.com/shiyu-coder/Kronos) is auto-cloned
+to ~/.cache/kronos-repo/ and added to sys.path.  Model weights are downloaded
+from HuggingFace Hub (~16 MB for Kronos-mini).
 
 Rate-limited via the existing ``binance`` bucket (OHLCV data fetch).
 """
@@ -14,6 +18,8 @@ from __future__ import annotations
 
 import asyncio
 import os
+import subprocess
+import sys
 from typing import Any
 
 from src.connectors.rate_limiter import rate_limiter
@@ -54,9 +60,53 @@ _LOOKBACK_HOURS = 360  # 15 days of 1h candles
 _FORECAST_HOURS = 24
 _MONTE_CARLO_N = int(os.environ.get("KRONOS_MONTE_CARLO_N", "10"))
 _MAX_RESOLUTION_DAYS = 7
+_KRONOS_REPO_URL = "https://github.com/shiyu-coder/Kronos.git"
+_KRONOS_CACHE_DIR = os.path.join(
+    os.environ.get("XDG_CACHE_HOME", os.path.expanduser("~/.cache")),
+    "kronos-repo",
+)
 
 
 # ── Lazy singleton for model loading ──────────────────────────────────
+
+
+def _ensure_kronos_on_path() -> bool:
+    """Clone the Kronos repo (if needed) and add it to sys.path.
+
+    Returns True if the ``model`` package is importable after this call.
+    """
+    # Already importable?
+    try:
+        import model  # noqa: F401
+        return True
+    except ImportError:
+        pass
+
+    # Check for cached clone
+    init_path = os.path.join(_KRONOS_CACHE_DIR, "model", "__init__.py")
+    if not os.path.exists(init_path):
+        log.info("kronos.cloning_repo", dest=_KRONOS_CACHE_DIR)
+        try:
+            subprocess.run(
+                ["git", "clone", "--depth=1", _KRONOS_REPO_URL, _KRONOS_CACHE_DIR],
+                capture_output=True,
+                text=True,
+                timeout=120,
+                check=True,
+            )
+        except Exception as e:
+            log.warning("kronos.clone_failed", error=str(e))
+            return False
+
+    if _KRONOS_CACHE_DIR not in sys.path:
+        sys.path.insert(0, _KRONOS_CACHE_DIR)
+
+    try:
+        import model  # noqa: F401
+        return True
+    except ImportError as e:
+        log.warning("kronos.import_failed_after_clone", error=str(e))
+        return False
 
 
 class _KronosSingleton:
@@ -70,12 +120,15 @@ class _KronosSingleton:
         """Load model on first call; return None if unavailable."""
         if not cls._loaded:
             try:
+                if not _ensure_kronos_on_path():
+                    raise ImportError("Kronos model package not available")
+
                 from model import Kronos, KronosPredictor, KronosTokenizer
 
                 tokenizer = KronosTokenizer.from_pretrained(_TOKENIZER_ID)
-                model = Kronos.from_pretrained(_MODEL_ID)
+                model_obj = Kronos.from_pretrained(_MODEL_ID)
                 cls._predictor = KronosPredictor(
-                    model, tokenizer, device="cpu", max_context=2048
+                    model_obj, tokenizer, device="cpu", max_context=2048
                 )
                 cls._loaded = True
                 log.info("kronos.model_loaded", model=_MODEL_ID)
@@ -184,10 +237,16 @@ class KronosConnector(BaseResearchConnector):
             n = len(df)
 
             # Build timestamps for input and forecast horizon
-            x_ts = pd.date_range(end=pd.Timestamp.now(), periods=n, freq="1h")
-            y_ts = pd.date_range(
-                start=x_ts[-1], periods=_FORECAST_HOURS + 1, freq="1h"
-            )[1:]
+            # KronosPredictor.predict -> calc_time_stamps uses .dt accessor,
+            # which requires pd.Series (not DatetimeIndex)
+            x_ts = pd.Series(
+                pd.date_range(end=pd.Timestamp.now(), periods=n, freq="1h")
+            )
+            y_ts = pd.Series(
+                pd.date_range(
+                    start=x_ts.iloc[-1], periods=_FORECAST_HOURS + 1, freq="1h"
+                )[1:]
+            )
 
             # Monte Carlo sampling
             final_prices: list[float] = []
