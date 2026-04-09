@@ -18,6 +18,7 @@ from __future__ import annotations
 
 import asyncio
 import os
+import re
 import subprocess
 import sys
 from typing import Any
@@ -157,10 +158,21 @@ class KronosConnector(BaseResearchConnector):
     def relevant_categories(self) -> set[str]:
         return {"CRYPTO"}
 
+    # Regex to detect far-future resolution dates where a 24h forecast is irrelevant
+    _FAR_FUTURE_RE = re.compile(
+        r"(by|before|end of).*(q[34]|oct|nov|dec|2027|2028|2029|2030)",
+        re.IGNORECASE,
+    )
+
     def is_relevant(self, question: str, market_type: str) -> bool:
         if market_type != "CRYPTO":
             return False
-        return bool(self._extract_symbol(question))
+        if not self._extract_symbol(question):
+            return False
+        # Skip far-future markets where a 24h forecast is irrelevant
+        if self._FAR_FUTURE_RE.search(question):
+            return False
+        return True
 
     async def _fetch_impl(
         self,

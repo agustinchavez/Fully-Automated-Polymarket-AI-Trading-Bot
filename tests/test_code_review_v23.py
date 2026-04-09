@@ -68,7 +68,7 @@ class TestRecessionPatternBroadened:
         """Pattern count is 84 (v24 added directional MACRO pattern)."""
         from src.forecast.base_rates import BaseRateRegistry
         registry = BaseRateRegistry()
-        assert registry.pattern_count == 84
+        assert registry.pattern_count == 85
 
 
 # ── Fix 2: smart_retrain + param_optimizer enabled ──────────────────

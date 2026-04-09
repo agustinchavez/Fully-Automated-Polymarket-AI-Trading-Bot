@@ -6,7 +6,7 @@ anchor on historical frequency data before adjusting improves
 calibration significantly.
 
 Features:
-  - 84 seed patterns with regex matching across 11 categories
+  - 85 seed patterns with regex matching across 11 categories
   - Self-updating empirical rates from resolved markets
   - Category-level fallback when no pattern matches
   - Confidence scoring for match quality
@@ -181,6 +181,14 @@ _SEED_PATTERNS: list[dict[str, Any]] = [
         "description": "Economic indicator shows directional improvement",
         "base_rate": 0.55,
         "source": "Monthly economic indicator direction 1990-2024",
+        "sample_size": 400,
+    },
+    {
+        "pattern": r"(retail sales|gdp growth|industrial production|manufacturing).*(decline|fall|drop|contract|decrease|shrink)",
+        "category": "MACRO",
+        "description": "Economic indicator declines or contracts (directional)",
+        "base_rate": 0.35,
+        "source": "Historical economic contraction frequency during expansion phases",
         "sample_size": 400,
     },
 

@@ -65,13 +65,13 @@ class TestRetailSalesDirectionalPattern:
     def test_total_pattern_count_84(self) -> None:
         from src.forecast.base_rates import BaseRateRegistry
         registry = BaseRateRegistry()
-        assert registry.pattern_count == 84
+        assert registry.pattern_count == 85
 
     def test_macro_pattern_count_16(self) -> None:
         from src.forecast.base_rates import BaseRateRegistry
         registry = BaseRateRegistry()
         macro = [p for p in registry.patterns if p.category == "MACRO"]
-        assert len(macro) == 16
+        assert len(macro) == 17
 
 
 # ── 2. KronosConnector: symbol extraction + relevance ────────────────

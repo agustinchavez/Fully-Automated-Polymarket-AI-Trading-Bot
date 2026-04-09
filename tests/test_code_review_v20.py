@@ -59,7 +59,7 @@ class TestWillTeamWinPattern:
         from src.forecast.base_rates import BaseRateRegistry
 
         registry = BaseRateRegistry()
-        assert registry.pattern_count == 84
+        assert registry.pattern_count == 85
 
     def test_sports_pattern_count_12(self) -> None:
         """SPORTS category now has 12 patterns."""

@@ -299,7 +299,7 @@ class TestBaseRateCoverage:
         from src.forecast.base_rates import BaseRateRegistry
 
         registry = BaseRateRegistry()
-        assert registry.pattern_count == 84
+        assert registry.pattern_count == 85
 
     def test_crypto_category_base_rate(self) -> None:
         """CRYPTO has a category-level fallback base rate."""
