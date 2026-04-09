@@ -66,7 +66,11 @@ research:
   sports_odds_enabled: true # needs ODDS_API_KEY
   sports_stats_enabled: true # needs API_FOOTBALL_KEY
   spotify_charts_enabled: true # no API key needed (kworb.net)
-  kronos_enabled: false # needs torch, einops, safetensors; CRYPTO only
+  kronos_enabled: true # needs torch, einops, safetensors; CRYPTO only
+  crypto_futures_enabled: true # no API key needed (Binance public API)
+  defillama_enabled: true # no API key needed (DeFiLlama public API)
+  acled_enabled: false # needs ACLED_API_KEY + ACLED_EMAIL
+  github_activity_enabled: true # optional GITHUB_TOKEN for higher rate limits
   manifold_enabled: true
   predictit_enabled: true
   primary_domains:

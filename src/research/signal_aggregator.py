@@ -76,6 +76,32 @@ class SignalStack:
     kronos_volatility_prob: float | None = None
     kronos_symbol: str = ""
 
+    # ── Crypto market signals (funding rate, TVL) ──────────────
+    funding_rate: float | None = None
+    funding_rate_sentiment: str = ""
+    funding_rate_symbol: str = ""
+    tvl_change_7d_pct: float | None = None
+    tvl_usd: float | None = None
+    tvl_trend: str = ""
+    tvl_protocol: str = ""
+
+    # ── Conflict data (ACLED) ─────────────────────────────────
+    conflict_events: int | None = None
+    conflict_fatalities: int | None = None
+    conflict_trend: str = ""
+    conflict_location: str = ""
+
+    # ── GDELT GKG media tone ──────────────────────────────────
+    gdelt_tone: float | None = None
+    gdelt_sentiment: str = ""
+    gdelt_article_count: int = 0
+
+    # ── GitHub dev activity ───────────────────────────────────
+    github_commits_4w: int | None = None
+    github_activity_trend: str = ""
+    github_stars: int | None = None
+    github_repo: str = ""
+
     # ── Calendar events (Improvement 8) ────────────────────────
     calendar_events: list[Any] = field(default_factory=list)
 
@@ -173,6 +199,34 @@ def build_signal_stack(
                 stack.kronos_upside_prob = bs.get("upside_probability")
                 stack.kronos_volatility_prob = bs.get("volatility_amplification")
                 stack.kronos_symbol = bs.get("symbol", "")
+
+            elif sig_source == "crypto_futures" and sig_type == "funding_rate":
+                stack.funding_rate = bs.get("value")
+                stack.funding_rate_sentiment = bs.get("sentiment", "")
+                stack.funding_rate_symbol = bs.get("symbol", "")
+
+            elif sig_source == "defillama" and sig_type == "tvl":
+                stack.tvl_change_7d_pct = bs.get("change_7d_pct")
+                stack.tvl_usd = bs.get("tvl_usd")
+                stack.tvl_trend = bs.get("trend", "")
+                stack.tvl_protocol = bs.get("protocol", "")
+
+            elif sig_source == "acled" and sig_type == "conflict_events":
+                stack.conflict_events = bs.get("value")
+                stack.conflict_fatalities = bs.get("fatalities")
+                stack.conflict_trend = bs.get("trend", "")
+                stack.conflict_location = bs.get("location", "")
+
+            elif sig_source == "gdelt_gkg" and sig_type == "media_tone":
+                stack.gdelt_tone = bs.get("value")
+                stack.gdelt_sentiment = bs.get("sentiment", "")
+                stack.gdelt_article_count = bs.get("article_count", 0)
+
+            elif sig_source == "github_activity" and sig_type == "dev_activity":
+                stack.github_commits_4w = bs.get("value")
+                stack.github_activity_trend = bs.get("activity_trend", "")
+                stack.github_stars = bs.get("stars")
+                stack.github_repo = bs.get("repo", "")
 
     # ── Microstructure signals (Improvement 2) ────────────────────
     if micro_signals is not None:
@@ -344,6 +398,44 @@ def render_signal_stack(stack: SignalStack) -> str:
             f"- Kronos foundation model{symbol_str}"
             f" (24h forecast, N=10 Monte Carlo paths):"
             f" upside probability {stack.kronos_upside_prob:.0%}{vol_str}"
+        )
+
+    if stack.funding_rate is not None:
+        symbol_str = f" {stack.funding_rate_symbol}" if stack.funding_rate_symbol else ""
+        behavioral_lines.append(
+            f"- Futures funding rate{symbol_str}:"
+            f" {stack.funding_rate * 100:.4f}%"
+            f" ({stack.funding_rate_sentiment})"
+        )
+    if stack.tvl_change_7d_pct is not None:
+        proto_str = f" ({stack.tvl_protocol})" if stack.tvl_protocol else ""
+        tvl_str = f", TVL: ${stack.tvl_usd:,.0f}" if stack.tvl_usd else ""
+        behavioral_lines.append(
+            f"- DeFi TVL{proto_str}: {stack.tvl_change_7d_pct:+.1%} 7d"
+            f" ({stack.tvl_trend}){tvl_str}"
+        )
+    if stack.conflict_events is not None:
+        loc_str = f" in {stack.conflict_location}" if stack.conflict_location else ""
+        behavioral_lines.append(
+            f"- ACLED conflict{loc_str}: {stack.conflict_events} events,"
+            f" {stack.conflict_fatalities or 0} fatalities"
+            f" ({stack.conflict_trend})"
+        )
+    if stack.gdelt_tone is not None:
+        behavioral_lines.append(
+            f"- GDELT media tone: {stack.gdelt_tone:+.1f}"
+            f" ({stack.gdelt_sentiment}, {stack.gdelt_article_count} articles)"
+        )
+    if stack.github_commits_4w is not None:
+        repo_str = f" ({stack.github_repo})" if stack.github_repo else ""
+        stars_str = (
+            f", {stack.github_stars:,} stars"
+            if stack.github_stars is not None
+            else ""
+        )
+        behavioral_lines.append(
+            f"- GitHub activity{repo_str}: {stack.github_commits_4w}"
+            f" commits/4w ({stack.github_activity_trend}){stars_str}"
         )
 
     if behavioral_lines:

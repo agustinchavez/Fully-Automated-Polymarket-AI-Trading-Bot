@@ -101,6 +101,16 @@ class ResearchConfig(BaseModel):
     sports_min_books: int = 2             # min sportsbooks needed for consensus
     # Spotify charts (kworb.net scraper, no key needed)
     spotify_charts_enabled: bool = False
+    # Binance futures funding rate (no key needed)
+    crypto_futures_enabled: bool = False
+    # DeFiLlama TVL (no key needed)
+    defillama_enabled: bool = False
+    # ACLED armed conflict data (free academic API key)
+    acled_enabled: bool = False
+    acled_api_key: str = ""
+    acled_lookback_days: int = 30
+    # GitHub activity (optional GITHUB_TOKEN for higher rate limits)
+    github_activity_enabled: bool = False
     # Kronos crypto price forecast (requires torch, einops, safetensors)
     kronos_enabled: bool = False
     # Improvement 6: Additional consensus connectors
@@ -715,6 +725,7 @@ _SECRET_FIELDS = frozenset({
     "reddit_client_id", "reddit_client_secret", "pubmed_api_key",
     "metaculus_api_key",
     "sports_odds_api_key", "sports_stats_api_key",
+    "acled_api_key",
 })
 
 
@@ -789,6 +800,7 @@ _ENV_OVERRIDES: dict[str, tuple[str, str, type]] = {
     "METACULUS_API_KEY": ("research", "metaculus_api_key", str),
     "ODDS_API_KEY": ("research", "sports_odds_api_key", str),
     "API_FOOTBALL_KEY": ("research", "sports_stats_api_key", str),
+    "ACLED_API_KEY": ("research", "acled_api_key", str),
 }
 
 

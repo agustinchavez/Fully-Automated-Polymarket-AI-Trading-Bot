@@ -449,10 +449,10 @@ class TestKronosConfig:
         config = ResearchConfig()
         assert config.kronos_enabled is False
 
-    def test_kronos_disabled_in_loaded_config(self) -> None:
+    def test_kronos_enabled_in_loaded_config(self) -> None:
         from src.config import load_config
         config = load_config()
-        assert config.research.kronos_enabled is False
+        assert config.research.kronos_enabled is True
 
 
 # ── 9. Registry: KronosConnector ─────────────────────────────────────

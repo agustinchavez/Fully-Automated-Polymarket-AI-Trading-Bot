@@ -112,7 +112,8 @@ class PipelineRunner:
                 config.research.search_provider
             )
             self._source_fetcher = SourceFetcher(
-                self._search_provider, config.research
+                self._search_provider, config.research,
+                db_path=config.storage.sqlite_path,
             )
             self._evidence_extractor = EvidenceExtractor(config.forecasting)
         except Exception:

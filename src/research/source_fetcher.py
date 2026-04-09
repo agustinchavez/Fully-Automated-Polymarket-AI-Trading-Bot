@@ -56,9 +56,16 @@ class SourceFetcher:
     _search_cache = get_cache("search", max_size_mb=50)
     _SEARCH_TTL_SECS = 7200  # 2 hours
 
-    def __init__(self, provider: SearchProvider, config: ResearchConfig):
+    def __init__(
+        self,
+        provider: SearchProvider,
+        config: ResearchConfig,
+        db_path: str | None = None,
+    ):
         self._provider = provider
         self._config = config
+        self._db_path = db_path
+        self._evidence_tracker: Any = None  # lazy-loaded
         self._http = httpx.AsyncClient(
             timeout=config.source_timeout_secs,
             follow_redirects=True,
@@ -67,6 +74,22 @@ class SourceFetcher:
         # Instantiate connectors once — reused across all fetch_sources() calls
         from src.research.connectors.registry import get_enabled_connectors
         self._connectors = get_enabled_connectors(config)
+
+    def _get_evidence_tracker(self) -> Any:
+        """Lazy-load the EvidenceQualityTracker for domain weight lookups."""
+        db_path = getattr(self, "_db_path", None)
+        tracker = getattr(self, "_evidence_tracker", None)
+        if tracker is None and db_path:
+            try:
+                import sqlite3
+                from src.analytics.evidence_quality import EvidenceQualityTracker
+                conn = sqlite3.connect(db_path, check_same_thread=False)
+                conn.row_factory = sqlite3.Row
+                self._evidence_tracker = EvidenceQualityTracker(conn)
+            except Exception:
+                self._evidence_tracker = False  # sentinel: don't retry
+        tracker = getattr(self, "_evidence_tracker", None)
+        return tracker if tracker else None
 
     async def close(self) -> None:
         await self._http.aclose()
@@ -176,6 +199,16 @@ class SourceFetcher:
                     continue
                 seen_urls.add(canonical)
 
+                base_authority = score_domain_authority(
+                    sr.url, primary, secondary
+                )
+                # Apply learned evidence quality weight (0.5–1.5 multiplier)
+                tracker = self._get_evidence_tracker()
+                if tracker is not None:
+                    domain = _extract_domain(sr.url)
+                    learned_w = tracker.get_effective_weight(domain)
+                    base_authority = base_authority * learned_w
+
                 all_sources.append(
                     FetchedSource(
                         title=sr.title,
@@ -183,9 +216,7 @@ class SourceFetcher:
                         snippet=sr.snippet,
                         publisher=sr.source or _extract_domain(sr.url),
                         date=sr.date,
-                        authority_score=score_domain_authority(
-                            sr.url, primary, secondary
-                        ),
+                        authority_score=base_authority,
                         query_intent=query.intent,
                         raw=sr.raw,
                     )

@@ -59,6 +59,9 @@ DEFAULT_LIMITS: dict[str, BucketConfig] = {
     "sports_odds": BucketConfig(tokens_per_second=0.017, max_burst=1, name="TheOddsAPI"),
     "sports_stats": BucketConfig(tokens_per_second=0.5, max_burst=2, name="APIFootball"),
     "spotify_charts": BucketConfig(tokens_per_second=0.033, max_burst=1, name="Spotify Charts"),
+    "defillama": BucketConfig(tokens_per_second=2.0, max_burst=4, name="DeFiLlama"),
+    "acled": BucketConfig(tokens_per_second=0.5, max_burst=2, name="ACLED"),
+    "github": BucketConfig(tokens_per_second=1.0, max_burst=3, name="GitHub"),
 }
 
 

@@ -171,6 +171,34 @@ def get_enabled_connectors(config: Any) -> list[BaseResearchConnector]:
         except Exception as e:
             log.warning("registry.spotify_charts_load_failed", error=str(e))
 
+    if getattr(config, "crypto_futures_enabled", False):
+        try:
+            from src.research.connectors.crypto_futures import CryptoFuturesConnector
+            connectors.append(CryptoFuturesConnector(config))
+        except Exception as e:
+            log.warning("registry.crypto_futures_load_failed", error=str(e))
+
+    if getattr(config, "defillama_enabled", False):
+        try:
+            from src.research.connectors.defillama import DeFiLlamaConnector
+            connectors.append(DeFiLlamaConnector(config))
+        except Exception as e:
+            log.warning("registry.defillama_load_failed", error=str(e))
+
+    if getattr(config, "acled_enabled", False):
+        try:
+            from src.research.connectors.acled import AcledConnector
+            connectors.append(AcledConnector(config))
+        except Exception as e:
+            log.warning("registry.acled_load_failed", error=str(e))
+
+    if getattr(config, "github_activity_enabled", False):
+        try:
+            from src.research.connectors.github_activity import GitHubActivityConnector
+            connectors.append(GitHubActivityConnector(config))
+        except Exception as e:
+            log.warning("registry.github_activity_load_failed", error=str(e))
+
     if getattr(config, "kronos_enabled", False):
         try:
             from src.research.connectors.kronos_connector import KronosConnector

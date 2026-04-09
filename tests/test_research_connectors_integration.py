@@ -40,6 +40,10 @@ class TestRegistry:
         config.sports_stats_enabled = False
         config.spotify_charts_enabled = False
         config.kronos_enabled = False
+        config.crypto_futures_enabled = False
+        config.defillama_enabled = False
+        config.acled_enabled = False
+        config.github_activity_enabled = False
         connectors = get_enabled_connectors(config)
         assert connectors == []
 
@@ -67,6 +71,10 @@ class TestRegistry:
         config.sports_stats_enabled = False
         config.spotify_charts_enabled = False
         config.kronos_enabled = False
+        config.crypto_futures_enabled = False
+        config.defillama_enabled = False
+        config.acled_enabled = False
+        config.github_activity_enabled = False
         connectors = get_enabled_connectors(config)
         assert len(connectors) == 1
         assert connectors[0].name == "open_meteo"
@@ -95,6 +103,10 @@ class TestRegistry:
         config.sports_stats_enabled = False
         config.spotify_charts_enabled = False
         config.kronos_enabled = False
+        config.crypto_futures_enabled = False
+        config.defillama_enabled = False
+        config.acled_enabled = False
+        config.github_activity_enabled = False
         connectors = get_enabled_connectors(config)
         assert len(connectors) == 3
         names = {c.name for c in connectors}
@@ -126,8 +138,12 @@ class TestRegistry:
         config.sports_stats_enabled = True
         config.spotify_charts_enabled = True
         config.kronos_enabled = True
+        config.crypto_futures_enabled = True
+        config.defillama_enabled = True
+        config.acled_enabled = True
+        config.github_activity_enabled = True
         connectors = get_enabled_connectors(config)
-        assert len(connectors) == 22
+        assert len(connectors) == 26
 
     def test_new_connectors_enabled_individually(self) -> None:
         for connector_flag, expected_name in [
@@ -170,6 +186,10 @@ class TestRegistry:
             config.sports_stats_enabled = False
             config.spotify_charts_enabled = False
             config.kronos_enabled = False
+            config.crypto_futures_enabled = False
+            config.defillama_enabled = False
+            config.acled_enabled = False
+            config.github_activity_enabled = False
             setattr(config, connector_flag, True)
             connectors = get_enabled_connectors(config)
             assert len(connectors) == 1
@@ -206,6 +226,10 @@ class TestConnectorContracts:
         config.sports_stats_enabled = True
         config.spotify_charts_enabled = True
         config.kronos_enabled = True
+        config.crypto_futures_enabled = True
+        config.defillama_enabled = True
+        config.acled_enabled = True
+        config.github_activity_enabled = True
         return get_enabled_connectors(config)
 
     def test_all_have_name(self) -> None:
