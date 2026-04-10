@@ -159,10 +159,14 @@ class AcledConnector(BaseResearchConnector):
             etype = e.get("event_type", "Unknown")
             type_counts[etype] = type_counts.get(etype, 0) + 1
 
-        # Trend: compare first half vs second half of period
-        mid = total_events // 2
-        first_half = total_events - mid  # older events
-        second_half = mid  # newer events
+        # Trend: compare older half vs newer half of period by date
+        mid_date = (
+            datetime.now(timezone.utc) - timedelta(days=lookback // 2)
+        ).strftime("%Y-%m-%d")
+        first_half = sum(
+            1 for e in events if e.get("event_date", "") < mid_date
+        )
+        second_half = total_events - first_half
         if first_half > 0:
             trend_ratio = second_half / first_half
             if trend_ratio > 1.2:

@@ -61,10 +61,12 @@ class SourceFetcher:
         provider: SearchProvider,
         config: ResearchConfig,
         db_path: str | None = None,
+        auto_weight_sources: bool = False,
     ):
         self._provider = provider
         self._config = config
         self._db_path = db_path
+        self._auto_weight_sources = auto_weight_sources
         self._evidence_tracker: Any = None  # lazy-loaded
         self._http = httpx.AsyncClient(
             timeout=config.source_timeout_secs,
@@ -203,7 +205,9 @@ class SourceFetcher:
                     sr.url, primary, secondary
                 )
                 # Apply learned evidence quality weight (0.5–1.5 multiplier)
-                tracker = self._get_evidence_tracker()
+                # Only when continuous_learning.auto_weight_sources is enabled
+                auto_weight = getattr(self, "_auto_weight_sources", False)
+                tracker = self._get_evidence_tracker() if auto_weight else None
                 if tracker is not None:
                     domain = _extract_domain(sr.url)
                     learned_w = tracker.get_effective_weight(domain)

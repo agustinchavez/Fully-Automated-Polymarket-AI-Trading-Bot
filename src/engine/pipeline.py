@@ -114,6 +114,7 @@ class PipelineRunner:
             self._source_fetcher = SourceFetcher(
                 self._search_provider, config.research,
                 db_path=config.storage.sqlite_path,
+                auto_weight_sources=config.continuous_learning.auto_weight_sources,
             )
             self._evidence_extractor = EvidenceExtractor(config.forecasting)
         except Exception:
@@ -178,7 +179,11 @@ class PipelineRunner:
             from src.research.evidence_extractor import EvidenceExtractor
 
             search_provider = create_search_provider(self.config.research.search_provider)
-            source_fetcher = SourceFetcher(search_provider, self.config.research)
+            source_fetcher = SourceFetcher(
+                search_provider, self.config.research,
+                db_path=self.config.storage.sqlite_path,
+                auto_weight_sources=self.config.continuous_learning.auto_weight_sources,
+            )
             extractor = EvidenceExtractor(self.config.forecasting)
 
         try:

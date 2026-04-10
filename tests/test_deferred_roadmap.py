@@ -936,3 +936,246 @@ class TestNewRateLimiterBuckets:
 
         assert "github" in DEFAULT_LIMITS
         assert DEFAULT_LIMITS["github"].name == "GitHub"
+
+
+# ── Code review v26 fixes ─────────────────────────────────────────
+
+
+class TestAcledTrendDateBased:
+    """Bug 1: ACLED trend uses date-based split, not index-based."""
+
+    @pytest.mark.asyncio
+    async def test_escalating_trend_more_recent_events(self) -> None:
+        """Events clustered in the recent half → escalating."""
+        from src.research.connectors.acled import AcledConnector
+        from datetime import datetime, timedelta, timezone
+
+        config = MagicMock()
+        config.acled_api_key = "k"
+        config.acled_lookback_days = 30
+
+        now = datetime.now(timezone.utc)
+        # 2 old events, 8 recent events → ratio 8/2 = 4.0 → escalating
+        old_date = (now - timedelta(days=25)).strftime("%Y-%m-%d")
+        new_date = (now - timedelta(days=5)).strftime("%Y-%m-%d")
+        events = [
+            {"event_type": "Battles", "fatalities": "1", "event_date": old_date},
+            {"event_type": "Battles", "fatalities": "1", "event_date": old_date},
+        ] + [
+            {"event_type": "Battles", "fatalities": "1", "event_date": new_date}
+            for _ in range(8)
+        ]
+
+        mock_resp = MagicMock()
+        mock_resp.json.return_value = {"data": events}
+        mock_resp.raise_for_status = MagicMock()
+
+        mock_client = AsyncMock()
+        mock_client.get = AsyncMock(return_value=mock_resp)
+
+        c = AcledConnector(config=config)
+        c._client = mock_client
+
+        with (
+            patch("src.research.connectors.acled.rate_limiter") as rl,
+            patch.dict("os.environ", {"ACLED_API_KEY": "k", "ACLED_EMAIL": "e@e.com"}),
+        ):
+            rl.get.return_value.acquire = AsyncMock()
+            sources = await c._fetch_impl("Ukraine war escalate?", "GEOPOLITICS")
+
+        assert len(sources) == 1
+        assert sources[0].raw["behavioral_signal"]["trend"] == "escalating"
+
+    @pytest.mark.asyncio
+    async def test_deescalating_trend_more_old_events(self) -> None:
+        """Events clustered in the older half → de-escalating."""
+        from src.research.connectors.acled import AcledConnector
+        from datetime import datetime, timedelta, timezone
+
+        config = MagicMock()
+        config.acled_api_key = "k"
+        config.acled_lookback_days = 30
+
+        now = datetime.now(timezone.utc)
+        # 8 old events, 2 recent → ratio 2/8 = 0.25 → de-escalating
+        old_date = (now - timedelta(days=25)).strftime("%Y-%m-%d")
+        new_date = (now - timedelta(days=5)).strftime("%Y-%m-%d")
+        events = [
+            {"event_type": "Battles", "fatalities": "1", "event_date": old_date}
+            for _ in range(8)
+        ] + [
+            {"event_type": "Battles", "fatalities": "1", "event_date": new_date},
+            {"event_type": "Battles", "fatalities": "1", "event_date": new_date},
+        ]
+
+        mock_resp = MagicMock()
+        mock_resp.json.return_value = {"data": events}
+        mock_resp.raise_for_status = MagicMock()
+
+        mock_client = AsyncMock()
+        mock_client.get = AsyncMock(return_value=mock_resp)
+
+        c = AcledConnector(config=config)
+        c._client = mock_client
+
+        with (
+            patch("src.research.connectors.acled.rate_limiter") as rl,
+            patch.dict("os.environ", {"ACLED_API_KEY": "k", "ACLED_EMAIL": "e@e.com"}),
+        ):
+            rl.get.return_value.acquire = AsyncMock()
+            sources = await c._fetch_impl("Ukraine war escalate?", "GEOPOLITICS")
+
+        assert len(sources) == 1
+        assert sources[0].raw["behavioral_signal"]["trend"] == "de-escalating"
+
+    @pytest.mark.asyncio
+    async def test_stable_trend_even_distribution(self) -> None:
+        """Events evenly split across both halves → stable."""
+        from src.research.connectors.acled import AcledConnector
+        from datetime import datetime, timedelta, timezone
+
+        config = MagicMock()
+        config.acled_api_key = "k"
+        config.acled_lookback_days = 30
+
+        now = datetime.now(timezone.utc)
+        old_date = (now - timedelta(days=25)).strftime("%Y-%m-%d")
+        new_date = (now - timedelta(days=5)).strftime("%Y-%m-%d")
+        events = [
+            {"event_type": "Battles", "fatalities": "1", "event_date": old_date}
+            for _ in range(5)
+        ] + [
+            {"event_type": "Battles", "fatalities": "1", "event_date": new_date}
+            for _ in range(5)
+        ]
+
+        mock_resp = MagicMock()
+        mock_resp.json.return_value = {"data": events}
+        mock_resp.raise_for_status = MagicMock()
+
+        mock_client = AsyncMock()
+        mock_client.get = AsyncMock(return_value=mock_resp)
+
+        c = AcledConnector(config=config)
+        c._client = mock_client
+
+        with (
+            patch("src.research.connectors.acled.rate_limiter") as rl,
+            patch.dict("os.environ", {"ACLED_API_KEY": "k", "ACLED_EMAIL": "e@e.com"}),
+        ):
+            rl.get.return_value.acquire = AsyncMock()
+            sources = await c._fetch_impl("Ukraine war escalate?", "GEOPOLITICS")
+
+        assert len(sources) == 1
+        assert sources[0].raw["behavioral_signal"]["trend"] == "stable"
+
+
+class TestAutoWeightSourcesGate:
+    """Bug 2: Evidence quality weighting is gated behind auto_weight_sources."""
+
+    def test_auto_weight_sources_flag_stored(self) -> None:
+        from src.research.source_fetcher import SourceFetcher
+
+        config = MagicMock()
+        config.source_timeout_secs = 10
+        provider = MagicMock()
+        with patch("src.research.connectors.registry.get_enabled_connectors", return_value=[]):
+            fetcher = SourceFetcher(provider, config, auto_weight_sources=True)
+        assert fetcher._auto_weight_sources is True
+
+    def test_auto_weight_defaults_false(self) -> None:
+        from src.research.source_fetcher import SourceFetcher
+
+        config = MagicMock()
+        config.source_timeout_secs = 10
+        provider = MagicMock()
+        with patch("src.research.connectors.registry.get_enabled_connectors", return_value=[]):
+            fetcher = SourceFetcher(provider, config)
+        assert fetcher._auto_weight_sources is False
+
+    @pytest.mark.asyncio
+    async def test_tracker_not_called_when_gate_disabled(self) -> None:
+        """With auto_weight_sources=False, tracker should never be consulted."""
+        from src.research.source_fetcher import SourceFetcher
+        from src.research.query_builder import SearchQuery
+
+        config = MagicMock()
+        config.source_timeout_secs = 10
+        config.max_sources = 5
+        config.primary_domains = {}
+        config.secondary_domains = []
+        config.blocked_domains = []
+        config.fetch_full_content = False
+        provider = MagicMock()
+
+        with patch("src.research.connectors.registry.get_enabled_connectors", return_value=[]):
+            fetcher = SourceFetcher(
+                provider, config,
+                db_path="data/test.db",
+                auto_weight_sources=False,
+            )
+
+        # Mock _get_evidence_tracker to track calls
+        fetcher._get_evidence_tracker = MagicMock(return_value=None)
+
+        # Mock search results
+        mock_result = MagicMock()
+        mock_result.title = "Test"
+        mock_result.url = "https://example.com/test"
+        mock_result.snippet = "snippet"
+        mock_result.source = "Example"
+        mock_result.date = ""
+        mock_result.position = 1
+        mock_result.raw = {}
+
+        fetcher._run_query = AsyncMock(return_value=[mock_result])
+
+        q = SearchQuery(text="test query", intent="primary")
+        await fetcher.fetch_sources([q])
+
+        # _get_evidence_tracker should NOT be called when gate is disabled
+        fetcher._get_evidence_tracker.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_tracker_called_when_gate_enabled(self) -> None:
+        """With auto_weight_sources=True, tracker IS consulted."""
+        from src.research.source_fetcher import SourceFetcher
+        from src.research.query_builder import SearchQuery
+
+        config = MagicMock()
+        config.source_timeout_secs = 10
+        config.max_sources = 5
+        config.primary_domains = {}
+        config.secondary_domains = []
+        config.blocked_domains = []
+        config.fetch_full_content = False
+        provider = MagicMock()
+
+        with patch("src.research.connectors.registry.get_enabled_connectors", return_value=[]):
+            fetcher = SourceFetcher(
+                provider, config,
+                db_path="data/test.db",
+                auto_weight_sources=True,
+            )
+
+        # Mock tracker
+        mock_tracker = MagicMock()
+        mock_tracker.get_effective_weight.return_value = 1.2
+        fetcher._get_evidence_tracker = MagicMock(return_value=mock_tracker)
+
+        mock_result = MagicMock()
+        mock_result.title = "Test"
+        mock_result.url = "https://example.com/test"
+        mock_result.snippet = "snippet"
+        mock_result.source = "Example"
+        mock_result.date = ""
+        mock_result.position = 1
+        mock_result.raw = {}
+
+        fetcher._run_query = AsyncMock(return_value=[mock_result])
+
+        q = SearchQuery(text="test query", intent="primary")
+        await fetcher.fetch_sources([q])
+
+        # _get_evidence_tracker SHOULD be called when gate is enabled
+        fetcher._get_evidence_tracker.assert_called()
