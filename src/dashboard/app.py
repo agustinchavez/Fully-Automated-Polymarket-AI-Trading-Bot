@@ -7979,6 +7979,145 @@ def _get_digest_generator():
     ), conn
 
 
+@app.route("/api/paper-trading-progress")
+def api_paper_trading_progress() -> Any:
+    """Trade counts by time window and milestone progress."""
+    conn = _get_conn()
+    _ensure_tables(conn)
+    try:
+        import datetime as dt
+
+        now = dt.datetime.now(dt.timezone.utc)
+        today = now.date().isoformat()
+        d7 = (now - dt.timedelta(days=7)).isoformat()
+        d30 = (now - dt.timedelta(days=30)).isoformat()
+
+        def _count(table: str, col: str, where: str = "",
+                   params: tuple = ()) -> int:
+            try:
+                sql = f"SELECT COUNT(*) AS n FROM {table}"
+                if where:
+                    sql += f" {where}"
+                r = conn.execute(sql, params).fetchone()
+                return int(r["n"]) if r else 0
+            except Exception:
+                return 0
+
+        trades_today = _count("trades", "created_at",
+                              "WHERE date(created_at) = ?", (today,))
+        trades_7d = _count("trades", "created_at",
+                           "WHERE created_at >= ?", (d7,))
+        trades_30d = _count("trades", "created_at",
+                            "WHERE created_at >= ?", (d30,))
+        trades_all = _count("trades", "created_at")
+
+        resolved_today = _count("closed_positions", "closed_at",
+                                "WHERE date(closed_at) = ?", (today,))
+        resolved_7d = _count("closed_positions", "closed_at",
+                             "WHERE closed_at >= ?", (d7,))
+        resolved_30d = _count("closed_positions", "closed_at",
+                              "WHERE closed_at >= ?", (d30,))
+        resolved_total = _count("closed_positions", "closed_at")
+
+        # Days running (from first trade)
+        days_running = 0
+        try:
+            row = conn.execute(
+                "SELECT MIN(created_at) AS first FROM trades"
+            ).fetchone()
+            if row and row["first"]:
+                first = dt.datetime.fromisoformat(
+                    str(row["first"]).replace("Z", "+00:00")
+                )
+                days_running = max(0, (now - first).days)
+        except Exception:
+            pass
+
+        # Current Brier score
+        brier_current = None
+        try:
+            brow = conn.execute(
+                "SELECT brier_score FROM calibration_history "
+                "ORDER BY recorded_at DESC LIMIT 1"
+            ).fetchone()
+            if brow:
+                brier_current = round(float(brow["brier_score"]), 4)
+        except Exception:
+            pass
+
+        # Milestone status
+        cfg = _get_config()
+        brier_threshold = 0.25
+        analyst_min = getattr(cfg.analyst, "min_resolved_trades", 50)
+
+        def _milestone_pct(*fractions: float) -> int:
+            valid = [f for f in fractions if f is not None]
+            return min(100, round(min(valid) * 100)) if valid else 0
+
+        milestones = {
+            "smart_retrain": {
+                "label": "Smart Retrain",
+                "description": "Calibration auto-refit fires",
+                "required_resolved": 30,
+                "current_resolved": resolved_total,
+                "met": resolved_total >= 30,
+                "progress_pct": _milestone_pct(resolved_total / 30),
+            },
+            "ai_analyst": {
+                "label": "AI Analyst",
+                "description": "AI reviews your performance",
+                "required_resolved": analyst_min,
+                "required_days": 28,
+                "current_resolved": resolved_total,
+                "current_days": days_running,
+                "met": resolved_total >= analyst_min and days_running >= 28,
+                "progress_pct": _milestone_pct(
+                    resolved_total / max(1, analyst_min),
+                    days_running / 28,
+                ),
+            },
+            "live_gate": {
+                "label": "Live Trading Gate",
+                "description": "All conditions required for live mode",
+                "required_resolved": 30,
+                "required_days": 28,
+                "required_brier": brier_threshold,
+                "current_resolved": resolved_total,
+                "current_days": days_running,
+                "current_brier": brier_current,
+                "met": (
+                    resolved_total >= 30
+                    and days_running >= 28
+                    and brier_current is not None
+                    and brier_current < brier_threshold
+                ),
+                "progress_pct": _milestone_pct(
+                    resolved_total / 30,
+                    days_running / 28,
+                    (brier_threshold / brier_current)
+                    if brier_current and brier_current > 0
+                    else 0.0,
+                ),
+            },
+        }
+
+        return jsonify({
+            "trades_today": trades_today,
+            "trades_7d": trades_7d,
+            "trades_30d": trades_30d,
+            "trades_all": trades_all,
+            "resolved_today": resolved_today,
+            "resolved_7d": resolved_7d,
+            "resolved_30d": resolved_30d,
+            "resolved_total": resolved_total,
+            "days_running": days_running,
+            "brier_current": brier_current,
+            "milestones": milestones,
+        })
+    finally:
+        conn.close()
+
+
 @app.route("/api/insights/pnl-overview")
 def api_insights_pnl_overview() -> Any:
     """P&L overview: KPIs, equity curve, daily bars, rolling windows."""

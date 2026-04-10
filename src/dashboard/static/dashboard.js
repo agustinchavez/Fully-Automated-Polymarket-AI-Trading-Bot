@@ -6783,7 +6783,67 @@ function filterDocs(query) {
 
 let _insightCharts = {};
 
+async function loadPaperTradingProgress() {
+    try {
+        const d = await apiFetch('/api/paper-trading-progress');
+        if (!d) return;
+
+        // Stat cards
+        const set = (id, val) => {
+            const el = document.getElementById(id);
+            if (el) el.textContent = val;
+        };
+        set('pt-trades-today', d.trades_today ?? '\u2014');
+        set('pt-trades-7d', d.trades_7d ?? '\u2014');
+        set('pt-trades-30d', d.trades_30d ?? '\u2014');
+        set('pt-resolved-total', d.resolved_total ?? '\u2014');
+        set('pt-resolved-7d', d.resolved_7d ?? '\u2014');
+        set('pt-days-running',
+            d.days_running != null ? `${d.days_running}d` : '\u2014');
+
+        // Milestone progress bars
+        const container = document.getElementById('pt-milestones');
+        if (!container) return;
+        container.innerHTML = '';
+        const milestones = d.milestones || {};
+
+        for (const [key, m] of Object.entries(milestones)) {
+            const pct = m.progress_pct ?? 0;
+            const met = m.met ? 'met' : '';
+            const icon = m.met ? '\u2705' : '\u23F3';
+
+            const details = [];
+            if (m.required_resolved)
+                details.push(`${m.current_resolved}/${m.required_resolved} resolved`);
+            if (m.required_days)
+                details.push(`${m.current_days}/${m.required_days} days`);
+            if (m.required_brier != null && m.current_brier != null)
+                details.push(`Brier ${m.current_brier} (need <${m.required_brier})`);
+            else if (m.required_brier != null)
+                details.push(`Brier n/a (need <${m.required_brier})`);
+
+            container.innerHTML += `
+                <div class="pt-milestone">
+                    <div class="pt-milestone-header">
+                        <span class="pt-milestone-label">${icon} ${m.label}</span>
+                        <span class="pt-milestone-pct">${pct}%</span>
+                    </div>
+                    <div class="pt-milestone-desc">
+                        ${m.description} &bull; ${details.join(' &bull; ')}
+                    </div>
+                    <div class="pt-bar-track">
+                        <div class="pt-bar-fill ${met}" style="width:${pct}%"></div>
+                    </div>
+                </div>
+            `;
+        }
+    } catch (e) {
+        console.warn('paper-trading-progress load failed', e);
+    }
+}
+
 async function updateInsightsTab() {
+    loadPaperTradingProgress();
     const days = parseInt($('#insights-days')?.value || '30', 10);
     try {
         const [pnl, cats, models, friction,

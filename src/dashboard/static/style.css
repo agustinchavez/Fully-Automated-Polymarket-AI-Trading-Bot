@@ -6948,3 +6948,43 @@ footer {
     text-align: right;
     flex-shrink: 0;
 }
+
+/* ── Paper Trading Progress milestones ────────────────────────── */
+.pt-milestone {
+    margin-bottom: 16px;
+}
+.pt-milestone-header {
+    display: flex;
+    justify-content: space-between;
+    margin-bottom: 6px;
+    font-size: 0.9em;
+}
+.pt-milestone-label {
+    font-weight: 600;
+    color: var(--text);
+}
+.pt-milestone-pct {
+    color: var(--text-dim);
+    font-family: var(--font-mono);
+}
+.pt-milestone-desc {
+    font-size: 0.8em;
+    color: var(--text-dim);
+    margin-bottom: 4px;
+}
+.pt-bar-track {
+    height: 10px;
+    background: var(--bg-card);
+    border-radius: 6px;
+    overflow: hidden;
+    border: 1px solid var(--border);
+}
+.pt-bar-fill {
+    height: 100%;
+    border-radius: 6px;
+    background: var(--accent-blue);
+    transition: width 0.4s ease;
+}
+.pt-bar-fill.met {
+    background: var(--accent-green);
+}
