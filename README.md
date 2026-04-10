@@ -15,7 +15,7 @@ Paper trading by default. Three independent safety gates must be unlocked for li
 
 **Keywords:** Polymarket bot, Polymarket trading bot, prediction market bot, AI trading bot, automated trading, algorithmic trading, whale tracker, smart money, Kelly criterion, prediction market trading, Polymarket API, Polymarket CLOB
 
-[Getting Started](#-getting-started) · [Dashboard](#-real-time-dashboard) · [Architecture](#%EF%B8%8F-architecture) · [Configuration](#%EF%B8%8F-configuration) · [Deployment](#-deployment)
+[Getting Started](#-getting-started) · [Dashboard](#-real-time-dashboard) · [Architecture](#%EF%B8%8F-architecture) · [Configuration](#%EF%B8%8F-configuration) · [API Reference](docs/API_REFERENCE.md) · [Glossary](docs/GLOSSARY.md) · [Deployment](#-deployment)
 
 </div>
 
@@ -273,21 +273,25 @@ Three frontier LLMs run in parallel, each producing an independent probability f
 
 ### Direct API Research Connectors
 
-Six free structured API connectors provide authoritative data before web search runs:
+26 structured API connectors provide authoritative data before web search runs:
 
 | Connector | Categories | API Key Required | Data Provided |
 |-----------|-----------|-----------------|---------------|
 | **Open-Meteo** | WEATHER | No | 7-day forecast, precipitation, temperature, wind |
-| **GDELT** | MACRO, ELECTION, LEGAL, CORPORATE | No | News volume timeline, spike detection |
+| **GDELT** | MACRO, ELECTION, LEGAL, CORPORATE, GEOPOLITICS | No | News volume timeline, spike detection, media tone analysis |
 | **FRED** | MACRO | Yes (free) | Federal funds rate, CPI, GDP, unemployment, treasury yields |
 | **CoinGecko** | CRYPTO | Yes (free demo) | Real-time prices, 24h change, market cap, volume |
 | **Congress.gov** | ELECTION, LEGAL | Yes (free) | Bill status, vote records, nominations |
 | **CourtListener** | LEGAL | Yes (free) | Court opinions, docket entries, case search |
+| **Binance Futures** | CRYPTO | No | Funding rates, market sentiment (bullish/bearish) |
+| **DeFiLlama** | CRYPTO | No | Protocol/chain TVL, 7-day trend |
+| **ACLED** | GEOPOLITICS | Yes (free academic) | Conflict events, fatalities, trend analysis |
+| **GitHub** | TECHNOLOGY, CRYPTO | Optional | Commit activity, stars, releases, dev trends |
+| **+ 16 more** | Various | Mixed | SEC EDGAR, arXiv, Wikipedia, Kalshi, Metaculus, etc. |
 
 - API sources are prepended before web search results with `extraction_method='api'`
 - Each connector is config-gated (`research.fred_enabled`, etc.) and disabled by default for key-required connectors
 - Circuit breakers prevent repeated failures from degrading the pipeline
-- GDELT uses `authority_score=0.4` (aggregator); all others use `1.0` (primary source)
 
 ### Calibration & Self-Improvement
 
@@ -658,6 +662,17 @@ make typecheck       # mypy type checking
 | `make docker-down` | Stop docker compose |
 | `make backup` | Backup SQLite database |
 | `make clean` | Remove build artifacts |
+
+---
+
+## 📚 Documentation
+
+| Document | Description |
+|----------|-------------|
+| [API Reference](docs/API_REFERENCE.md) | All 129 dashboard API endpoints with descriptions, methods, and parameters |
+| [Glossary](docs/GLOSSARY.md) | Definitions of key terms: Brier score, Sharpe ratio, Kelly criterion, edge, drawdown, VaR, calibration, and more |
+| [Deployment Guide](DEPLOYMENT.md) | Step-by-step guide for paper trading, staged live deployment, Docker, and systemd |
+| [Environment Variables](.env.example) | All supported environment variables with descriptions |
 
 ---
 

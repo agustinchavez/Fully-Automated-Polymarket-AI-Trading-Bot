@@ -2243,8 +2243,13 @@
                     <a class="docs-nav-link" href="#doc-dashboard-guide" onclick="scrollToDoc(event,'doc-dashboard-guide')">Dashboard Guide</a>
                     <a class="docs-nav-link" href="#doc-configuration" onclick="scrollToDoc(event,'doc-configuration')">Configuration Reference</a>
                     <a class="docs-nav-link" href="#doc-cli" onclick="scrollToDoc(event,'doc-cli')">CLI Commands</a>
+                    <a class="docs-nav-link" href="#doc-backtesting" onclick="scrollToDoc(event,'doc-backtesting')">Backtesting</a>
+                    <a class="docs-nav-link" href="#doc-continuous-learning" onclick="scrollToDoc(event,'doc-continuous-learning')">Continuous Learning</a>
+                    <a class="docs-nav-link" href="#doc-arbitrage" onclick="scrollToDoc(event,'doc-arbitrage')">Arbitrage</a>
+                    <a class="docs-nav-link" href="#doc-production" onclick="scrollToDoc(event,'doc-production')">Production &amp; Safety</a>
                     <a class="docs-nav-link" href="#doc-safety" onclick="scrollToDoc(event,'doc-safety')">Safety &amp; Security</a>
                     <a class="docs-nav-link" href="#doc-deployment" onclick="scrollToDoc(event,'doc-deployment')">Deployment</a>
+                    <a class="docs-nav-link" href="#doc-api-reference" onclick="scrollToDoc(event,'doc-api-reference')">API Reference</a>
                     <a class="docs-nav-link" href="#doc-glossary" onclick="scrollToDoc(event,'doc-glossary')">Glossary</a>
                 </nav>
             </aside>
@@ -2255,10 +2260,10 @@
                 <!-- ── OVERVIEW ──────────────────────────────────── -->
                 <section class="docs-section" id="doc-overview">
                     <h1>Polymarket Research &amp; Trading Bot</h1>
-                    <p class="docs-version">Version 0.2.0 &middot; MIT License &middot; Python 3.9+</p>
+                    <p class="docs-version">Version 1.0.0 &middot; MIT License &middot; Python 3.9+</p>
                     <div class="docs-callout docs-callout-info">
                         <strong>What is this?</strong>
-                        <p>A production-grade, AI-powered autonomous trading agent for <a href="https://polymarket.com" target="_blank">Polymarket</a> prediction markets. It discovers markets, gathers authoritative evidence from whitelisted sources, generates calibrated probability forecasts using an LLM ensemble, enforces strict risk controls, and executes trades with fractional Kelly sizing.</p>
+                        <p>A production-grade, AI-powered autonomous trading agent for <a href="https://polymarket.com" target="_blank">Polymarket</a> prediction markets. It discovers markets, gathers authoritative evidence from 26 research connectors, generates calibrated probability forecasts using a multi-model LLM ensemble, enforces strict risk controls, and executes trades with fractional Kelly sizing. Includes a 10-phase feature set: backtesting, domain specialists, cross-platform arbitrage, whale intelligence, continuous learning, and graduated live deployment.</p>
                     </div>
                     <h3>Key Capabilities</h3>
                     <div class="docs-feature-grid">
@@ -2269,28 +2274,38 @@
                         </div>
                         <div class="docs-feature-card">
                             <div class="docs-feature-icon">RES</div>
-                            <h4>Evidence-Based Research</h4>
-                            <p>Fetches sources from whitelisted authoritative domains (bls.gov, sec.gov, etc.) with LLM-powered evidence extraction.</p>
+                            <h4>26 Research Connectors</h4>
+                            <p>DuckDuckGo (default, free), FRED, CoinGecko, Congress.gov, CourtListener, Open-Meteo, Kalshi, Metaculus, and 18 more structured data sources.</p>
                         </div>
                         <div class="docs-feature-card">
                             <div class="docs-feature-icon">AI</div>
                             <h4>Multi-Model Ensemble</h4>
-                            <p>Queries GPT-4o, Claude 3.5 Sonnet, and Gemini 1.5 Pro in parallel with adaptive weighting and Platt calibration.</p>
+                            <p>Queries GPT-4o, Claude Sonnet 4.6, and Gemini 2.0 Flash in parallel with adaptive weighting and Platt calibration.</p>
                         </div>
                         <div class="docs-feature-card">
                             <div class="docs-feature-icon">RSK</div>
                             <h4>15-Check Risk Engine</h4>
-                            <p>Kill switch, drawdown management, portfolio limits, min edge, evidence quality gates, and more. ALL must pass.</p>
+                            <p>Kill switch, drawdown management, portfolio limits, min edge, evidence quality gates, VaR gate, and more. ALL must pass.</p>
                         </div>
                         <div class="docs-feature-card">
                             <div class="docs-feature-icon">KEL</div>
                             <h4>Kelly Position Sizing</h4>
-                            <p>Fractional Kelly criterion with confidence scaling, drawdown heat multiplier, and liquidity-aware caps.</p>
+                            <p>Fractional Kelly criterion with confidence scaling, drawdown heat multiplier, uncertainty adjustment, and liquidity-aware caps.</p>
                         </div>
                         <div class="docs-feature-card">
                             <div class="docs-feature-icon">WHL</div>
-                            <h4>Whale Tracking</h4>
-                            <p>Monitors top Polymarket leaderboard wallets for smart-money conviction signals to boost or penalize edge.</p>
+                            <h4>Whale Intelligence</h4>
+                            <p>5-dimension quality scoring (S/A/B/C tiers), conviction signals, Smart Money Index, and quality-weighted edge adjustment.</p>
+                        </div>
+                        <div class="docs-feature-card">
+                            <div class="docs-feature-icon">BKT</div>
+                            <h4>Historical Backtesting</h4>
+                            <p>Full pipeline replay with LLM cache, Brier/Sharpe/calibration metrics, and A/B comparator with paired t-tests.</p>
+                        </div>
+                        <div class="docs-feature-card">
+                            <div class="docs-feature-icon">ARB</div>
+                            <h4>Cross-Platform Arbitrage</h4>
+                            <p>Polymarket vs Kalshi spread detection, complementary YES+NO arb, and correlated mispricing scanner.</p>
                         </div>
                     </div>
                 </section>
@@ -2301,56 +2316,65 @@
                     <p>The bot follows a modular pipeline architecture with clear separation of concerns:</p>
                     <div class="docs-code-block">
 <pre>
-┌─────────────────────────────────────────────────────────────────────┐
-│                         CLI (Click) / Dashboard (Flask)             │
-│  scan │ research │ forecast │ paper-trade │ trade │ engine │ dash   │
-├───────┴──────────┴──────────┴─────────────┴───────┴────────┴───────┤
-│                                                                     │
-│  Connectors          Research             Forecast                  │
-│  ┌──────────────┐    ┌───────────────┐    ┌───────────────────┐    │
-│  │ Gamma API    │    │ Query Builder │    │ Feature Builder    │    │
-│  │ CLOB API     │───▶│ Source Fetcher│───▶│ LLM Forecaster    │    │
-│  │ Web Search   │    │ Evidence Ext. │    │ Ensemble (3 LLMs) │    │
-│  │ WebSocket    │    └───────────────┘    │ Calibrator         │    │
-│  │ Rate Limiter │                         └───────────────────┘    │
-│  └──────────────┘                                │                  │
-│                                                  ▼                  │
-│  Policy                        Analytics                            │
-│  ┌─────────────────────┐       ┌──────────────────────────┐        │
-│  │ Edge Calculator     │       │ Regime Detector          │        │
-│  │ Risk Limits (15)    │◀─────▶│ Calibration Feedback     │        │
-│  │ Position Sizer      │       │ Adaptive Model Weights   │        │
-│  │ Drawdown Manager    │       │ Smart Entry Calculator   │        │
-│  │ Portfolio Risk      │       │ Wallet Scanner           │        │
-│  │ Timeline Intel      │       └──────────────────────────┘        │
-│  └─────────────────────┘                                            │
-│            │                                                        │
-│            ▼                                                        │
-│  Execution                     Storage / Observability              │
-│  ┌─────────────────────┐       ┌──────────────────────────┐        │
-│  │ Order Builder        │       │ SQLite + WAL + Migrations│        │
-│  │ Order Router (dry)   │       │ structlog JSON Logging   │        │
-│  │ Fill Tracker         │       │ In-Process Metrics       │        │
-│  │ Cancel Manager       │       │ Alerts (Telegram/Slack)  │        │
-│  │ TWAP / Iceberg       │       │ JSON Run Reports         │        │
-│  └─────────────────────┘       └──────────────────────────┘        │
-└─────────────────────────────────────────────────────────────────────┘
+┌──────────────────────────────────────────────────────────────────────────┐
+│                    CLI (Click) / Dashboard (Flask)                        │
+│  scan │ research │ forecast │ paper-trade │ trade │ engine │ backtest    │
+├───────┴──────────┴──────────┴─────────────┴───────┴────────┴────────────┤
+│                                                                          │
+│  Connectors            Research (26 Connectors)     Forecast             │
+│  ┌──────────────┐      ┌───────────────────┐      ┌─────────────────┐   │
+│  │ Gamma API    │      │ Query Builder     │      │ Feature Builder  │   │
+│  │ CLOB API     │─────▶│ Source Fetcher    │─────▶│ Ensemble (3 LLM)│   │
+│  │ DuckDuckGo   │      │ Evidence Extract. │      │ Specialists (3)  │   │
+│  │ Kalshi API   │      │ Signal Aggregator │      │ Base Rates (56)  │   │
+│  │ Rate Limiter │      │ 26 Connectors     │      │ Calibrator       │   │
+│  │ Circuit Brkr │      └───────────────────┘      │ Decomposer       │   │
+│  └──────────────┘                                  └─────────────────┘   │
+│                                                          │               │
+│                                                          ▼               │
+│  Policy                          Analytics                               │
+│  ┌──────────────────────┐        ┌───────────────────────────┐          │
+│  │ Edge Calculator      │        │ Regime Detector           │          │
+│  │ Edge Uncertainty     │        │ Calibration Feedback      │          │
+│  │ Risk Limits (15)     │◀──────▶│ Adaptive Model Weights    │          │
+│  │ Position Sizer       │        │ Smart Entry Calculator    │          │
+│  │ Drawdown Manager     │        │ Whale Scorer (5-dim)      │          │
+│  │ Portfolio VaR Gate   │        │ Post-Mortem Analyzer      │          │
+│  │ Correlation Scorer   │        │ Evidence Quality Tracker  │          │
+│  │ Capital Efficiency   │        │ Parameter Optimizer       │          │
+│  │ Cross-Platform Arb   │        │ AI Analyst (4 providers)  │          │
+│  └──────────────────────┘        └───────────────────────────┘          │
+│            │                                                             │
+│            ▼                                                             │
+│  Execution                       Storage / Observability                 │
+│  ┌──────────────────────┐        ┌───────────────────────────┐          │
+│  │ Order Builder         │        │ SQLite + WAL + Migrations │          │
+│  │ Order Router (dry)    │        │ structlog JSON Logging    │          │
+│  │ Strategy Selector     │        │ In-Process Metrics        │          │
+│  │ Fill Tracker          │        │ Circuit Breakers          │          │
+│  │ TWAP / Iceberg Plans  │        │ Cost Tracker              │          │
+│  │ Exit Finalizer        │        │ Daily Summaries           │          │
+│  │ Fill Simulator (BT)   │        │ Alerts (Telegram/Discord) │          │
+│  │ Patience Window       │        │ Kill Switch + Preflight   │          │
+│  └──────────────────────┘        └───────────────────────────┘          │
+└──────────────────────────────────────────────────────────────────────────┘
 </pre>
                     </div>
                     <h3>Module Map</h3>
                     <table class="docs-table">
                         <thead><tr><th>Package</th><th>Purpose</th><th>Key Files</th></tr></thead>
                         <tbody>
-                            <tr><td><code>src/connectors/</code></td><td>External API integrations</td><td>polymarket_gamma.py, polymarket_clob.py, web_search.py, ws_feed.py</td></tr>
-                            <tr><td><code>src/research/</code></td><td>Evidence gathering pipeline</td><td>query_builder.py, source_fetcher.py, evidence_extractor.py</td></tr>
-                            <tr><td><code>src/forecast/</code></td><td>Probability forecasting</td><td>ensemble.py, llm_forecaster.py, calibrator.py, feature_builder.py</td></tr>
-                            <tr><td><code>src/policy/</code></td><td>Risk &amp; sizing decisions</td><td>risk_limits.py, position_sizer.py, edge_calc.py, drawdown.py, portfolio_risk.py</td></tr>
-                            <tr><td><code>src/execution/</code></td><td>Order management</td><td>order_builder.py, order_router.py, fill_tracker.py, cancels.py</td></tr>
-                            <tr><td><code>src/engine/</code></td><td>Continuous trading loop</td><td>loop.py, market_filter.py, market_classifier.py, event_monitor.py</td></tr>
-                            <tr><td><code>src/analytics/</code></td><td>Self-improving analytics</td><td>regime_detector.py, adaptive_weights.py, calibration_feedback.py, smart_entry.py, wallet_scanner.py</td></tr>
+                            <tr><td><code>src/connectors/</code></td><td>External API integrations</td><td>polymarket_gamma.py, polymarket_clob.py, web_search.py, kalshi_client.py, rate_limiter.py</td></tr>
+                            <tr><td><code>src/research/</code></td><td>Evidence gathering (26 connectors)</td><td>query_builder.py, source_fetcher.py, evidence_extractor.py, signal_aggregator.py, connectors/</td></tr>
+                            <tr><td><code>src/forecast/</code></td><td>Probability forecasting</td><td>ensemble.py, llm_forecaster.py, calibrator.py, base_rates.py, decomposer.py, specialists/</td></tr>
+                            <tr><td><code>src/policy/</code></td><td>Risk, sizing &amp; arbitrage</td><td>risk_limits.py, position_sizer.py, edge_calc.py, drawdown.py, portfolio_risk.py, edge_uncertainty.py, correlation.py, cross_platform_arb.py</td></tr>
+                            <tr><td><code>src/execution/</code></td><td>Order management</td><td>order_builder.py, order_router.py, fill_tracker.py, strategy_selector.py, exit_finalizer.py</td></tr>
+                            <tr><td><code>src/engine/</code></td><td>Trading loop + pipeline</td><td>loop.py, pipeline.py, market_filter.py, market_classifier.py, event_monitor.py</td></tr>
+                            <tr><td><code>src/analytics/</code></td><td>Self-improving analytics</td><td>regime_detector.py, adaptive_weights.py, calibration_feedback.py, whale_scorer.py, post_mortem.py, ai_analyst.py, param_optimizer.py</td></tr>
+                            <tr><td><code>src/backtest/</code></td><td>Historical backtesting</td><td>database.py, replay_engine.py, fill_simulator.py, comparator.py</td></tr>
                             <tr><td><code>src/storage/</code></td><td>Persistence layer</td><td>database.py, models.py, migrations.py, cache.py, audit.py</td></tr>
-                            <tr><td><code>src/observability/</code></td><td>Logging &amp; monitoring</td><td>logger.py, metrics.py, alerts.py, reports.py, sentry_integration.py</td></tr>
-                            <tr><td><code>src/dashboard/</code></td><td>Web UI</td><td>app.py, templates/index.html, static/dashboard.js, static/style.css</td></tr>
+                            <tr><td><code>src/observability/</code></td><td>Logging, monitoring &amp; safety</td><td>logger.py, metrics.py, alerts.py, reports.py, circuit_breaker.py, daily_summary.py, chaos.py, preflight.py, telegram_bot.py</td></tr>
+                            <tr><td><code>src/dashboard/</code></td><td>Web UI (11 tabs)</td><td>app.py, templates/index.html, static/dashboard.js, static/style.css</td></tr>
                         </tbody>
                     </table>
                 </section>
@@ -2385,7 +2409,7 @@
                             <div class="docs-step-num">4</div>
                             <div class="docs-step-body">
                                 <h4>LLM Ensemble Forecast</h4>
-                                <p>GPT-4o + Claude 3.5 Sonnet + Gemini 1.5 Pro queried in parallel &rarr; trimmed mean aggregation</p>
+                                <p>GPT-4o + Claude Sonnet 4.6 + Gemini 2.0 Flash queried in parallel &rarr; trimmed mean / adaptive weighted aggregation</p>
                             </div>
                         </div>
                         <div class="docs-pipeline-step">
@@ -2511,12 +2535,33 @@
                     <table class="docs-table">
                         <thead><tr><th>Provider</th><th>Env Variable</th><th>Notes</th></tr></thead>
                         <tbody>
-                            <tr><td>Tavily</td><td><code>TAVILY_API_KEY</code></td><td>Preferred; purpose-built for research agents</td></tr>
-                            <tr><td>SerpAPI</td><td><code>SERPAPI_KEY</code></td><td>Google search results</td></tr>
-                            <tr><td>Bing</td><td><code>BING_API_KEY</code></td><td>Microsoft Bing search</td></tr>
-                            <tr><td>Fallback</td><td>Any available</td><td>Tries each provider in order (default mode)</td></tr>
+                            <tr><td>DuckDuckGo</td><td>None (free)</td><td><strong>Default</strong> &mdash; free, unlimited, no API key needed</td></tr>
+                            <tr><td>SearXNG</td><td><code>SEARXNG_URL</code></td><td>Self-hosted meta-search (optional)</td></tr>
+                            <tr><td>Tavily</td><td><code>TAVILY_API_KEY</code></td><td>Paid fallback (1,000/mo free tier)</td></tr>
+                            <tr><td>SerpAPI</td><td><code>SERPAPI_KEY</code></td><td>Paid fallback (250/mo free tier)</td></tr>
+                            <tr><td>Bing</td><td><code>BING_API_KEY</code></td><td>Paid fallback</td></tr>
                         </tbody>
                     </table>
+                    <h3>Research Connectors (26 total)</h3>
+                    <p>Beyond web search, the bot has 26 structured data connectors that provide domain-specific data directly:</p>
+                    <table class="docs-table">
+                        <thead><tr><th>Category</th><th>Connectors</th><th>Data Provided</th></tr></thead>
+                        <tbody>
+                            <tr><td>Economics</td><td>FRED, BLS, Treasury, World Bank</td><td>GDP, CPI, interest rates, employment data</td></tr>
+                            <tr><td>Finance</td><td>SEC EDGAR, Yahoo Finance</td><td>Earnings, filings, stock prices</td></tr>
+                            <tr><td>Crypto</td><td>CoinGecko, DeFi Llama</td><td>Prices, market cap, TVL, protocol metrics</td></tr>
+                            <tr><td>Politics</td><td>Congress.gov, FEC, OpenSecrets</td><td>Bills, voting records, campaign finance</td></tr>
+                            <tr><td>Legal</td><td>CourtListener, Federal Register</td><td>Court cases, regulations</td></tr>
+                            <tr><td>Weather</td><td>Open-Meteo</td><td>GFS ensemble forecasts, historical</td></tr>
+                            <tr><td>Geopolitics</td><td>ACLED, GDELT</td><td>Conflict events, global news trends</td></tr>
+                            <tr><td>Health</td><td>CDC, WHO</td><td>Disease data, public health metrics</td></tr>
+                            <tr><td>Prediction</td><td>Kalshi, Metaculus</td><td>Cross-platform consensus signals</td></tr>
+                            <tr><td>Social</td><td>Wikipedia pageviews, Google Trends</td><td>Public attention indicators</td></tr>
+                        </tbody>
+                    </table>
+                    <p>All connectors follow the <code>BaseResearchConnector</code> ABC pattern and are config-gated (disabled by default). Each connector has its own rate limiter bucket and circuit breaker.</p>
+                    <h3>Signal Aggregation</h3>
+                    <p>The <code>SignalStack</code> aggregates signals from all sources into a unified context for the LLM prompt: consensus prices (Kalshi, Metaculus), behavioral signals, economic indicators, and cross-platform spreads. The <code>compute_signal_confluence()</code> function adjusts Kelly sizing based on signal agreement.</p>
                     <h3>Blocked Domains</h3>
                     <p>The following domains are always excluded: wikipedia.org, reddit.com, medium.com, twitter.com/x.com, quora.com, and other user-generated content sites.</p>
                 </section>
@@ -2530,8 +2575,34 @@
                         <thead><tr><th>Model</th><th>Provider</th><th>Default Weight</th><th>Env Variable</th></tr></thead>
                         <tbody>
                             <tr><td>GPT-4o</td><td>OpenAI</td><td>40%</td><td><code>OPENAI_API_KEY</code></td></tr>
-                            <tr><td>Claude 3.5 Sonnet</td><td>Anthropic</td><td>35%</td><td><code>ANTHROPIC_API_KEY</code></td></tr>
-                            <tr><td>Gemini 1.5 Pro</td><td>Google</td><td>25%</td><td><code>GOOGLE_API_KEY</code></td></tr>
+                            <tr><td>Claude Sonnet 4.6</td><td>Anthropic</td><td>35%</td><td><code>ANTHROPIC_API_KEY</code></td></tr>
+                            <tr><td>Gemini 2.0 Flash</td><td>Google</td><td>25%</td><td><code>GOOGLE_API_KEY</code></td></tr>
+                        </tbody>
+                    </table>
+                    <h3>Model Tier Routing</h3>
+                    <p>The <code>ModelTierRouter</code> assigns markets to cost-appropriate tiers based on volume and edge:</p>
+                    <table class="docs-table">
+                        <thead><tr><th>Tier</th><th>Model</th><th>Cost/Market</th><th>When Used</th></tr></thead>
+                        <tbody>
+                            <tr><td>Scout</td><td>gpt-4o-mini</td><td>~$0.001</td><td>Low-value markets, quick filter</td></tr>
+                            <tr><td>Standard</td><td>gpt-4o</td><td>~$0.01</td><td>Most markets</td></tr>
+                            <tr><td>Premium</td><td>3-model ensemble</td><td>~$0.05</td><td>High-value markets</td></tr>
+                        </tbody>
+                    </table>
+                    <h3>Prompt Versions</h3>
+                    <ul class="docs-ul">
+                        <li><strong>v1</strong> (default) &mdash; Standard: question + evidence + market features &rarr; probability + confidence + reasoning</li>
+                        <li><strong>v2</strong> (opt-in) &mdash; Structured reasoning chain: base rate &rarr; evidence for/against &rarr; adjustment &rarr; final probability</li>
+                    </ul>
+                    <h3>Question Decomposition</h3>
+                    <p>When enabled (<code>decomposition_enabled: true</code>), complex questions are split into up to 3 sub-questions using gpt-4o-mini. Each sub-question is forecast independently, then recombined using weighted combination.</p>
+                    <h3>Domain Specialists</h3>
+                    <table class="docs-table">
+                        <thead><tr><th>Specialist</th><th>Data Source</th><th>Mode</th><th>Description</th></tr></thead>
+                        <tbody>
+                            <tr><td>Weather</td><td>Open-Meteo GFS</td><td>Bypass</td><td>31-member GFS ensemble &rarr; fraction exceeding threshold (bypasses LLM entirely)</td></tr>
+                            <tr><td>Crypto TA</td><td>Binance candles</td><td>Bypass</td><td>RSI/VWAP/SMA/momentum &rarr; logistic sigmoid probability</td></tr>
+                            <tr><td>Politics</td><td>Polling data</td><td>Augment</td><td>Polling average + time discount + error model &rarr; injected as base rate for LLM</td></tr>
                         </tbody>
                     </table>
                     <h3>Aggregation Methods</h3>
@@ -3034,10 +3105,14 @@
                     <p>The <code>GammaClient</code> connects to Polymarket's public market-listing API at <code>https://gamma-api.polymarket.com</code>. Used for: listing markets, fetching metadata (question, category, end date, resolution source), and getting pricing snapshots.</p>
                     <h3>CLOB API (Orderbook &amp; Trading)</h3>
                     <p>The <code>CLOBClient</code> connects to <code>https://clob.polymarket.com</code> for real-time orderbook data (bids/asks), trade history, spread calculations, and order placement via the <code>py-clob-client</code> signing library.</p>
+                    <h3>Kalshi API (Cross-Platform Arbitrage)</h3>
+                    <p>The <code>KalshiClient</code> connects to Kalshi's API with RSA-PSS authentication for cross-platform price comparison. Supports paper mode by default. The <code>MarketMatcher</code> maps Kalshi markets to Polymarket equivalents using manual mappings + keyword/Jaccard similarity matching.</p>
                     <h3>WebSocket Feed</h3>
                     <p>The <code>WebSocketFeed</code> subscribes to real-time price ticks for monitored markets, providing live data for the dashboard and microstructure analysis.</p>
                     <h3>Rate Limiter</h3>
-                    <p>A global rate limiter prevents API abuse with configurable per-endpoint limits and automatic backoff on 429 responses.</p>
+                    <p>Token-bucket rate limiters per provider prevent API abuse with configurable per-endpoint limits. Each LLM provider, search engine, and research connector has its own rate limiter bucket.</p>
+                    <h3>Circuit Breakers</h3>
+                    <p>Each API provider has its own circuit breaker (CLOSED &rarr; OPEN &rarr; HALF_OPEN state machine). After repeated failures, the circuit opens to prevent cascading failures, then allows one test request after a recovery period. Per-model circuit breakers are wired into the ensemble's <code>_query_*</code> methods.</p>
                 </section>
 
                 <!-- ── STORAGE ───────────────────────────────────── -->
@@ -3069,10 +3144,30 @@
                             <tr><td><code>wallet_equity_snapshots</code></td><td>Point-in-time equity snapshots for performance tracking</td></tr>
                         </tbody>
                     </table>
+                    <h3>Additional Tables (Phases 5-9)</h3>
+                    <table class="docs-table">
+                        <thead><tr><th>Table</th><th>Purpose</th></tr></thead>
+                        <tbody>
+                            <tr><td><code>arb_opportunities</code></td><td>Cross-platform arbitrage opportunities detected</td></tr>
+                            <tr><td><code>arb_trades</code></td><td>Executed arbitrage trade pairs</td></tr>
+                            <tr><td><code>complementary_arb</code></td><td>Intra-Polymarket complementary YES+NO arb</td></tr>
+                            <tr><td><code>whale_quality_scores</code></td><td>5-dimension whale scoring (ROI, calibration, specialization, consistency, timing)</td></tr>
+                            <tr><td><code>whale_price_snapshots</code></td><td>Deferred price snapshots for whale timing analysis</td></tr>
+                            <tr><td><code>trade_analysis</code></td><td>Post-mortem analysis per resolved trade</td></tr>
+                            <tr><td><code>evidence_source_quality</code></td><td>Domain-level evidence source quality rankings</td></tr>
+                            <tr><td><code>param_optimization_runs</code></td><td>Parameter optimizer run history</td></tr>
+                            <tr><td><code>param_optimization_results</code></td><td>Per-parameter optimization results</td></tr>
+                            <tr><td><code>calibration_ab_results</code></td><td>Calibration A/B holdout test results</td></tr>
+                            <tr><td><code>kill_switch_state</code></td><td>Persistent kill switch state across restarts</td></tr>
+                            <tr><td><code>deployment_stages</code></td><td>Graduated deployment stage tracking</td></tr>
+                            <tr><td><code>daily_summaries</code></td><td>Daily P&amp;L summaries with trade counts</td></tr>
+                            <tr><td><code>chaos_test_results</code></td><td>Chaos testing framework results</td></tr>
+                        </tbody>
+                    </table>
                     <h3>Migrations</h3>
-                    <p>Schema is managed through numbered migrations (currently 10). Migrations run automatically on startup, ensuring the database schema stays in sync with the code. Each migration is idempotent and includes proper error handling.</p>
+                    <p>Schema is managed through 19 numbered migrations (SCHEMA_VERSION=19). Migrations run automatically on startup, ensuring the database schema stays in sync with the code. Each migration is idempotent and includes proper error handling. A separate backtest database (<code>data/backtest.db</code>) has its own schema (version 2).</p>
                     <h3>Backup</h3>
-                    <p>Database backups can be triggered from the Admin Panel. Backups are stored as timestamped copies in the <code>data/</code> directory.</p>
+                    <p>Database backups can be triggered from the Admin Panel or via <code>make backup</code>. Backups are stored as timestamped copies in the <code>data/backups/</code> directory (max 10, auto-pruned).</p>
                 </section>
 
                 <!-- ── OBSERVABILITY ─────────────────────────────── -->
@@ -3089,9 +3184,11 @@
                         <li><code>api.calls</code>, <code>api.errors</code>, <code>api.latency_ms</code></li>
                     </ul>
                     <h3>Cost Tracking</h3>
-                    <p>LLM and search API costs are tracked per-provider with running totals visible in the Admin Panel. Includes token counts and estimated USD costs for OpenAI, Anthropic, Google, and search providers.</p>
-                    <h3>JSON Run Reports</h3>
-                    <p>Each engine cycle produces a JSON report saved to <code>reports/</code> with full pipeline details.</p>
+                    <p>Token-based cost tracking per provider with daily budget caps. The <code>CostTracker</code> records input/output token counts and estimated USD costs for each LLM call. Daily budget warnings at configurable percentage, hard stop at daily limit.</p>
+                    <h3>Circuit Breakers</h3>
+                    <p>Per-provider circuit breakers (OpenAI, Anthropic, Google, search, Kalshi) with sliding window failure counting. View states via <code>/api/circuit-breakers</code>.</p>
+                    <h3>Weekly Digest</h3>
+                    <p>Auto-generated weekly digest reports sent via Telegram with P&amp;L summary, category breakdown, model accuracy, friction analysis, and recommendations. Also available via <code>/weekly</code> Telegram command.</p>
                     <h3>Sentry Integration</h3>
                     <p>Optional error tracking via Sentry SDK. Configure with <code>SENTRY_DSN</code> environment variable.</p>
                 </section>
@@ -3125,19 +3222,21 @@
                 <section class="docs-section" id="doc-dashboard-guide">
                     <h2>Dashboard Guide</h2>
                     <p>The web dashboard provides a real-time view of all bot operations, accessible at <code>http://localhost:2345</code>.</p>
-                    <h3>Tabs Overview</h3>
+                    <h3>Tabs Overview (11 tabs)</h3>
                     <table class="docs-table">
-                        <thead><tr><th>Tab</th><th>Contents</th></tr></thead>
+                        <thead><tr><th>Key</th><th>Tab</th><th>Contents</th></tr></thead>
                         <tbody>
-                            <tr><td><strong>Overview</strong></td><td>Portfolio summary cards, equity curve, engine status, drawdown gauge, regime indicator</td></tr>
-                            <tr><td><strong>Trading</strong></td><td>Open positions with live P&amp;L, pipeline candidates, recent forecasts, enhanced trade history with TP/SL hit tracking, close reasons, duration, PnL%, and summary stats</td></tr>
-                            <tr><td><strong>Analytics</strong></td><td>Performance metrics (Sharpe, Sortino, Calmar), accuracy charts, P&amp;L by category, strategy leaderboard</td></tr>
-                            <tr><td><strong>Whale Tracker</strong></td><td>Tracked wallets with tiering, conviction signals, whale activity feed, Smart Money Index, consensus analysis</td></tr>
-                            <tr><td><strong>Decision Intel</strong></td><td>Full decision audit trail — every stage (SCAN→RESEARCH→FORECAST→EDGE→RISK→SIZE→EXECUTE→MONITOR) with filtering, search, and integrity hashes</td></tr>
-                            <tr><td><strong>Strategies</strong></td><td>Multi-wallet/strategy portfolio management — create wallets &amp; strategies, bind them together, track allocation percentages and per-strategy performance</td></tr>
-                            <tr><td><strong>Journal</strong></td><td>VaR calculations, watchlist, trade journal entries, equity snapshots</td></tr>
-                            <tr><td><strong>Admin Panel</strong></td><td>Engine health, risk monitor, API keys, feature flags, config editor, audit trail, alerts, database stats, system info, danger zone actions</td></tr>
-                            <tr><td><strong>Documentation</strong></td><td>This page — complete bot reference with 28 sections</td></tr>
+                            <tr><td>F1</td><td><strong>Overview</strong></td><td>Portfolio summary cards, equity curve, engine status, drawdown gauge, regime indicator</td></tr>
+                            <tr><td>F2</td><td><strong>Trading</strong></td><td>Open positions with live P&amp;L, pipeline candidates, recent forecasts, trade history with TP/SL, close reasons, duration, and summary stats</td></tr>
+                            <tr><td>F3</td><td><strong>Analytics</strong></td><td>Performance metrics (Sharpe, Sortino, Calmar), accuracy charts, P&amp;L by category, execution quality, strategy leaderboard</td></tr>
+                            <tr><td>F4</td><td><strong>Whale Tracker</strong></td><td>Quality-scored wallets (S/A/B/C tiers), conviction signals, whale activity feed, Smart Money Index, consensus analysis</td></tr>
+                            <tr><td>F5</td><td><strong>Decision Intel</strong></td><td>Full decision audit trail &mdash; every stage (SCAN&rarr;RESEARCH&rarr;FORECAST&rarr;EDGE&rarr;RISK&rarr;SIZE&rarr;EXECUTE&rarr;MONITOR) with filtering, search, and integrity hashes</td></tr>
+                            <tr><td>F6</td><td><strong>Strategies</strong></td><td>Multi-wallet/strategy portfolio management &mdash; create wallets &amp; strategies, bind them together, track allocation percentages</td></tr>
+                            <tr><td>F7</td><td><strong>Journal</strong></td><td>VaR calculations, watchlist, trade journal entries, equity snapshots, event calendar, reconciliation</td></tr>
+                            <tr><td>F8</td><td><strong>Insights</strong></td><td>Paper trading progress milestones, P&amp;L overview, category breakdown, model accuracy, friction waterfall, AI analyst reports</td></tr>
+                            <tr><td>F9</td><td><strong>Backtest</strong></td><td>Backtest run history with Sharpe/Brier/calibration, equity curves, A/B comparator with paired t-test, cache stats</td></tr>
+                            <tr><td>F10</td><td><strong>Admin Panel</strong></td><td>Engine health, risk monitor, API keys, feature flags, config editor, audit trail, alerts, database stats, kill switch controls</td></tr>
+                            <tr><td>F11</td><td><strong>Documentation</strong></td><td>This page &mdash; complete bot reference guide</td></tr>
                         </tbody>
                     </table>
                     <h3>Authentication</h3>
@@ -3154,18 +3253,27 @@
                         <thead><tr><th>Section</th><th>Key Settings</th><th>Description</th></tr></thead>
                         <tbody>
                             <tr><td><code>scanning</code></td><td>min_volume_usd, min_liquidity_usd, max_spread, preferred_types, restricted_types</td><td>Market discovery filters</td></tr>
-                            <tr><td><code>research</code></td><td>max_sources, search_provider, min_corroborating_sources, stale_days_penalty</td><td>Evidence gathering settings</td></tr>
-                            <tr><td><code>forecasting</code></td><td>llm_model, llm_temperature, min_evidence_quality, min_confidence_level</td><td>LLM forecasting parameters</td></tr>
+                            <tr><td><code>research</code></td><td>max_sources, search_provider, connector enable flags, min_corroborating_sources</td><td>Evidence gathering &amp; 26 connectors</td></tr>
+                            <tr><td><code>forecasting</code></td><td>llm_model, llm_temperature, min_evidence_quality, prompt_version, base_rate_enabled, decomposition_enabled</td><td>LLM forecasting parameters</td></tr>
                             <tr><td><code>ensemble</code></td><td>models, aggregation, weights, min_models_required, timeout_per_model_secs</td><td>Multi-model ensemble config</td></tr>
-                            <tr><td><code>risk</code></td><td>max_stake_per_market, max_daily_loss, min_edge, kelly_fraction, bankroll, stop_loss_pct</td><td>Risk management thresholds</td></tr>
+                            <tr><td><code>risk</code></td><td>max_stake_per_market, max_daily_loss, min_edge, kelly_fraction, bankroll, uncertainty_enabled</td><td>Risk management thresholds</td></tr>
                             <tr><td><code>drawdown</code></td><td>max_drawdown_pct, warning/critical thresholds, auto_kill_at_max</td><td>Drawdown heat system</td></tr>
-                            <tr><td><code>portfolio</code></td><td>max_category_exposure_pct, max_single_event_exposure_pct, max_correlated_positions</td><td>Portfolio-level risk limits</td></tr>
+                            <tr><td><code>portfolio</code></td><td>max_category_exposure_pct, max_single_event_exposure_pct, var_gate_enabled, max_portfolio_var_pct</td><td>Portfolio-level risk &amp; VaR gate</td></tr>
                             <tr><td><code>timeline</code></td><td>near_resolution_hours, confidence_boost, exit_before_resolution_hours</td><td>Resolution timing adjustments</td></tr>
                             <tr><td><code>microstructure</code></td><td>whale_size_threshold_usd, flow_imbalance_windows, depth_change_alert_pct</td><td>Market microstructure analysis</td></tr>
-                            <tr><td><code>execution</code></td><td>dry_run, slippage_tolerance, twap_enabled, iceberg_threshold, adaptive_pricing</td><td>Order execution settings</td></tr>
+                            <tr><td><code>execution</code></td><td>dry_run, slippage_tolerance, twap_enabled, iceberg_threshold, realistic_fills_enabled, patience_window_enabled</td><td>Order execution &amp; simulation</td></tr>
                             <tr><td><code>engine</code></td><td>cycle_interval_secs, max_markets_per_cycle, paper_mode, auto_start</td><td>Trading engine loop settings</td></tr>
                             <tr><td><code>alerts</code></td><td>telegram/discord/slack/email credentials, alert triggers, daily_summary_hour</td><td>Notification channels</td></tr>
-                            <tr><td><code>wallet_scanner</code></td><td>scan_interval, min_conviction_score, conviction_edge_boost/penalty</td><td>Whale tracking config</td></tr>
+                            <tr><td><code>wallet_scanner</code></td><td>scan_interval, min_conviction_score, conviction_edge_boost/penalty, whale_quality_scoring_enabled</td><td>Whale tracking &amp; quality scoring</td></tr>
+                            <tr><td><code>budget</code></td><td>enabled, daily_limit_usd, warning_pct</td><td>Daily LLM budget cap</td></tr>
+                            <tr><td><code>model_tiers</code></td><td>enabled, scout/standard/premium models, thresholds</td><td>Cost-tiered model routing</td></tr>
+                            <tr><td><code>circuit_breakers</code></td><td>enabled, default_failure_threshold, default_window_secs, default_recovery_secs</td><td>Per-provider circuit breakers</td></tr>
+                            <tr><td><code>specialists</code></td><td>enabled, enabled_specialists, weather_min_edge, crypto_min_edge, politics_polling_weight</td><td>Domain specialist forecasters</td></tr>
+                            <tr><td><code>arbitrage</code></td><td>enabled, kalshi_paper_mode, min_arb_edge, complementary_threshold, correlated_min_divergence</td><td>Cross-platform arbitrage</td></tr>
+                            <tr><td><code>continuous_learning</code></td><td>post_mortem_enabled, evidence_tracking_enabled, param_optimizer_enabled, smart_retrain_enabled</td><td>Self-improvement features</td></tr>
+                            <tr><td><code>production</code></td><td>enabled, daily_pnl_kill_enabled, daily_pnl_kill_pct, graduated_deployment_enabled</td><td>Live trading safety</td></tr>
+                            <tr><td><code>digest</code></td><td>enabled, cron schedule, template</td><td>Weekly digest reports</td></tr>
+                            <tr><td><code>analyst</code></td><td>enabled, provider, rate_limit_hours</td><td>AI analyst (4 providers)</td></tr>
                             <tr><td><code>cache</code></td><td>search_ttl_secs, orderbook_ttl_secs, max_cache_size_mb</td><td>Response caching</td></tr>
                             <tr><td><code>storage</code></td><td>db_type, sqlite_path</td><td>Database settings</td></tr>
                             <tr><td><code>observability</code></td><td>log_level, log_format, log_file, enable_metrics</td><td>Logging and monitoring</td></tr>
@@ -3194,22 +3302,41 @@
                             <tr><td><code>bot dashboard</code></td><td>Launch web dashboard</td><td><code>--host</code>, <code>--port</code>, <code>--debug</code></td></tr>
                         </tbody>
                     </table>
+                    <h3>Backtest Commands</h3>
+                    <table class="docs-table">
+                        <thead><tr><th>Command</th><th>Description</th><th>Key Flags</th></tr></thead>
+                        <tbody>
+                            <tr><td><code>bot backtest scrape</code></td><td>Scrape resolved markets from Gamma API</td><td><code>--limit N</code>, <code>--min-volume</code></td></tr>
+                            <tr><td><code>bot backtest run</code></td><td>Run a backtest with cached LLM forecasts</td><td><code>--config PATH</code>, <code>--label TEXT</code></td></tr>
+                            <tr><td><code>bot backtest list</code></td><td>List all backtest runs with summary</td><td></td></tr>
+                            <tr><td><code>bot backtest compare</code></td><td>A/B comparison with paired t-test</td><td><code>--run-a ID</code>, <code>--run-b ID</code></td></tr>
+                            <tr><td><code>bot backtest cache-stats</code></td><td>Show LLM response cache hit rate</td><td></td></tr>
+                            <tr><td><code>bot backtest validate</code></td><td>Validate backtest vs paper Sharpe</td><td></td></tr>
+                        </tbody>
+                    </table>
+                    <h3>Production Commands</h3>
+                    <table class="docs-table">
+                        <thead><tr><th>Command</th><th>Description</th></tr></thead>
+                        <tbody>
+                            <tr><td><code>bot production preflight</code></td><td>Run 7-check pre-flight readiness gate (Sharpe, paper days, chaos, backup, budget, alerts)</td></tr>
+                            <tr><td><code>bot production chaos-test</code></td><td>Run 8-test chaos testing framework (failure injection)</td></tr>
+                        </tbody>
+                    </table>
                     <h3>Quick Start</h3>
                     <div class="docs-code-block">
 <pre># Install
 git clone &lt;repo-url&gt; polymarket-bot
 cd polymarket-bot
-python -m venv .venv &amp;&amp; source .venv/bin/activate
-pip install -e ".[dev]"
+make dev                               # Create venv + install deps
 
 # Configure
 cp .env.example .env
-# Edit .env with API keys: OPENAI_API_KEY, TAVILY_API_KEY, etc.
+# Edit .env with API keys (at minimum: OPENAI_API_KEY)
 
 # Run
+make dashboard                         # Launch web UI on :2345
 bot scan --limit 20                    # Discover markets
-bot forecast --market &lt;CONDITION_ID&gt;   # Full forecast pipeline
-bot dashboard                          # Launch web UI on :2345</pre>
+bot forecast --market &lt;CONDITION_ID&gt;   # Full forecast pipeline</pre>
                     </div>
                 </section>
 
@@ -3243,71 +3370,358 @@ bot dashboard                          # Launch web UI on :2345</pre>
                     <h2>Deployment</h2>
                     <h3>Local Development</h3>
                     <div class="docs-code-block">
-<pre>python -m venv .venv
-source .venv/bin/activate
-pip install -e ".[dev]"
-bot dashboard</pre>
+<pre>make dev                      # Create venv + install deps
+make dashboard                # Flask dev server on :2345
+make gunicorn                 # Production WSGI server</pre>
                     </div>
                     <h3>Docker</h3>
                     <div class="docs-code-block">
-<pre>docker compose build
-docker compose up -d          # Runs dashboard + engine
-docker compose logs -f        # Follow logs</pre>
+<pre>docker compose up -d          # Build + run
+docker compose logs -f bot    # Follow logs
+docker compose down           # Stop</pre>
                     </div>
                     <h3>Environment Variables</h3>
                     <table class="docs-table">
                         <thead><tr><th>Variable</th><th>Required</th><th>Description</th></tr></thead>
                         <tbody>
                             <tr><td><code>OPENAI_API_KEY</code></td><td>Yes</td><td>GPT-4o forecasting</td></tr>
-                            <tr><td><code>ANTHROPIC_API_KEY</code></td><td>Recommended</td><td>Claude 3.5 Sonnet (ensemble)</td></tr>
-                            <tr><td><code>GOOGLE_API_KEY</code></td><td>Recommended</td><td>Gemini 1.5 Pro (ensemble)</td></tr>
-                            <tr><td><code>TAVILY_API_KEY</code></td><td>Yes*</td><td>Web search provider (*or SERPAPI_KEY or BING_API_KEY)</td></tr>
-                            <tr><td><code>POLYMARKET_API_KEY</code></td><td>For live trading</td><td>Polymarket CLOB API credentials</td></tr>
-                            <tr><td><code>POLYMARKET_API_SECRET</code></td><td>For live trading</td><td>CLOB API secret</td></tr>
-                            <tr><td><code>POLYMARKET_PASSPHRASE</code></td><td>For live trading</td><td>CLOB API passphrase</td></tr>
-                            <tr><td><code>ENABLE_LIVE_TRADING</code></td><td>No</td><td>Must be "true" to allow live orders</td></tr>
+                            <tr><td><code>ANTHROPIC_API_KEY</code></td><td>Optional</td><td>Claude Sonnet 4.6 (ensemble)</td></tr>
+                            <tr><td><code>GOOGLE_API_KEY</code></td><td>Optional</td><td>Gemini 2.0 Flash (ensemble)</td></tr>
+                            <tr><td><code>FRED_API_KEY</code></td><td>Optional</td><td>FRED economic data (free)</td></tr>
+                            <tr><td><code>COINGECKO_API_KEY</code></td><td>Optional</td><td>CoinGecko crypto prices (free demo)</td></tr>
+                            <tr><td><code>CONGRESS_API_KEY</code></td><td>Optional</td><td>Congress.gov legislative data (free)</td></tr>
+                            <tr><td><code>COURTLISTENER_API_KEY</code></td><td>Optional</td><td>CourtListener legal cases (free)</td></tr>
+                            <tr><td><code>TELEGRAM_BOT_TOKEN</code></td><td>Optional</td><td>Telegram kill bot &amp; alerts</td></tr>
+                            <tr><td><code>DISCORD_BOT_TOKEN</code></td><td>Optional</td><td>Discord kill bot &amp; alerts</td></tr>
+                            <tr><td><code>POLYMARKET_API_KEY</code></td><td>Live only</td><td>Polymarket CLOB API</td></tr>
+                            <tr><td><code>ENABLE_LIVE_TRADING</code></td><td>Live only</td><td>Must be "true" to allow live orders</td></tr>
                             <tr><td><code>DASHBOARD_API_KEY</code></td><td>No</td><td>Protects dashboard access</td></tr>
                             <tr><td><code>SENTRY_DSN</code></td><td>No</td><td>Sentry error tracking</td></tr>
                         </tbody>
                     </table>
+                    <p>Web search uses <strong>DuckDuckGo by default</strong> (free, unlimited, no API key). Paid providers (Tavily, SerpAPI, Bing) and self-hosted SearXNG are optional fallbacks.</p>
+                    <h3>Graduated Live Deployment</h3>
+                    <table class="docs-table">
+                        <thead><tr><th>Stage</th><th>Duration</th><th>Max Bankroll</th><th>Max Stake</th><th>Kelly</th></tr></thead>
+                        <tbody>
+                            <tr><td>Paper</td><td>30+ days</td><td>Unlimited (sim)</td><td>Unlimited</td><td>0.25</td></tr>
+                            <tr><td>Week 1</td><td>7 days</td><td>$100</td><td>$5</td><td>0.10</td></tr>
+                            <tr><td>Week 2</td><td>7 days</td><td>$500</td><td>$25</td><td>0.15</td></tr>
+                            <tr><td>Weeks 3-4</td><td>14 days</td><td>$2,000</td><td>$50</td><td>0.20</td></tr>
+                            <tr><td>Month 2+</td><td>Ongoing</td><td>Config value</td><td>Config value</td><td>0.25</td></tr>
+                        </tbody>
+                    </table>
                     <h3>Testing</h3>
                     <div class="docs-code-block">
-<pre>pytest                                   # Run all tests
+<pre>make test                                # Run all tests (~3,700 tests)
 pytest --cov=src --cov-report=term       # With coverage
 pytest tests/test_policy.py -v           # Specific test file
-mypy src/                                # Type checking
 ruff check src/ tests/                   # Linting</pre>
+                    </div>
+                </section>
+
+                <!-- ── BACKTESTING ──────────────────────────────── -->
+                <section class="docs-section" id="doc-backtesting">
+                    <h2>Historical Backtesting</h2>
+                    <p>Full pipeline replay engine for validating strategy changes against resolved markets.</p>
+                    <h3>Architecture</h3>
+                    <ul class="docs-ul">
+                        <li><strong>Separate SQLite DB</strong> &mdash; <code>data/backtest.db</code> (SCHEMA_VERSION=2), completely isolated from live trading</li>
+                        <li><strong>LLM Response Cache</strong> &mdash; SHA-256 keyed by (question + model + template_version), excludes volatile features. Cache-hit avoids re-running LLM calls</li>
+                        <li><strong>Mock Evidence</strong> &mdash; No web search during backtests; forecaster relies on parametric knowledge only</li>
+                        <li><strong>Execution Simulation</strong> &mdash; <code>contracts = stake / entry_price; pnl = (exit_price - entry) * contracts</code></li>
+                    </ul>
+                    <h3>Metrics Computed</h3>
+                    <table class="docs-table">
+                        <thead><tr><th>Metric</th><th>Description</th></tr></thead>
+                        <tbody>
+                            <tr><td>Brier Score</td><td>Forecast accuracy (lower is better)</td></tr>
+                            <tr><td>Calibration Buckets</td><td>Predicted vs actual resolution rates in 10 bins</td></tr>
+                            <tr><td>Sharpe / Sortino / Calmar</td><td>Risk-adjusted return ratios</td></tr>
+                            <tr><td>Max Drawdown</td><td>Worst peak-to-trough decline</td></tr>
+                            <tr><td>Equity Curve</td><td>Cumulative P&amp;L over time</td></tr>
+                        </tbody>
+                    </table>
+                    <h3>A/B Comparator</h3>
+                    <p>Compare two backtest runs side-by-side with <strong>paired t-test</strong> on overlapping market P&amp;L. Significance levels: none, weak (p&lt;0.10), moderate (p&lt;0.05), strong (p&lt;0.01). Config differences are highlighted automatically.</p>
+                    <h3>Dashboard (F9 Tab)</h3>
+                    <p>The Backtest tab shows run history, equity curves, calibration charts, trade-level detail, and the A/B comparator. Cache stats show hit rate to monitor LLM cost savings.</p>
+                </section>
+
+                <!-- ── CONTINUOUS LEARNING ─────────────────────────── -->
+                <section class="docs-section" id="doc-continuous-learning">
+                    <h2>Continuous Learning &amp; Self-Improvement</h2>
+                    <p>A suite of self-improving features that analyze past performance and automatically adjust strategy. All disabled by default.</p>
+                    <h3>Post-Mortem Analysis</h3>
+                    <p>After markets resolve, the <code>PostMortemAnalyzer</code> generates per-trade analysis (what went right/wrong, evidence quality, model accuracy) and weekly summaries with lessons learned.</p>
+                    <h3>Evidence Source Quality</h3>
+                    <p>The <code>EvidenceQualityTracker</code> records outcomes per domain and computes effective weights (0.5&ndash;1.5x). Sources that consistently provide accurate evidence get boosted; unreliable sources get penalized.</p>
+                    <h3>Parameter Optimizer</h3>
+                    <p>Tunes 6 parameters (min_edge, kelly_fraction, max_stake, etc.) using random perturbations (&plusmn;20%) and paired t-tests. Results are <strong>human-approval-only</strong> &mdash; the optimizer suggests changes but never auto-applies them.</p>
+                    <h3>Smart Calibration Retraining</h3>
+                    <p>Automatically re-fits the calibration curve when triggered by: resolution count threshold, Brier score degradation, or specialist model changes. Uses 80/20 A/B holdout validation (SHA-256 split) to ensure the new calibration outperforms the old.</p>
+                </section>
+
+                <!-- ── ARBITRAGE ───────────────────────────────────── -->
+                <section class="docs-section" id="doc-arbitrage">
+                    <h2>Cross-Platform Arbitrage</h2>
+                    <p>Detects and exploits price discrepancies across prediction markets. All features disabled by default.</p>
+                    <h3>Cross-Platform (Polymarket vs Kalshi)</h3>
+                    <p>The <code>CrossPlatformArbScanner</code> computes 4-directional spreads between matched Polymarket and Kalshi markets. When spread exceeds <code>min_arb_edge</code> (default 3%), paired trades are executed on both platforms simultaneously.</p>
+                    <h3>Intra-Polymarket</h3>
+                    <table class="docs-table">
+                        <thead><tr><th>Type</th><th>Detection</th><th>Default Threshold</th></tr></thead>
+                        <tbody>
+                            <tr><td>Complementary</td><td>YES + NO prices on same market &lt; 1.0</td><td><code>complementary_threshold: 0.97</code></td></tr>
+                            <tr><td>Correlated Mispricings</td><td>Related markets with divergent prices</td><td><code>correlated_min_divergence: 0.10</code></td></tr>
+                        </tbody>
+                    </table>
+                    <h3>Dashboard Endpoints</h3>
+                    <p><code>/api/arbitrage</code> (opportunities), <code>/api/arbitrage/summary</code> (stats), <code>/api/arbitrage/matches</code> (cross-platform market pairs).</p>
+                </section>
+
+                <!-- ── PRODUCTION & SAFETY ─────────────────────────── -->
+                <section class="docs-section" id="doc-production">
+                    <h2>Production Deployment &amp; Live Trading</h2>
+                    <p>Production features for safe transition from paper trading to live capital.</p>
+                    <h3>Pre-Flight Check (7 gates)</h3>
+                    <p>Run <code>bot production preflight</code> before going live. All must pass:</p>
+                    <ul class="docs-ul">
+                        <li>Backtest Sharpe &ge; 1.0</li>
+                        <li>Paper trading &ge; 30 days</li>
+                        <li>Backtest-paper Sharpe agreement (delta &lt; 1.0)</li>
+                        <li>Chaos tests passed</li>
+                        <li>DB backup exists and recent</li>
+                        <li>Budget caps configured</li>
+                        <li>Alert channel configured (Telegram, Discord, or Slack)</li>
+                    </ul>
+                    <h3>Chaos Testing</h3>
+                    <p>8 failure injection tests: API failures, DB corruption, network timeouts, concurrent access, malformed data, memory pressure, config corruption, and cascading failures.</p>
+                    <h3>Kill Switch</h3>
+                    <p>Persistent across restarts (stored in DB). Can be triggered from: dashboard toggle, <code>/kill</code> Telegram command, <code>!kill</code> Discord command, daily P&amp;L auto-kill (percentage-based), or max drawdown.</p>
+                    <h3>Daily Summaries</h3>
+                    <p>Auto-generated daily P&amp;L reports with trade counts, win rate, and Sharpe ratio. Sent to configured alert channels at the summary hour (default 6pm).</p>
+                    <h3>Interactive Kill Bots</h3>
+                    <table class="docs-table">
+                        <thead><tr><th>Platform</th><th>Commands</th></tr></thead>
+                        <tbody>
+                            <tr><td>Telegram</td><td>/kill, /status, /pnl, /resume, /weekly, /report, /insights, /models, /analyze, /provider, /help</td></tr>
+                            <tr><td>Discord</td><td>!kill, !status, !pnl, !resume, !weekly, !report, !insights, !models, !analyze, !provider, !help</td></tr>
+                            <tr><td>Slack</td><td>Same as Discord but with Slack Socket Mode</td></tr>
+                        </tbody>
+                    </table>
+                </section>
+
+                <!-- ── API REFERENCE ───────────────────────────────── -->
+                <section class="docs-section" id="doc-api-reference">
+                    <h2>API Reference</h2>
+                    <p>All 129+ endpoints served by the Flask dashboard at <code>http://localhost:2345</code>. When <code>DASHBOARD_API_KEY</code> is set, requests require <code>X-API-Key</code> header or <code>?api_key=</code> query parameter. Health/readiness/metrics endpoints are always open.</p>
+
+                    <h3>Health &amp; System</h3>
+                    <table class="docs-table">
+                        <thead><tr><th>Endpoint</th><th>Method</th><th>Description</th></tr></thead>
+                        <tbody>
+                            <tr><td><code>/health</code></td><td>GET</td><td>Liveness probe (always 200)</td></tr>
+                            <tr><td><code>/ready</code></td><td>GET</td><td>Readiness check (DB + engine)</td></tr>
+                            <tr><td><code>/metrics</code></td><td>GET</td><td>Prometheus-compatible metrics</td></tr>
+                        </tbody>
+                    </table>
+
+                    <h3>Portfolio &amp; Positions</h3>
+                    <table class="docs-table">
+                        <thead><tr><th>Endpoint</th><th>Method</th><th>Description</th></tr></thead>
+                        <tbody>
+                            <tr><td><code>/api/portfolio</code></td><td>GET</td><td>Portfolio overview: net value, allocation, unrealized P&amp;L</td></tr>
+                            <tr><td><code>/api/positions</code></td><td>GET</td><td>All open positions with prices and P&amp;L</td></tr>
+                            <tr><td><code>/api/equity-curve</code></td><td>GET</td><td>Historical equity progression</td></tr>
+                            <tr><td><code>/api/var</code></td><td>GET</td><td>Value at Risk (parametric + historical)</td></tr>
+                            <tr><td><code>/api/performance</code></td><td>GET</td><td>Win rate, Sharpe, ROI, max drawdown</td></tr>
+                        </tbody>
+                    </table>
+
+                    <h3>Trading &amp; Execution</h3>
+                    <table class="docs-table">
+                        <thead><tr><th>Endpoint</th><th>Method</th><th>Description</th></tr></thead>
+                        <tbody>
+                            <tr><td><code>/api/trades</code></td><td>GET</td><td>All historical trades</td></tr>
+                            <tr><td><code>/api/forecasts</code></td><td>GET</td><td>Model probability forecasts</td></tr>
+                            <tr><td><code>/api/candidates</code></td><td>GET</td><td>Current cycle candidates</td></tr>
+                            <tr><td><code>/api/execution-plans</code></td><td>GET</td><td>TWAP/Iceberg plans</td></tr>
+                            <tr><td><code>/api/execution-quality</code></td><td>GET</td><td>Slippage, fill rate, strategy stats</td></tr>
+                            <tr><td><code>/api/engine-status</code></td><td>GET</td><td>Engine state and uptime</td></tr>
+                            <tr><td><code>/api/engine/start</code></td><td>POST</td><td>Start trading engine</td></tr>
+                            <tr><td><code>/api/engine/stop</code></td><td>POST</td><td>Stop trading engine</td></tr>
+                            <tr><td><code>/api/latency</code></td><td>GET</td><td>Per-endpoint API latency (p50/p95/p99)</td></tr>
+                        </tbody>
+                    </table>
+
+                    <h3>Risk &amp; Decision Support</h3>
+                    <table class="docs-table">
+                        <thead><tr><th>Endpoint</th><th>Method</th><th>Description</th></tr></thead>
+                        <tbody>
+                            <tr><td><code>/api/risk</code></td><td>GET</td><td>Current risk configuration</td></tr>
+                            <tr><td><code>/api/filter-stats</code></td><td>GET</td><td>Pipeline pass/fail counts per stage</td></tr>
+                            <tr><td><code>/api/decision-log</code></td><td>GET</td><td>Full decision audit trail</td></tr>
+                            <tr><td><code>/api/drawdown</code></td><td>GET</td><td>Drawdown level and heat state</td></tr>
+                            <tr><td><code>/api/regime</code></td><td>GET</td><td>Current market regime</td></tr>
+                            <tr><td><code>/api/circuit-breakers</code></td><td>GET</td><td>Per-provider circuit breaker states</td></tr>
+                            <tr><td><code>/api/invariant-checks</code></td><td>GET</td><td>12 data integrity checks</td></tr>
+                        </tbody>
+                    </table>
+
+                    <h3>Whale Intelligence</h3>
+                    <table class="docs-table">
+                        <thead><tr><th>Endpoint</th><th>Method</th><th>Description</th></tr></thead>
+                        <tbody>
+                            <tr><td><code>/api/whale-activity</code></td><td>GET</td><td>Whale trades, conviction, SMI</td></tr>
+                            <tr><td><code>/api/whale-profile/&lt;address&gt;</code></td><td>GET</td><td>Individual whale metrics</td></tr>
+                            <tr><td><code>/api/whale-quality-scores</code></td><td>GET</td><td>Quality tiers (S/A/B/C)</td></tr>
+                            <tr><td><code>/api/whale-mentor</code></td><td>POST</td><td>AI whale mentor chat</td></tr>
+                        </tbody>
+                    </table>
+
+                    <h3>Insights &amp; Analytics</h3>
+                    <table class="docs-table">
+                        <thead><tr><th>Endpoint</th><th>Method</th><th>Description</th></tr></thead>
+                        <tbody>
+                            <tr><td><code>/api/paper-trading-progress</code></td><td>GET</td><td>Trade counts, milestones (Smart Retrain, AI Analyst, Live Gate)</td></tr>
+                            <tr><td><code>/api/insights/pnl-overview</code></td><td>GET</td><td>P&amp;L KPIs, equity curve, daily bars</td></tr>
+                            <tr><td><code>/api/insights/category-breakdown</code></td><td>GET</td><td>Per-category performance</td></tr>
+                            <tr><td><code>/api/insights/model-accuracy</code></td><td>GET</td><td>Per-model Brier scores, calibration</td></tr>
+                            <tr><td><code>/api/insights/friction</code></td><td>GET</td><td>Friction waterfall (edge &rarr; fees &rarr; slippage)</td></tr>
+                            <tr><td><code>/api/insights/ai-analysis</code></td><td>GET/POST</td><td>AI analyst report (cached or trigger new)</td></tr>
+                        </tbody>
+                    </table>
+
+                    <h3>Backtesting</h3>
+                    <table class="docs-table">
+                        <thead><tr><th>Endpoint</th><th>Method</th><th>Description</th></tr></thead>
+                        <tbody>
+                            <tr><td><code>/api/backtest/runs</code></td><td>GET</td><td>List all backtest runs</td></tr>
+                            <tr><td><code>/api/backtest/runs/&lt;id&gt;</code></td><td>GET</td><td>Detailed metrics for a run</td></tr>
+                            <tr><td><code>/api/backtest/compare</code></td><td>GET</td><td>A/B comparison with t-test</td></tr>
+                            <tr><td><code>/api/backtest/cache-stats</code></td><td>GET</td><td>LLM cache hit rate</td></tr>
+                            <tr><td><code>/api/forecast/base-rates</code></td><td>GET</td><td>Base rate registry (56 patterns)</td></tr>
+                        </tbody>
+                    </table>
+
+                    <h3>Continuous Learning</h3>
+                    <table class="docs-table">
+                        <thead><tr><th>Endpoint</th><th>Method</th><th>Description</th></tr></thead>
+                        <tbody>
+                            <tr><td><code>/api/post-mortem/recent</code></td><td>GET</td><td>Recent trade analysis</td></tr>
+                            <tr><td><code>/api/post-mortem/summary</code></td><td>GET</td><td>Weekly post-mortem</td></tr>
+                            <tr><td><code>/api/evidence-quality</code></td><td>GET</td><td>Domain quality rankings</td></tr>
+                            <tr><td><code>/api/param-optimization/runs</code></td><td>GET</td><td>Optimizer run history</td></tr>
+                            <tr><td><code>/api/param-optimization/suggestions</code></td><td>GET</td><td>Suggested parameter changes</td></tr>
+                            <tr><td><code>/api/calibration/retrain-history</code></td><td>GET</td><td>Calibration retraining events</td></tr>
+                        </tbody>
+                    </table>
+
+                    <h3>Arbitrage</h3>
+                    <table class="docs-table">
+                        <thead><tr><th>Endpoint</th><th>Method</th><th>Description</th></tr></thead>
+                        <tbody>
+                            <tr><td><code>/api/arbitrage</code></td><td>GET</td><td>Detected arb opportunities</td></tr>
+                            <tr><td><code>/api/arbitrage/summary</code></td><td>GET</td><td>Arb stats and spreads</td></tr>
+                            <tr><td><code>/api/arbitrage/matches</code></td><td>GET</td><td>Cross-platform market matches</td></tr>
+                        </tbody>
+                    </table>
+
+                    <h3>Kill Switch &amp; Deployment</h3>
+                    <table class="docs-table">
+                        <thead><tr><th>Endpoint</th><th>Method</th><th>Description</th></tr></thead>
+                        <tbody>
+                            <tr><td><code>/api/kill-switch</code></td><td>POST</td><td>Toggle kill switch</td></tr>
+                            <tr><td><code>/api/kill-switch/state</code></td><td>GET</td><td>Current kill switch state</td></tr>
+                            <tr><td><code>/api/kill-switch/reset</code></td><td>POST</td><td>Reset kill switch</td></tr>
+                            <tr><td><code>/api/deployment-stage</code></td><td>GET</td><td>Graduated deployment stage</td></tr>
+                            <tr><td><code>/api/daily-summaries</code></td><td>GET</td><td>Daily P&amp;L summaries</td></tr>
+                        </tbody>
+                    </table>
+
+                    <h3>Configuration &amp; Admin</h3>
+                    <table class="docs-table">
+                        <thead><tr><th>Endpoint</th><th>Method</th><th>Description</th></tr></thead>
+                        <tbody>
+                            <tr><td><code>/api/config</code></td><td>GET/POST</td><td>View or save config (secrets masked)</td></tr>
+                            <tr><td><code>/api/config/reload</code></td><td>POST</td><td>Hot-reload config from disk</td></tr>
+                            <tr><td><code>/api/costs</code></td><td>GET</td><td>LLM token usage and cost breakdown</td></tr>
+                            <tr><td><code>/api/admin</code></td><td>GET</td><td>Admin health dashboard</td></tr>
+                            <tr><td><code>/api/admin/backup-db</code></td><td>POST</td><td>Create database backup</td></tr>
+                        </tbody>
+                    </table>
+                    <div class="docs-callout docs-callout-info">
+                        <strong>Full API Reference:</strong>
+                        <p>For the complete list of all 129+ endpoints with detailed descriptions, see <code>docs/API_REFERENCE.md</code> in the repository.</p>
                     </div>
                 </section>
 
                 <!-- ── GLOSSARY ──────────────────────────────────── -->
                 <section class="docs-section" id="doc-glossary">
                     <h2>Glossary</h2>
+                    <h3>Forecasting &amp; Accuracy</h3>
                     <table class="docs-table">
                         <thead><tr><th>Term</th><th>Definition</th></tr></thead>
                         <tbody>
-                            <tr><td><strong>Edge</strong></td><td>The difference between model probability and market-implied probability; the bot's informational advantage.</td></tr>
-                            <tr><td><strong>Implied Probability</strong></td><td>The probability implied by the current market price (best bid or mid-point).</td></tr>
-                            <tr><td><strong>Kelly Criterion</strong></td><td>A mathematical formula for optimal bet sizing that maximizes long-term bankroll growth.</td></tr>
-                            <tr><td><strong>Fractional Kelly</strong></td><td>Using a fraction (e.g., 25%) of full Kelly to reduce variance at the cost of slightly lower expected growth.</td></tr>
-                            <tr><td><strong>Drawdown</strong></td><td>The percentage decline from peak equity; measures how much has been lost from the highest point.</td></tr>
-                            <tr><td><strong>Heat Level</strong></td><td>A 0-3 scale representing drawdown severity; higher levels reduce position sizes and may halt trading.</td></tr>
-                            <tr><td><strong>Brier Score</strong></td><td>A calibration metric: mean squared error between predicted probabilities and outcomes. Lower is better (0 = perfect).</td></tr>
-                            <tr><td><strong>Platt Scaling</strong></td><td>A calibration technique using logistic regression to adjust raw probabilities for better real-world accuracy.</td></tr>
+                            <tr><td><strong>Brier Score</strong></td><td>Forecast accuracy metric: <code>mean((forecast - outcome)^2)</code>. Ranges 0 (perfect) to 1 (worst). Superforecaster level: 0.10. Random guessing: 0.25. The bot requires Brier &lt; 0.25 to unlock live trading.</td></tr>
+                            <tr><td><strong>Calibration</strong></td><td>How well predicted probabilities match actual outcomes. A calibrated forecaster predicting 70% should be right ~70% of the time. The dashboard plots calibration curves (predicted vs actual).</td></tr>
+                            <tr><td><strong>Base Rate</strong></td><td>Historical frequency of an event type (e.g., "incumbents win re-election ~70%"). The bot maintains 56 base rate patterns across 7 categories.</td></tr>
+                            <tr><td><strong>Ensemble</strong></td><td>Running multiple AI models (GPT-4o, Claude Sonnet 4.6, Gemini 2.0 Flash) in parallel and combining forecasts. Aggregation: trimmed mean, median, or weighted average.</td></tr>
+                            <tr><td><strong>Platt Scaling</strong></td><td>Calibration technique using logistic regression: <code>calibrated = sigmoid(a &times; logit(raw) + b)</code>. Shrinks extreme probabilities toward 0.5.</td></tr>
+                            <tr><td><strong>Implied Probability</strong></td><td>Probability derived from market price. A YES token at $0.65 implies 65% probability.</td></tr>
+                        </tbody>
+                    </table>
+                    <h3>Edge &amp; Trading</h3>
+                    <table class="docs-table">
+                        <thead><tr><th>Term</th><th>Definition</th></tr></thead>
+                        <tbody>
+                            <tr><td><strong>Edge</strong></td><td>Difference between model probability and market price, minus fees. Formula: <code>net_edge = |model_prob - market_price| - fees</code>. Minimum 4% required by default.</td></tr>
+                            <tr><td><strong>Kelly Criterion</strong></td><td>Optimal bet sizing formula: <code>f* = edge / odds</code>. The bot uses fractional Kelly (default 25%) with 7 adjustment multipliers (confidence, drawdown, timeline, volatility, regime, category, liquidity).</td></tr>
+                            <tr><td><strong>Slippage</strong></td><td>Difference between expected and actual fill price, measured in basis points (bps). 100 bps = 1%. Tracked by execution strategy (Simple, TWAP, Iceberg).</td></tr>
+                            <tr><td><strong>TWAP</strong></td><td>Time-Weighted Average Price; splits large orders into 5 time-weighted child orders to minimize market impact.</td></tr>
+                            <tr><td><strong>Iceberg Order</strong></td><td>Hides full order size; shows only 20% to the market, refills as filled. Used for very large orders.</td></tr>
+                            <tr><td><strong>Paper Mode</strong></td><td>Simulation mode where all trades are recorded but no real orders are placed. Default mode.</td></tr>
+                        </tbody>
+                    </table>
+                    <h3>Risk Management</h3>
+                    <table class="docs-table">
+                        <thead><tr><th>Term</th><th>Definition</th></tr></thead>
+                        <tbody>
+                            <tr><td><strong>Drawdown</strong></td><td>Decline from peak equity: <code>(peak - current) / peak</code>. A drop from $5,500 to $5,000 is 9.1% drawdown.</td></tr>
+                            <tr><td><strong>Heat System</strong></td><td>4-level progressive risk reduction: Normal (&lt;10%, full sizing), Warning (10%, 50%), Critical (15%, 25%), Kill (20%, 0% &mdash; all trading halted).</td></tr>
+                            <tr><td><strong>Value at Risk (VaR)</strong></td><td>Maximum expected loss at a confidence level. VaR 95% = $150 means 19/20 days you lose less than $150. VaR gate blocks trades if portfolio VaR exceeds threshold.</td></tr>
+                            <tr><td><strong>Sharpe Ratio</strong></td><td>Risk-adjusted return: <code>mean(returns) / std(returns) &times; sqrt(252)</code>. Good: 1-2, Very good: 2-3, Excellent: 3+.</td></tr>
+                            <tr><td><strong>Sortino Ratio</strong></td><td>Like Sharpe but only penalizes downside volatility. More relevant for trading.</td></tr>
+                            <tr><td><strong>Calmar Ratio</strong></td><td>Annualized return / max drawdown. Measures how well you handle worst-case scenarios.</td></tr>
+                            <tr><td><strong>Circuit Breaker</strong></td><td>Auto-disables an API after repeated failures. States: CLOSED (normal) &rarr; OPEN (failing, requests blocked) &rarr; HALF_OPEN (testing recovery).</td></tr>
+                            <tr><td><strong>Kill Switch</strong></td><td>Emergency halt for all trading. Persistent across restarts. Accessible from dashboard, CLI, Telegram (/kill), Discord (!kill), and Slack.</td></tr>
+                        </tbody>
+                    </table>
+                    <h3>Market Concepts</h3>
+                    <table class="docs-table">
+                        <thead><tr><th>Term</th><th>Definition</th></tr></thead>
+                        <tbody>
+                            <tr><td><strong>Market Regime</strong></td><td>Auto-classified market conditions: Normal (1.0x sizing), Trending (0.8x), Mean-Reverting (1.1x), High Volatility (0.6x), Low Activity (0.7x).</td></tr>
+                            <tr><td><strong>Conviction Signal</strong></td><td>Signal from 2+ quality-scored whale wallets taking the same position. Quality-weighted: S-tier whales count more than C-tier.</td></tr>
                             <tr><td><strong>CLOB</strong></td><td>Central Limit Order Book; Polymarket's orderbook for matching trades.</td></tr>
                             <tr><td><strong>Gamma API</strong></td><td>Polymarket's public REST API for market metadata and discovery.</td></tr>
-                            <tr><td><strong>TWAP</strong></td><td>Time-Weighted Average Price; splits a large order into smaller slices executed over time.</td></tr>
-                            <tr><td><strong>Iceberg Order</strong></td><td>An order that hides its full size, showing only a fraction to the market at a time.</td></tr>
-                            <tr><td><strong>Kill Switch</strong></td><td>An emergency mechanism that immediately halts all trading activity.</td></tr>
-                            <tr><td><strong>Conviction Score</strong></td><td>A whale tracking metric measuring how strongly top traders agree on a market direction.</td></tr>
-                            <tr><td><strong>WAL</strong></td><td>Write-Ahead Logging; a SQLite journal mode that allows concurrent reads during writes.</td></tr>
-                            <tr><td><strong>Paper Mode</strong></td><td>Simulation mode where all trades are recorded but no real orders are placed.</td></tr>
+                            <tr><td><strong>WAL</strong></td><td>Write-Ahead Logging; SQLite journal mode enabling concurrent reads during writes.</td></tr>
+                        </tbody>
+                    </table>
+                    <h3>Paper Trading Milestones</h3>
+                    <table class="docs-table">
+                        <thead><tr><th>Milestone</th><th>Requirements</th><th>What It Unlocks</th></tr></thead>
+                        <tbody>
+                            <tr><td><strong>Smart Retrain</strong></td><td>30 resolved trades</td><td>Auto-refit calibration correction curve from historical data</td></tr>
+                            <tr><td><strong>AI Analyst</strong></td><td>50 resolved trades + 28 days</td><td>LLM-powered performance review with actionable recommendations</td></tr>
+                            <tr><td><strong>Live Trading Gate</strong></td><td>30 resolved + 28 days + Brier &lt; 0.25</td><td>System considers you ready for live trading with real capital</td></tr>
                         </tbody>
                     </table>
                 </section>
 
                 <div class="docs-footer">
-                    <p>Polymarket Research &amp; Trading Bot v0.2.0 &middot; Built with Python, Flask, SQLite, and GPT-4o/Claude/Gemini</p>
+                    <p>Polymarket Research &amp; Trading Bot v1.0.0 &middot; Built with Python, Flask, SQLite, and GPT-4o/Claude Sonnet 4.6/Gemini 2.0 Flash</p>
                 </div>
 
             </main>
