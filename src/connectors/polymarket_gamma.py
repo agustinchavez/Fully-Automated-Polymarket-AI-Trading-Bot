@@ -7,13 +7,14 @@ and get basic pricing snapshots.
 
 from __future__ import annotations
 
+import asyncio
 import datetime as dt
 import json
 from typing import Any
 
 import httpx
 from pydantic import BaseModel, Field
-from tenacity import retry, stop_after_attempt, wait_exponential
+from tenacity import retry, retry_if_not_exception_type, stop_after_attempt, wait_exponential
 
 from src.observability.logger import get_logger
 from src.observability.metrics import track_latency
@@ -189,7 +190,7 @@ class GammaClient:
     async def close(self) -> None:
         await self._client.aclose()
 
-    @retry(stop=stop_after_attempt(3), wait=wait_exponential(min=1, max=10))
+    @retry(stop=stop_after_attempt(3), wait=wait_exponential(min=1, max=10), retry=retry_if_not_exception_type(asyncio.CancelledError))
     async def _get(self, path: str, params: dict[str, Any] | None = None) -> Any:
         await rate_limiter.get("gamma").acquire()
         with track_latency("gamma"):

@@ -12,12 +12,13 @@ Endpoints:
 
 from __future__ import annotations
 
+import asyncio
 import datetime as dt
 from dataclasses import dataclass, field
 from typing import Any
 
 import httpx
-from tenacity import retry, stop_after_attempt, wait_exponential
+from tenacity import retry, retry_if_not_exception_type, stop_after_attempt, wait_exponential
 
 from src.observability.logger import get_logger
 from src.observability.metrics import track_latency
@@ -136,7 +137,7 @@ class DataAPIClient:
 
     # ── Positions ────────────────────────────────────────────────
 
-    @retry(stop=stop_after_attempt(3), wait=wait_exponential(min=1, max=8))
+    @retry(stop=stop_after_attempt(3), wait=wait_exponential(min=1, max=8), retry=retry_if_not_exception_type(asyncio.CancelledError))
     async def get_positions(
         self,
         address: str,
@@ -176,7 +177,7 @@ class DataAPIClient:
 
     # ── Activity (recent buys/sells) ─────────────────────────────
 
-    @retry(stop=stop_after_attempt(3), wait=wait_exponential(min=1, max=8))
+    @retry(stop=stop_after_attempt(3), wait=wait_exponential(min=1, max=8), retry=retry_if_not_exception_type(asyncio.CancelledError))
     async def get_activity(
         self,
         address: str,

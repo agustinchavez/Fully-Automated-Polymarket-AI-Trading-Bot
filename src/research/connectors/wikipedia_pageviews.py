@@ -90,10 +90,12 @@ class WikipediaPageviewsConnector(BaseResearchConnector):
         return "wikipedia_pageviews"
 
     def relevant_categories(self) -> set[str]:
+        # SPORTS/ESPORTS excluded: team matchup titles produce garbage article
+        # names (e.g. 'Heat_Hornets', 'Spread_Cleveland') that always 404.
         return {
             "MACRO", "ELECTION", "CORPORATE", "LEGAL", "TECHNOLOGY",
-            "SCIENCE", "GEOPOLITICS", "CRYPTO", "WEATHER", "SPORTS",
-            "ENTERTAINMENT", "TECH", "REGULATION", "CULTURE", "UNKNOWN",
+            "SCIENCE", "GEOPOLITICS", "CRYPTO", "WEATHER",
+            "ENTERTAINMENT", "TECH", "REGULATION", "CULTURE",
         }
 
     async def _fetch_impl(
@@ -153,19 +155,20 @@ class WikipediaPageviewsConnector(BaseResearchConnector):
             if entity in q_lower:
                 return _ENTITY_MAP[entity]
 
-        # Fallback: extract capitalized noun phrases
+        # Fallback: only proceed if we get multi-word proper nouns that look
+        # like a real entity (not a team name fragment like 'Heat' or 'Spread')
         words = question.split()
         proper_nouns = [
             re.sub(r'[^\w]', '', w) for w in words
-            if w[0].isupper() and len(w) > 2
+            if w[0].isupper() and len(w) > 3
             and w.lower() not in {
                 "will", "the", "does", "has", "are", "can",
                 "should", "what", "when", "how", "is",
+                "versus", "beats", "over", "under",
             }
         ]
-        # Filter out empty strings after stripping
-        proper_nouns = [w for w in proper_nouns if w]
-        if proper_nouns:
+        proper_nouns = [w for w in proper_nouns if len(w) > 3]
+        if len(proper_nouns) >= 2:
             return "_".join(proper_nouns[:2])
 
         return ""

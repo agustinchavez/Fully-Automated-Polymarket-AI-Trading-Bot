@@ -43,11 +43,18 @@ class TestEntityExtraction:
         c = WikipediaPageviewsConnector()
         assert c._extract_article("Will Trump win the election?") == "Donald_Trump"
 
-    def test_unknown_entity_capitalized_fallback(self) -> None:
+    def test_unknown_entity_single_word_skipped(self) -> None:
         c = WikipediaPageviewsConnector()
-        # "Zylothon" is capitalized and not in stop words
+        # Single proper noun isn't enough — requires >= 2 to avoid
+        # garbage articles like "Heat_Hornets" from sports matchups
         result = c._extract_article("Will Zylothon succeed?")
-        assert "Zylothon" in result
+        assert result == ""
+
+    def test_unknown_entity_multi_word_fallback(self) -> None:
+        c = WikipediaPageviewsConnector()
+        # Two qualifying proper nouns produce a valid fallback
+        result = c._extract_article("Will Zylothon Corporation expand?")
+        assert result == "Zylothon_Corporation"
 
     def test_empty_question_returns_empty(self) -> None:
         c = WikipediaPageviewsConnector()

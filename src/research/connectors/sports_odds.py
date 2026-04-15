@@ -55,6 +55,19 @@ _SPORT_KEYWORDS: dict[str, str] = {
     "nascar": "motorsport_nascar",
     "atp": "tennis_atp",
     "wta": "tennis_wta",
+    # WTA-specific tournaments (matched before generic 'tennis' by length)
+    "porsche tennis": "tennis_wta",
+    "madrid open women": "tennis_wta",
+    "rome women": "tennis_wta",
+    "birmingham classic": "tennis_wta",
+    "eastbourne": "tennis_wta",
+    "bad homburg": "tennis_wta",
+    # WTA top players
+    "swiatek": "tennis_wta",
+    "sabalenka": "tennis_wta",
+    "gauff": "tennis_wta",
+    "rybakina": "tennis_wta",
+    # ATP / generic tennis
     "tennis": "tennis_atp",
     "wimbledon": "tennis_atp",
     "roland garros": "tennis_atp",

@@ -13,6 +13,7 @@ Includes domain whitelisting/blocking per the research agent spec.
 from __future__ import annotations
 
 import abc
+import asyncio
 import os
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field
@@ -20,7 +21,7 @@ from typing import Any, ClassVar
 from urllib.parse import urlparse
 
 import httpx
-from tenacity import retry, stop_after_attempt, wait_exponential
+from tenacity import retry, retry_if_not_exception_type, stop_after_attempt, wait_exponential
 
 from src.observability.logger import get_logger
 from src.connectors.rate_limiter import rate_limiter
@@ -116,7 +117,7 @@ class SerpAPIProvider(SearchProvider):
     async def close(self) -> None:
         await self._client.aclose()
 
-    @retry(stop=stop_after_attempt(3), wait=wait_exponential(min=1, max=8))
+    @retry(stop=stop_after_attempt(3), wait=wait_exponential(min=1, max=8), retry=retry_if_not_exception_type(asyncio.CancelledError))
     async def search(self, query: str, num_results: int = 10) -> list[SearchResult]:
         await rate_limiter.get("serpapi").acquire()
         with track_latency("serpapi"):
@@ -173,7 +174,7 @@ class BingProvider(SearchProvider):
     async def close(self) -> None:
         await self._client.aclose()
 
-    @retry(stop=stop_after_attempt(3), wait=wait_exponential(min=1, max=8))
+    @retry(stop=stop_after_attempt(3), wait=wait_exponential(min=1, max=8), retry=retry_if_not_exception_type(asyncio.CancelledError))
     async def search(self, query: str, num_results: int = 10) -> list[SearchResult]:
         await rate_limiter.get("bing").acquire()
         with track_latency("bing"):
@@ -232,7 +233,7 @@ class TavilyProvider(SearchProvider):
     async def close(self) -> None:
         await self._client.aclose()
 
-    @retry(stop=stop_after_attempt(3), wait=wait_exponential(min=1, max=8))
+    @retry(stop=stop_after_attempt(3), wait=wait_exponential(min=1, max=8), retry=retry_if_not_exception_type(asyncio.CancelledError))
     async def search(self, query: str, num_results: int = 10) -> list[SearchResult]:
         await rate_limiter.get("tavily").acquire()
         with track_latency("tavily"):
@@ -304,7 +305,7 @@ class DuckDuckGoProvider(SearchProvider):
     async def close(self) -> None:
         pass  # No persistent client
 
-    @retry(stop=stop_after_attempt(3), wait=wait_exponential(min=1, max=8))
+    @retry(stop=stop_after_attempt(3), wait=wait_exponential(min=1, max=8), retry=retry_if_not_exception_type(asyncio.CancelledError))
     async def search(self, query: str, num_results: int = 10) -> list[SearchResult]:
         try:
             from ddgs import DDGS
@@ -366,7 +367,7 @@ class SearXNGProvider(SearchProvider):
     async def close(self) -> None:
         await self._client.aclose()
 
-    @retry(stop=stop_after_attempt(3), wait=wait_exponential(min=1, max=8))
+    @retry(stop=stop_after_attempt(3), wait=wait_exponential(min=1, max=8), retry=retry_if_not_exception_type(asyncio.CancelledError))
     async def search(self, query: str, num_results: int = 10) -> list[SearchResult]:
         await rate_limiter.get("searxng").acquire()
         with track_latency("searxng"):

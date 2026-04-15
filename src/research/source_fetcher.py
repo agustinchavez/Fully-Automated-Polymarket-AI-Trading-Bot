@@ -289,6 +289,8 @@ class SourceFetcher:
 
     async def fetch_page_content(self, url: str) -> str:
         """Fetch and extract readable text content from a URL using BeautifulSoup."""
+        if not url or not url.startswith(("http://", "https://")):
+            return ""
         try:
             resp = await self._http.get(url)
             resp.raise_for_status()

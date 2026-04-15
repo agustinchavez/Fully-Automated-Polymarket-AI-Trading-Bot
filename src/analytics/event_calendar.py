@@ -71,6 +71,8 @@ class EventCalendar:
         if not fred_key:
             return []
 
+        import ssl
+        import certifi
         import aiohttp
 
         now = datetime.now(timezone.utc)
@@ -85,7 +87,8 @@ class EventCalendar:
             "limit": "50",
         }
 
-        async with aiohttp.ClientSession() as session:
+        ssl_ctx = ssl.create_default_context(cafile=certifi.where())
+        async with aiohttp.ClientSession(connector=aiohttp.TCPConnector(ssl=ssl_ctx)) as session:
             async with session.get(url, params=params, timeout=aiohttp.ClientTimeout(total=10)) as resp:
                 data = await resp.json()
 

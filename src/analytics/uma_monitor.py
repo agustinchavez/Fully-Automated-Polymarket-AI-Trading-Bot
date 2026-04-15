@@ -34,9 +34,13 @@ class UMAMonitor:
             return
 
         try:
+            import ssl
+            import certifi
             import aiohttp
 
-            async with aiohttp.ClientSession() as session:
+            ssl_ctx = ssl.create_default_context(cafile=certifi.where())
+            connector = aiohttp.TCPConnector(ssl=ssl_ctx)
+            async with aiohttp.ClientSession(connector=connector) as session:
                 async with session.get(
                     f"{self.BASE}/disputes",
                     timeout=aiohttp.ClientTimeout(total=10),

@@ -9,12 +9,13 @@ Handles:
 
 from __future__ import annotations
 
+import asyncio
 import os
 from dataclasses import dataclass, field
 from typing import Any
 
 import httpx
-from tenacity import retry, stop_after_attempt, wait_exponential
+from tenacity import retry, retry_if_not_exception_type, stop_after_attempt, wait_exponential
 
 from src.observability.logger import get_logger
 from src.observability.metrics import track_latency
@@ -145,7 +146,7 @@ class CLOBClient:
 
     # ── Public read endpoints ────────────────────────────────────────
 
-    @retry(stop=stop_after_attempt(3), wait=wait_exponential(min=1, max=10))
+    @retry(stop=stop_after_attempt(3), wait=wait_exponential(min=1, max=10), retry=retry_if_not_exception_type(asyncio.CancelledError))
     async def _get(self, path: str, params: dict[str, Any] | None = None) -> Any:
         with track_latency("clob"):
             resp = await self._client.get(path, params=params)

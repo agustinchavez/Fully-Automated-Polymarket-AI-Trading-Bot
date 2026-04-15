@@ -71,7 +71,13 @@ class GdeltConnector(BaseResearchConnector):
             "", q, flags=re.I,
         )
         q = re.sub(r"\s+(by|before|after|in)\s+\d{4}.*$", "", q, flags=re.I)
-        return q.strip()[:80]
+        # Remove parentheses/colons (GDELT only allows parens around OR)
+        q = re.sub(r"[():]", " ", q)
+        # Remove O/U spread notation (meaningless for GDELT)
+        q = re.sub(r"\bO/U\s+[\d.]+\b", "", q, flags=re.I)
+        # Filter tokens shorter than 3 chars (GDELT rejects them)
+        tokens = [t for t in q.split() if len(t) >= 3]
+        return " ".join(tokens[:5]).strip()[:80]
 
     async def _fetch_timeline(
         self,
