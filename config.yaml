@@ -13,6 +13,8 @@ scanning:
     - TECHNOLOGY
     - SCIENCE
     - SPORTS
+    - CRYPTO
+    - GEOPOLITICS
   restricted_types:
     - WEATHER
   filter_min_score: 25
@@ -23,6 +25,7 @@ scanning:
   category_cooldown_minutes:
     SPORTS: 20
     CULTURE: 30
+    CRYPTO: 30
     MACRO: 90
     GEOPOLITICS: 120
     ELECTION: 90

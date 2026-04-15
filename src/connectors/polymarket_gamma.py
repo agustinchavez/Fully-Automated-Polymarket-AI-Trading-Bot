@@ -31,11 +31,18 @@ _TYPE_KEYWORDS: dict[str, list[str]] = {
         "yield", "rate cut", "rate hike", "recession", "jobs report",
         "natural gas", "crude oil", "wti", "(ng)", "brent",
         "oil price", "gold price", "silver", "commodity",
+        "qqq", "spy", "etf", "index fund", "s&p", "dow",
     ],
     "GEOPOLITICS": [
         "military action", "military strike", "military operation",
         "war", "invasion", "ceasefire", "sanctions", "diplomacy",
         "gaza", "beirut", "ukraine", "nato", "treaty",
+        "offensive", "suspend", "truce", "artillery", "drone",
+    ],
+    "CRYPTO": [
+        "bitcoin", "btc", "ethereum", "eth", "crypto", "blockchain",
+        "defi", "nft", "satoshi", "nakamoto",
+        "coinbase", "binance", "solana", "sol", "xrp", "ripple",
     ],
     "ELECTION": [
         "election", "vote", "president", "governor", "senate", "congress",
