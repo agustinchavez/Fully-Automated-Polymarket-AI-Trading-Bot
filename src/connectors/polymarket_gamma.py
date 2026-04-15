@@ -40,9 +40,9 @@ _TYPE_KEYWORDS: dict[str, list[str]] = {
         "offensive", "suspend", "truce", "artillery", "drone",
     ],
     "CRYPTO": [
-        "bitcoin", "btc", "ethereum", "eth", "crypto", "blockchain",
+        "bitcoin", "btc", "ethereum", " eth ", "crypto", "blockchain",
         "defi", "nft", "satoshi", "nakamoto",
-        "coinbase", "binance", "solana", "sol", "xrp", "ripple",
+        "coinbase", "binance", "solana", " sol ", "xrp", "ripple",
     ],
     "ELECTION": [
         "election", "vote", "president", "governor", "senate", "congress",
@@ -160,7 +160,7 @@ def classify_market_type(question: str, category: str = "", description: str = "
     When multiple categories tie on keyword count, the higher-priority
     category wins (e.g. GEOPOLITICS beats ELECTION).
     """
-    text = f"{question} {category} {description}".lower()
+    text = f" {question} {category} {description} ".lower()
     scores: dict[str, int] = {}
     for mtype, keywords in _TYPE_KEYWORDS.items():
         score = sum(1 for kw in keywords if kw in text)

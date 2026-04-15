@@ -100,4 +100,4 @@ class TestTierRouting:
         from src.config import load_config
         cfg = load_config()
         assert cfg.model_tiers.enabled is True
-        assert cfg.model_tiers.premium_min_volume_usd == 10000.0
+        assert cfg.model_tiers.premium_min_volume_usd == 5000.0

@@ -487,10 +487,8 @@ async def _query_google(model: str, prompt: str, config: ForecastingConfig, time
         import google.generativeai as genai
         await rate_limiter.get("google").acquire()
         api_key = os.environ.get("GOOGLE_API_KEY", "")
-        gmodel = genai.GenerativeModel(model)
-        # Configure per-request to avoid thread-safety issues with global state
-        gmodel._client = genai.GenerativeModel(model)
         genai.configure(api_key=api_key)
+        gmodel = genai.GenerativeModel(model)
         resp = await asyncio.wait_for(
             asyncio.to_thread(
                 gmodel.generate_content,

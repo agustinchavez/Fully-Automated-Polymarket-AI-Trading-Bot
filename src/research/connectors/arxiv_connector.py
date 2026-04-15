@@ -17,7 +17,7 @@ from src.research.source_fetcher import FetchedSource
 
 log = get_logger(__name__)
 
-_ARXIV_API = "http://export.arxiv.org/api/query"
+_ARXIV_API = "https://export.arxiv.org/api/query"
 _ATOM_NS = "{http://www.w3.org/2005/Atom}"
 
 _SCIENCE_KEYWORDS: list[str] = [

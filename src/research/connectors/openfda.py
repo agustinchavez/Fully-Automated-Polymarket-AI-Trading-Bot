@@ -37,7 +37,12 @@ class OpenFDAConnector(BaseResearchConnector):
     def relevant_categories(self) -> set[str]:
         return {"SCIENCE"}
 
+    _EXCLUDED_TYPES: set[str] = {"SPORTS", "CULTURE", "ELECTION", "CRYPTO", "WEATHER", "GEOPOLITICS"}
+
     def is_relevant(self, question: str, market_type: str) -> bool:
+        # Skip categories that will never have FDA-relevant content
+        if market_type.upper() in self._EXCLUDED_TYPES:
+            return False
         # Only trigger on FDA-related keywords (not all SCIENCE)
         return self._question_matches_keywords(question, _FDA_KEYWORDS)
 

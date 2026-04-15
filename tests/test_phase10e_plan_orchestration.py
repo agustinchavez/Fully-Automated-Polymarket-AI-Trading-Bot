@@ -156,7 +156,7 @@ class TestMigration19:
     def test_schema_version_is_19(self):
         conn = _make_conn()
         row = conn.execute("SELECT MAX(version) FROM schema_version").fetchone()
-        assert row[0] == 19
+        assert row[0] == 20
 
     def test_execution_plans_table_exists(self):
         conn = _make_conn()

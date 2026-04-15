@@ -8,7 +8,7 @@ from src.observability.logger import get_logger
 
 log = get_logger(__name__)
 
-SCHEMA_VERSION = 19
+SCHEMA_VERSION = 20
 
 _MIGRATIONS: dict[int, list[str]] = {
     1: [
@@ -1174,6 +1174,17 @@ _MIGRATIONS: dict[int, list[str]] = {
     ],
     19: [
         "ALTER TABLE model_forecast_log ADD COLUMN resolved_at TEXT;",
+    ],
+    # ── Migration 20: Repair closed_positions missing columns ─────────
+    # The CREATE TABLE in migration 8 was updated to include token_id, size,
+    # opened_at, market_type but databases created with the original schema
+    # are missing them. ALTER TABLE ADD COLUMN is idempotent here — the
+    # migration runner skips "duplicate column name" errors.
+    20: [
+        "ALTER TABLE closed_positions ADD COLUMN token_id TEXT;",
+        "ALTER TABLE closed_positions ADD COLUMN size REAL;",
+        "ALTER TABLE closed_positions ADD COLUMN opened_at TEXT;",
+        "ALTER TABLE closed_positions ADD COLUMN market_type TEXT DEFAULT '';",
     ],
 }
 
