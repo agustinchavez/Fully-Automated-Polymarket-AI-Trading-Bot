@@ -394,6 +394,7 @@ class EvidenceExtractor:
                 question=question,
                 market_type=market_type,
                 quality_score=0.0,
+                num_sources=len(sources),
                 summary=f"LLM extraction failed: {e}",
             )
 

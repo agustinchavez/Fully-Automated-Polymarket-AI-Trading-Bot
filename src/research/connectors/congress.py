@@ -176,9 +176,15 @@ class CongressConnector(BaseResearchConnector):
 
         snippet = f"{bill_type}{bill_number}: {action_text[:80]}"
 
+        # Use public congress.gov URL (not API URL which requires auth)
+        public_url = (
+            f"https://congress.gov/bill/{congress}th-congress/"
+            f"{bill_type.lower()}-bill/{bill_number}"
+        )
+
         return self._make_source(
             title=f"Congress.gov: {bill_type}{bill_number} — {title[:60]}",
-            url=bill.get("url", f"https://congress.gov/bill/{congress}"),
+            url=public_url,
             snippet=snippet,
             publisher="Congress.gov",
             date=action_date,
@@ -205,9 +211,17 @@ class CongressConnector(BaseResearchConnector):
 
         snippet = f"Nomination: {description[:60]} — {action_text[:40]}"
 
+        # Use public congress.gov URL (not API URL which requires auth)
+        nom_number = nom.get("number", "")
+        public_url = (
+            f"https://congress.gov/nomination/{congress}th-congress/{nom_number}"
+            if congress and nom_number
+            else "https://congress.gov"
+        )
+
         return self._make_source(
             title=f"Congress.gov Nomination: {description[:60]}",
-            url=nom.get("url", "https://congress.gov"),
+            url=public_url,
             snippet=snippet,
             publisher="Congress.gov",
             date=action_date,
