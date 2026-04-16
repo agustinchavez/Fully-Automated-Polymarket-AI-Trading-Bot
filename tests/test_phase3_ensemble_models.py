@@ -479,7 +479,7 @@ class TestMockedApiCalls:
                     )
                     mock_cls.assert_called_once_with(
                         api_key="test-key",
-                        base_url="https://api.deepseek.com",
+                        base_url="https://api.deepseek.com/v1",
                     )
                     assert not result.error
             finally:

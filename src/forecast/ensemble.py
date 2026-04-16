@@ -594,7 +594,7 @@ async def _query_deepseek(model: str, prompt: str, config: ForecastingConfig, ti
     start = time.monotonic()
     try:
         await rate_limiter.get("deepseek").acquire()
-        client = AsyncOpenAI(api_key=api_key, base_url="https://api.deepseek.com")
+        client = AsyncOpenAI(api_key=api_key, base_url="https://api.deepseek.com/v1")
         resp = await asyncio.wait_for(
             client.chat.completions.create(
                 model=model,
@@ -746,7 +746,7 @@ class EnsembleForecaster:
                 # Switch fallback to a provider that didn't fail
                 alt_models = {
                     "openai": "gpt-4o",
-                    "anthropic": "claude-sonnet-4-6",
+                    "anthropic": "claude-haiku-4-5-20251001",
                     "google": "gemini-2.0-flash",
                     "xai": "grok-4-fast-reasoning",
                     "deepseek": "deepseek-chat",

@@ -134,6 +134,7 @@ _DEFAULT_COSTS: dict[str, float] = {
     "gpt-4o": 0.005,                    # ~$5/1M input tokens, ~1K tokens/call
     "gpt-4o-mini": 0.0005,
     "claude-sonnet-4-6": 0.008,
+    "claude-haiku-4-5-20251001": 0.001,
     "gemini-1.5-pro": 0.003,
     "gemini-2.0-flash": 0.0003,
     "grok-4-fast-reasoning": 0.010,      # xAI: ~$10/1M tokens
@@ -148,6 +149,7 @@ _TOKEN_COSTS: dict[str, tuple[float, float]] = {
     "gpt-4o": (2.50e-6, 10.00e-6),
     "gpt-4o-mini": (0.15e-6, 0.60e-6),
     "claude-sonnet-4-6": (3.00e-6, 15.00e-6),
+    "claude-haiku-4-5-20251001": (0.80e-6, 4.00e-6),
     "claude-3-5-sonnet-20241022": (3.00e-6, 15.00e-6),
     "gemini-2.0-flash": (0.10e-6, 0.40e-6),
     "gemini-1.5-pro": (1.25e-6, 5.00e-6),

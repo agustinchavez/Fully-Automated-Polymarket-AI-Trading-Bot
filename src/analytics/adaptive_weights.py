@@ -241,6 +241,8 @@ class AdaptiveModelWeighter:
         # Inverse-Brier weighting
         raw_weights: dict[str, ModelWeight] = {}
         for r in rows:
+            if r["brier"] is None:
+                continue
             brier = float(r["brier"])
             cnt = int(r["cnt"])
             inv_brier = 1.0 / max(brier, 0.001)

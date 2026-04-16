@@ -122,7 +122,7 @@ class ForecastingConfig(BaseModel):
     llm_model: str = "gpt-4o"
     evidence_model: str = "gpt-4o-mini"
     llm_temperature: float = 0.2
-    llm_max_tokens: int = 4096
+    llm_max_tokens: int = 800
     calibration_method: str = "platt"
     low_evidence_penalty: float = 0.15
     min_evidence_quality: float = 0.55
@@ -149,14 +149,14 @@ class EnsembleConfig(BaseModel):
     """Multi-model ensemble configuration."""
     enabled: bool = True
     models: list[str] = Field(default_factory=lambda: [
-        "gpt-4o", "claude-sonnet-4-6", "gemini-2.0-flash",
+        "gpt-4o", "claude-haiku-4-5-20251001", "gemini-2.0-flash",
         "grok-4-fast-reasoning", "deepseek-chat",
     ])
     aggregation: str = "median"  # trimmed_mean | median | weighted
     trim_fraction: float = 0.1
     weights: dict[str, float] = Field(default_factory=lambda: {
         "gpt-4o": 0.25,
-        "claude-sonnet-4-6": 0.25,
+        "claude-haiku-4-5-20251001": 0.25,
         "gemini-2.0-flash": 0.20,
         "grok-4-fast-reasoning": 0.15,
         "deepseek-chat": 0.15,
@@ -199,7 +199,7 @@ class ModelTierConfig(BaseModel):
     scout_models: list[str] = Field(default_factory=lambda: ["gpt-4o-mini"])
     standard_models: list[str] = Field(default_factory=lambda: ["gpt-4o"])
     premium_models: list[str] = Field(default_factory=lambda: [
-        "gpt-4o", "claude-sonnet-4-6", "gemini-2.0-flash",
+        "gpt-4o", "claude-haiku-4-5-20251001", "gemini-2.0-flash",
     ])
     premium_min_volume_usd: float = 10000.0
     premium_min_edge: float = 0.06
@@ -614,7 +614,7 @@ class AnalystConfig(BaseModel):
     """AI analyst configuration (Phase 3 — multi-provider)."""
     enabled: bool = False
     provider: str = "anthropic"
-    model: str = "claude-sonnet-4-6"
+    model: str = "claude-haiku-4-5-20251001"
     max_tokens: int = 1500
     temperature: float = 0.3
     timeout_secs: int = 45

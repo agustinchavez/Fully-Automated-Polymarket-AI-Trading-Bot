@@ -396,7 +396,8 @@ class PipelineRunner:
                             category=cat,
                             blend=round(adaptive_result.blend_factor, 3),
                             weights={k: round(v, 3)
-                                     for k, v in adaptive_result.weights.items()},
+                                     for k, v in adaptive_result.weights.items()
+                                     if v is not None},
                         )
             except Exception as e:
                 log.warning("engine.adaptive_weights_inject_error", error=str(e))

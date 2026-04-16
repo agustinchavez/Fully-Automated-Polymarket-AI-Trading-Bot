@@ -152,7 +152,7 @@ forecasting:
   llm_model: gpt-4o
   evidence_model: gpt-4o-mini
   llm_temperature: 0.2
-  llm_max_tokens: 4096
+  llm_max_tokens: 800
   low_evidence_penalty: 0.15
   min_evidence_quality: 0.55
   prompt_version: v2
@@ -165,7 +165,7 @@ ensemble:
   enabled: true
   models:
     - gpt-4o
-    - claude-sonnet-4-6
+    - claude-haiku-4-5-20251001
     - gemini-2.0-flash
     - grok-4-fast-reasoning
     - deepseek-chat
@@ -287,7 +287,7 @@ model_tiers:
     - gpt-4o
   premium_models:
     - gpt-4o
-    - claude-sonnet-4-6
+    - claude-haiku-4-5-20251001
     - gemini-2.0-flash
     - grok-4-fast-reasoning
     - deepseek-chat
@@ -314,7 +314,7 @@ digest:
 analyst:
   enabled: true
   provider: anthropic
-  model: claude-sonnet-4-6
+  model: claude-haiku-4-5-20251001
   max_tokens: 1500
   temperature: 0.3
   timeout_secs: 45
