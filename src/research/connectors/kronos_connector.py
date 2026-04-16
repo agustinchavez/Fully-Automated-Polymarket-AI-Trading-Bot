@@ -105,7 +105,7 @@ def _ensure_kronos_on_path() -> bool:
     try:
         import model  # noqa: F401
         return True
-    except ImportError as e:
+    except Exception as e:
         log.warning("kronos.import_failed_after_clone", error=str(e))
         return False
 
