@@ -120,9 +120,9 @@ class ResearchConfig(BaseModel):
 
 class ForecastingConfig(BaseModel):
     llm_model: str = "gpt-4o"
-    evidence_model: str = "gpt-4o-mini"
+    evidence_model: str = "gemini-2.0-flash"
     llm_temperature: float = 0.2
-    llm_max_tokens: int = 800
+    llm_max_tokens: int = 1500
     calibration_method: str = "platt"
     low_evidence_penalty: float = 0.15
     min_evidence_quality: float = 0.55

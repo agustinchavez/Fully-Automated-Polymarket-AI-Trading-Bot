@@ -23,6 +23,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import os
 import re
 import datetime as dt
 from dataclasses import dataclass, field
@@ -354,31 +355,12 @@ class EvidenceExtractor:
             evidence_model = getattr(
                 self._config, "evidence_model", self._config.llm_model,
             )
-            resp = await asyncio.wait_for(
-                self._llm.chat.completions.create(
-                    model=evidence_model,
-                    temperature=0.1,
-                    max_tokens=self._config.llm_max_tokens,
-                    messages=[
-                        {
-                            "role": "system",
-                            "content": (
-                                "You are a precise research analyst. "
-                                "Return only valid JSON. Never fabricate data."
-                            ),
-                        },
-                        {"role": "user", "content": prompt},
-                    ],
-                ),
-                timeout=60,
-            )
-            raw_text = resp.choices[0].message.content or "{}"
-            usage = getattr(resp, "usage", None)
-            cost_tracker.record_call(
-                evidence_model,
-                input_tokens=getattr(usage, "prompt_tokens", 0) or 0,
-                output_tokens=getattr(usage, "completion_tokens", 0) or 0,
-            )
+
+            if "gemini" in evidence_model:
+                raw_text = await self._call_gemini(evidence_model, prompt)
+            else:
+                raw_text = await self._call_openai(evidence_model, prompt)
+
             raw_text = raw_text.strip()
             if raw_text.startswith("```"):
                 raw_text = raw_text.split("\n", 1)[1] if "\n" in raw_text else raw_text[3:]
@@ -399,6 +381,62 @@ class EvidenceExtractor:
             )
 
         return _build_package(market_id, question, market_type, sources, parsed)
+
+    async def _call_openai(self, model: str, prompt: str) -> str:
+        """Call OpenAI-compatible API for evidence extraction."""
+        resp = await asyncio.wait_for(
+            self._llm.chat.completions.create(
+                model=model,
+                temperature=0.1,
+                max_tokens=self._config.llm_max_tokens,
+                messages=[
+                    {
+                        "role": "system",
+                        "content": (
+                            "You are a precise research analyst. "
+                            "Return only valid JSON. Never fabricate data."
+                        ),
+                    },
+                    {"role": "user", "content": prompt},
+                ],
+            ),
+            timeout=60,
+        )
+        raw_text = resp.choices[0].message.content or "{}"
+        usage = getattr(resp, "usage", None)
+        cost_tracker.record_call(
+            model,
+            input_tokens=getattr(usage, "prompt_tokens", 0) or 0,
+            output_tokens=getattr(usage, "completion_tokens", 0) or 0,
+        )
+        return raw_text
+
+    async def _call_gemini(self, model: str, prompt: str) -> str:
+        """Call Google Gemini API for evidence extraction."""
+        import google.generativeai as genai
+
+        api_key = os.environ.get("GOOGLE_API_KEY", "")
+        genai.configure(api_key=api_key)
+        gmodel = genai.GenerativeModel(model)
+        resp = await asyncio.wait_for(
+            asyncio.to_thread(
+                gmodel.generate_content,
+                (
+                    "You are a precise research analyst. "
+                    "Return only valid JSON. Never fabricate data.\n\n"
+                    + prompt
+                ),
+            ),
+            timeout=60,
+        )
+        raw_text = resp.text or "{}"
+        usage_meta = getattr(resp, "usage_metadata", None)
+        cost_tracker.record_call(
+            model,
+            input_tokens=getattr(usage_meta, "prompt_token_count", 0) or 0,
+            output_tokens=getattr(usage_meta, "candidates_token_count", 0) or 0,
+        )
+        return raw_text
 
 
 def _build_package(
