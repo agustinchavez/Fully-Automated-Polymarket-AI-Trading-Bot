@@ -408,7 +408,7 @@ class TestPerModelCircuitBreakers:
 
         from src.forecast.ensemble import _query_google
         from src.config import ForecastingConfig
-        result = asyncio.run(_query_google("gemini-2.0-flash", "test", ForecastingConfig()))
+        result = asyncio.run(_query_google("gemini-2.0-flash-latest", "test", ForecastingConfig()))
         assert result.model_probability == 0.5
         assert "Circuit breaker open" in result.error
         cb.reset()

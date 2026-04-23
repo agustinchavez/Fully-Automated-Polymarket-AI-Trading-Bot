@@ -93,6 +93,7 @@ class PreflightChecker:
             self.check_db_backup,
             self.check_budget_caps,
             self.check_alert_channels,
+            self.check_model_availability,
         ]
 
         for check_fn in checks:
@@ -356,4 +357,107 @@ class PreflightChecker:
             passed=False,
             message="No alert channels configured — configure at least one",
             required=False,
+        )
+
+    def check_model_availability(self) -> CheckResult:
+        """Validate configured LLM models respond with a cheap test call."""
+        import asyncio
+
+        models_to_check: list[tuple[str, str]] = []
+        fc = self._config.forecasting
+        ec = self._config.ensemble
+
+        # Evidence model + fallbacks
+        models_to_check.append(("evidence", fc.evidence_model))
+        for m in getattr(fc, "evidence_fallback_models", [])[:2]:
+            models_to_check.append(("evidence_fallback", m))
+
+        # Ensemble models (test primary two only — keep preflight fast)
+        for m in ec.models[:2]:
+            models_to_check.append(("ensemble", m))
+
+        failures: list[str] = []
+        warnings: list[str] = []
+
+        async def _probe(role: str, model: str) -> tuple[str, str, bool]:
+            """Send a 1-token prompt. Returns (model, error_or_empty, ok)."""
+            try:
+                if "gemini" in model:
+                    import google.generativeai as genai
+
+                    genai.configure(
+                        api_key=os.environ.get("GOOGLE_API_KEY", ""),
+                    )
+                    gm = genai.GenerativeModel(model)
+                    await asyncio.wait_for(
+                        asyncio.to_thread(gm.generate_content, "hi"),
+                        timeout=10,
+                    )
+                elif "claude" in model:
+                    import anthropic
+
+                    client = anthropic.AsyncAnthropic()
+                    await asyncio.wait_for(
+                        client.messages.create(
+                            model=model,
+                            max_tokens=1,
+                            messages=[{"role": "user", "content": "hi"}],
+                        ),
+                        timeout=10,
+                    )
+                else:
+                    from openai import AsyncOpenAI
+
+                    client = AsyncOpenAI()
+                    await asyncio.wait_for(
+                        client.chat.completions.create(
+                            model=model,
+                            max_tokens=1,
+                            messages=[{"role": "user", "content": "hi"}],
+                        ),
+                        timeout=10,
+                    )
+                return (model, "", True)
+            except Exception as e:
+                return (model, str(e)[:100], False)
+
+        async def _run_probes() -> list[tuple[str, str, bool]]:
+            tasks = [_probe(role, m) for role, m in models_to_check]
+            return await asyncio.gather(*tasks)
+
+        try:
+            results = asyncio.run(_run_probes())
+        except RuntimeError:
+            loop = asyncio.new_event_loop()
+            results = loop.run_until_complete(_run_probes())
+            loop.close()
+
+        for model, err, ok in results:
+            if not ok:
+                if model == fc.evidence_model:
+                    failures.append(f"{model}: {err}")
+                else:
+                    warnings.append(f"{model}: {err}")
+
+        if failures:
+            return CheckResult(
+                name="model_availability",
+                passed=False,
+                required=True,
+                message=(
+                    f"Primary models unavailable: {failures}. "
+                    f"Fallbacks: {warnings or 'ok'}"
+                ),
+            )
+        if warnings:
+            return CheckResult(
+                name="model_availability",
+                passed=True,
+                required=False,
+                message=f"All primary models OK. Fallback issues: {warnings}",
+            )
+        return CheckResult(
+            name="model_availability",
+            passed=True,
+            message=f"All {len(models_to_check)} models responded OK",
         )

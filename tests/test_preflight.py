@@ -321,13 +321,24 @@ class TestPreflightFullRun:
     def test_run_all_returns_report(self):
         conn = _create_test_db()
         checker = PreflightChecker(_cfg(), conn)
+        # Mock model availability to avoid real API calls in tests
+        mock_result = CheckResult(
+            name="model_availability", passed=True,
+            message="All models OK (mocked)",
+        )
+        checker.check_model_availability = lambda: mock_result
         report = checker.run_all()
-        assert len(report.checks) == 7
+        assert len(report.checks) == 8
 
     def test_run_without_conn(self):
         checker = PreflightChecker(_cfg())
+        mock_result = CheckResult(
+            name="model_availability", passed=True,
+            message="All models OK (mocked)",
+        )
+        checker.check_model_availability = lambda: mock_result
         report = checker.run_all()
-        assert len(report.checks) == 7
+        assert len(report.checks) == 8
         # Most DB-dependent checks should fail
         assert not report.ready_for_live
 

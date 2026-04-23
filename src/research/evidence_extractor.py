@@ -351,16 +351,58 @@ class EvidenceExtractor:
             sources_block=sources_block,
         )
 
-        try:
-            evidence_model = getattr(
-                self._config, "evidence_model", self._config.llm_model,
+        # ── Fallback chain: try each provider in sequence ──────────
+        evidence_model = getattr(
+            self._config, "evidence_model", self._config.llm_model,
+        )
+        fallbacks = list(getattr(self._config, "evidence_fallback_models", []))
+        candidates = [evidence_model] + [m for m in fallbacks if m != evidence_model]
+
+        raw_text = None
+        last_error: Exception | None = None
+
+        for candidate in candidates:
+            try:
+                if "gemini" in candidate:
+                    raw_text = await self._call_gemini(candidate, prompt)
+                elif "claude" in candidate or "anthropic" in candidate:
+                    raw_text = await self._call_anthropic(candidate, prompt)
+                else:
+                    raw_text = await self._call_openai(candidate, prompt)
+                if candidate != evidence_model:
+                    log.warning(
+                        "evidence_extractor.using_fallback",
+                        primary=evidence_model,
+                        fallback=candidate,
+                        market_id=market_id,
+                    )
+                break  # success — stop trying
+            except Exception as e:
+                last_error = e
+                log.warning(
+                    "evidence_extractor.provider_failed",
+                    model=candidate,
+                    market_id=market_id,
+                    error=str(e)[:120],
+                )
+                continue
+
+        if raw_text is None:
+            log.error(
+                "evidence_extractor.all_providers_failed",
+                market_id=market_id,
+                error=str(last_error),
+            )
+            return EvidencePackage(
+                market_id=market_id,
+                question=question,
+                market_type=market_type,
+                quality_score=0.0,
+                num_sources=len(sources),
+                summary=f"All evidence providers failed: {last_error}",
             )
 
-            if "gemini" in evidence_model:
-                raw_text = await self._call_gemini(evidence_model, prompt)
-            else:
-                raw_text = await self._call_openai(evidence_model, prompt)
-
+        try:
             raw_text = raw_text.strip()
             if raw_text.startswith("```"):
                 raw_text = raw_text.split("\n", 1)[1] if "\n" in raw_text else raw_text[3:]
@@ -435,6 +477,33 @@ class EvidenceExtractor:
             model,
             input_tokens=getattr(usage_meta, "prompt_token_count", 0) or 0,
             output_tokens=getattr(usage_meta, "candidates_token_count", 0) or 0,
+        )
+        return raw_text
+
+    async def _call_anthropic(self, model: str, prompt: str) -> str:
+        """Call Anthropic Claude API for evidence extraction."""
+        import anthropic
+
+        client = anthropic.AsyncAnthropic()
+        resp = await asyncio.wait_for(
+            client.messages.create(
+                model=model,
+                max_tokens=self._config.llm_max_tokens,
+                temperature=0.1,
+                system=(
+                    "You are a precise research analyst. "
+                    "Return only valid JSON. Never fabricate data."
+                ),
+                messages=[{"role": "user", "content": prompt}],
+            ),
+            timeout=60,
+        )
+        raw_text = resp.content[0].text if resp.content else "{}"
+        usage = getattr(resp, "usage", None)
+        cost_tracker.record_call(
+            model,
+            input_tokens=getattr(usage, "input_tokens", 0) or 0,
+            output_tokens=getattr(usage, "output_tokens", 0) or 0,
         )
         return raw_text
 

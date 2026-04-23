@@ -383,7 +383,7 @@ class TestEvidenceExtractor:
             pkg = await extractor.extract("mkt-1", "Q", sources, "MACRO")
 
         assert pkg.quality_score == 0.0
-        assert "LLM extraction failed" in pkg.summary
+        assert "All evidence providers failed" in pkg.summary
 
     @pytest.mark.asyncio
     async def test_markdown_fences_stripped(self):

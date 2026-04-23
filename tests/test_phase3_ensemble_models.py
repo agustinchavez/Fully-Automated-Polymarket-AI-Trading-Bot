@@ -82,7 +82,7 @@ class TestProviderRouting:
     def test_existing_routes_unchanged(self) -> None:
         assert _route_model("gpt-4o") == "openai"
         assert _route_model("claude-sonnet-4-6") == "anthropic"
-        assert _route_model("gemini-2.0-flash") == "google"
+        assert _route_model("gemini-2.0-flash-latest") == "google"
 
 
 # ── No-key behavior — Grok ───────────────────────────────────────────
@@ -420,7 +420,7 @@ class TestConfig:
     def test_model_tier_config_premium_includes_new_models(self) -> None:
         # Check that the default ModelTierConfig can accept new models
         cfg = ModelTierConfig(
-            premium_models=["gpt-4o", "claude-sonnet-4-6", "gemini-2.0-flash",
+            premium_models=["gpt-4o", "claude-sonnet-4-6", "gemini-2.0-flash-latest",
                             "grok-4-fast-reasoning", "deepseek-chat"]
         )
         assert "grok-4-fast-reasoning" in cfg.premium_models

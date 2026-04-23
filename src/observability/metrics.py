@@ -137,6 +137,7 @@ _DEFAULT_COSTS: dict[str, float] = {
     "claude-haiku-4-5-20251001": 0.001,
     "gemini-1.5-pro": 0.003,
     "gemini-2.0-flash": 0.0003,
+    "gemini-2.0-flash-latest": 0.0003,   # alias
     "grok-4-fast-reasoning": 0.010,      # xAI: ~$10/1M tokens
     "deepseek-chat": 0.0003,             # DeepSeek: ~$0.27/1M input
     "serpapi": 0.005,                    # $50/5K searches
@@ -152,6 +153,7 @@ _TOKEN_COSTS: dict[str, tuple[float, float]] = {
     "claude-haiku-4-5-20251001": (0.80e-6, 4.00e-6),
     "claude-3-5-sonnet-20241022": (3.00e-6, 15.00e-6),
     "gemini-2.0-flash": (0.10e-6, 0.40e-6),
+    "gemini-2.0-flash-latest": (0.10e-6, 0.40e-6),  # alias
     "gemini-1.5-pro": (1.25e-6, 5.00e-6),
     "grok-4-fast-reasoning": (5.00e-6, 15.00e-6),
     "deepseek-chat": (0.27e-6, 1.10e-6),

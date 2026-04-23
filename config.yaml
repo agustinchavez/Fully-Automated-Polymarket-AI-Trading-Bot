@@ -150,7 +150,10 @@ research:
     - substack.com
 forecasting:
   llm_model: gpt-4o
-  evidence_model: gemini-2.0-flash
+  evidence_model: gemini-2.0-flash-latest
+  evidence_fallback_models:
+    - gpt-4o-mini
+    - claude-haiku-4-5-20251001
   llm_temperature: 0.2
   llm_max_tokens: 1500
   low_evidence_penalty: 0.15
@@ -166,7 +169,7 @@ ensemble:
   models:
     - gpt-4o
     - claude-haiku-4-5-20251001
-    - gemini-2.0-flash
+    - gemini-2.0-flash-latest
     - grok-4-fast-reasoning
     - deepseek-chat
   aggregation: median
@@ -256,6 +259,7 @@ alerts:
   alert_on_kill_switch: true
   daily_summary_enabled: true
   daily_summary_hour: 18
+  zero_trade_alert_cycles: 20   # ~60 minutes at 3-min cycle interval
   # Email alerts via SMTP (set credentials in .env: SMTP_HOST, SMTP_PORT,
   # SMTP_USER, SMTP_PASS, ALERT_EMAIL_FROM, ALERT_EMAIL_TO)
   # Gmail: smtp.gmail.com:587 with App Password
@@ -288,7 +292,7 @@ model_tiers:
   premium_models:
     - gpt-4o
     - claude-haiku-4-5-20251001
-    - gemini-2.0-flash
+    - gemini-2.0-flash-latest
     - grok-4-fast-reasoning
     - deepseek-chat
   premium_min_volume_usd: 5000.0

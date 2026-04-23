@@ -117,6 +117,8 @@ class TradingEngine:
         self._running = False
         self._cycle_count = 0
         self._cycle_history: list[CycleResult] = []
+        self._consecutive_no_trade_cycles: int = 0
+        self._budget_warning_sent: bool = False
 
         bankroll = self.config.risk.bankroll
         self.drawdown = DrawdownManager(bankroll, self.config)
@@ -628,6 +630,65 @@ class TradingEngine:
             log.warning("engine.daily_pnl_kill_check_error", error=str(e))
         return False
 
+    async def _maybe_alert_zero_trade_stall(self) -> None:
+        """Alert when no trades have been placed for N consecutive cycles."""
+        threshold = getattr(
+            self.config.alerts, "zero_trade_alert_cycles", 20,
+        )
+        if self._consecutive_no_trade_cycles < threshold:
+            return
+        if self._consecutive_no_trade_cycles % threshold != 0:
+            return  # only fire once per threshold, not every cycle
+
+        # Diagnose the most likely cause from recent violations
+        cause = "unknown — check logs"
+        if self._db:
+            try:
+                rows = self._db.conn.execute(
+                    "SELECT decision_reasons FROM candidates "
+                    "ORDER BY created_at DESC LIMIT 50",
+                ).fetchall()
+                all_reasons = " ".join(
+                    (r["decision_reasons"] or "") for r in rows
+                )
+                if "EVIDENCE_QUALITY" in all_reasons:
+                    cause = "evidence_quality=0 — check evidence extractor API keys"
+                elif "LOW_CONFIDENCE" in all_reasons:
+                    cause = "all forecasts LOW confidence — ensemble may be degraded"
+                elif "MIN_EDGE" in all_reasons:
+                    cause = "no markets meeting min edge threshold"
+            except Exception:
+                pass
+
+        mins = round(
+            self._consecutive_no_trade_cycles
+            * self.config.scanning.cycle_interval_secs
+            / 60,
+        )
+        message = (
+            f"No trades placed in {self._consecutive_no_trade_cycles} consecutive "
+            f"cycles (~{mins} minutes).\n"
+            f"Most likely cause: {cause}\n"
+            f"Check: dashboard Decisions tab, errors.log"
+        )
+        if self._alert_manager:
+            import asyncio as _aio
+
+            _aio.ensure_future(
+                self._alert_manager.send(
+                    "warning",
+                    f"Zero trades for ~{mins} minutes",
+                    message,
+                    cooldown_key="zero_trade_stall",
+                    cooldown_secs=3600,
+                ),
+            )
+        log.warning(
+            "engine.zero_trade_stall",
+            cycles=self._consecutive_no_trade_cycles,
+            cause=cause,
+        )
+
     async def _maybe_send_daily_summary(self) -> None:
         """Send daily summary at the configured hour (once per day)."""
         if not self._db:
@@ -805,6 +866,56 @@ class TradingEngine:
                 can_spend, remaining = cost_tracker.check_budget(
                     self.config.budget.daily_limit_usd,
                 )
+
+                # ── Warning at warning_pct (default 80%) ─────────
+                if can_spend and not self._budget_warning_sent:
+                    daily_cost = cost_tracker.daily_cost
+                    limit = self.config.budget.daily_limit_usd
+                    pct_used = daily_cost / limit if limit > 0 else 0
+                    warn_pct = self.config.budget.warning_pct
+                    if pct_used >= warn_pct:
+                        self._budget_warning_sent = True
+                        remaining_hrs = (
+                            (limit - daily_cost)
+                            / (daily_cost / max(1, self._cycle_count))
+                            * (self.config.scanning.cycle_interval_secs / 3600)
+                            if daily_cost > 0
+                            else 0
+                        )
+                        msg = (
+                            f"Daily API budget {pct_used:.0%} used "
+                            f"(${daily_cost:.2f} of ${limit:.2f}).\n"
+                            f"Estimated ~{remaining_hrs:.1f}h of credits remaining today.\n"
+                            f"Top up at: console.anthropic.com, platform.openai.com, "
+                            f"aistudio.google.com"
+                        )
+                        if self._db:
+                            self._db.insert_alert("warning", msg, "budget")
+                        if self._alert_manager:
+                            import asyncio as _aio
+
+                            _aio.ensure_future(
+                                self._alert_manager.send(
+                                    "warning",
+                                    f"API budget at {pct_used:.0%}",
+                                    msg,
+                                    cooldown_key="budget_warning",
+                                    cooldown_secs=7200,
+                                ),
+                            )
+                        log.warning(
+                            "engine.budget_warning",
+                            pct_used=round(pct_used, 3),
+                            remaining_usd=round(remaining, 2),
+                        )
+
+                # ── Reset warning flag on new day ─────────────────
+                if not can_spend or cost_tracker.daily_cost < (
+                    self.config.budget.daily_limit_usd * 0.5
+                ):
+                    self._budget_warning_sent = False
+
+                # ── Hard stop at 100% ─────────────────────────────
                 if not can_spend:
                     log.warning(
                         "engine.budget_exhausted",
@@ -978,6 +1089,9 @@ class TradingEngine:
             # ── Invariant Checks ───────────────────────────────────
             self._maybe_check_invariants()
 
+            # ── Zero-Trade Stall Detection ────────────────────────
+            await self._maybe_alert_zero_trade_stall()
+
             cycle.status = "completed"
 
         except Exception as e:
@@ -1006,6 +1120,12 @@ class TradingEngine:
 
         # Collect API cost summary for this cycle
         cycle_costs = cost_tracker.end_cycle()
+
+        # Track consecutive no-trade cycles for stall detection
+        if cycle.trades_executed > 0:
+            self._consecutive_no_trade_cycles = 0
+        else:
+            self._consecutive_no_trade_cycles += 1
 
         log.info(
             "engine.cycle_complete",

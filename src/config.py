@@ -120,7 +120,7 @@ class ResearchConfig(BaseModel):
 
 class ForecastingConfig(BaseModel):
     llm_model: str = "gpt-4o"
-    evidence_model: str = "gemini-2.0-flash"
+    evidence_model: str = "gemini-2.0-flash-latest"
     llm_temperature: float = 0.2
     llm_max_tokens: int = 1500
     calibration_method: str = "platt"
@@ -128,6 +128,9 @@ class ForecastingConfig(BaseModel):
     min_evidence_quality: float = 0.55
     min_confidence_level: str = "MEDIUM"  # Reject LOW confidence trades
     category_min_confidence: dict[str, str] = Field(default_factory=dict)  # per-category override
+    evidence_fallback_models: list[str] = Field(
+        default_factory=lambda: ["gpt-4o-mini", "claude-haiku-4-5-20251001"]
+    )
     # Phase 2: Structured forecasting
     prompt_version: str = "v1"  # v1 (legacy) or v2 (structured reasoning chain)
     base_rate_enabled: bool = False  # inject base rates into prompt
@@ -149,7 +152,7 @@ class EnsembleConfig(BaseModel):
     """Multi-model ensemble configuration."""
     enabled: bool = True
     models: list[str] = Field(default_factory=lambda: [
-        "gpt-4o", "claude-haiku-4-5-20251001", "gemini-2.0-flash",
+        "gpt-4o", "claude-haiku-4-5-20251001", "gemini-2.0-flash-latest",
         "grok-4-fast-reasoning", "deepseek-chat",
     ])
     aggregation: str = "median"  # trimmed_mean | median | weighted
@@ -157,7 +160,7 @@ class EnsembleConfig(BaseModel):
     weights: dict[str, float] = Field(default_factory=lambda: {
         "gpt-4o": 0.25,
         "claude-haiku-4-5-20251001": 0.25,
-        "gemini-2.0-flash": 0.20,
+        "gemini-2.0-flash-latest": 0.20,
         "grok-4-fast-reasoning": 0.15,
         "deepseek-chat": 0.15,
     })
@@ -199,7 +202,7 @@ class ModelTierConfig(BaseModel):
     scout_models: list[str] = Field(default_factory=lambda: ["gpt-4o-mini"])
     standard_models: list[str] = Field(default_factory=lambda: ["gpt-4o"])
     premium_models: list[str] = Field(default_factory=lambda: [
-        "gpt-4o", "claude-haiku-4-5-20251001", "gemini-2.0-flash",
+        "gpt-4o", "claude-haiku-4-5-20251001", "gemini-2.0-flash-latest",
     ])
     premium_min_volume_usd: float = 10000.0
     premium_min_edge: float = 0.06
@@ -472,6 +475,7 @@ class AlertsConfig(BaseModel):
     daily_summary_hour: int = 18
     min_alert_interval_secs: int = 60
     min_alert_level: str = "info"  # info | warning | critical
+    zero_trade_alert_cycles: int = 20  # alert after N consecutive no-trade cycles
 
     @property
     def telegram_token(self) -> str:
