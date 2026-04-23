@@ -252,7 +252,7 @@ observability:
 alerts:
   enabled: true
   min_alert_level: info
-  alert_on_trade: true
+  alert_on_trade: false
   alert_on_risk_breach: true
   alert_on_drawdown_warning: true
   alert_on_system_error: true
