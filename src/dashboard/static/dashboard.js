@@ -7246,7 +7246,8 @@ function renderModelIntelligencePanel(weights, history, accuracy) {
             'gpt-4o':               'rgba(41, 121, 255, 0.7)',
             'claude-sonnet-4-6':    'rgba(168, 85, 247, 0.7)',
             'claude-haiku-4-5-20251001': 'rgba(168, 85, 247, 0.7)',
-            'gemini-2.0-flash-latest':     'rgba(0, 200, 83, 0.7)',
+            'gemini-2.5-flash':            'rgba(0, 200, 83, 0.7)',
+            'gemini-2.5-flash-lite':       'rgba(0, 200, 83, 0.5)',
             'grok-4-fast-reasoning':'rgba(255, 109, 0, 0.7)',
             'deepseek-chat':        'rgba(0, 188, 212, 0.7)',
         };

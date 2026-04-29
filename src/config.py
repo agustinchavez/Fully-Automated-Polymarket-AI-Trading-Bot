@@ -82,8 +82,8 @@ class ResearchConfig(BaseModel):
     google_trends_enabled: bool = False
     reddit_sentiment_enabled: bool = False
     pubmed_enabled: bool = False
-    metaculus_min_forecasters: int = 20
-    metaculus_min_jaccard: float = 0.60
+    metaculus_min_forecasters: int = 10
+    metaculus_min_jaccard: float = 0.20
     wikipedia_cache_ttl_secs: int = 14400  # 4 hours
     google_trends_volume_threshold_usd: float = 50000.0
     reddit_client_id: str = ""
@@ -120,7 +120,7 @@ class ResearchConfig(BaseModel):
 
 class ForecastingConfig(BaseModel):
     llm_model: str = "gpt-4o"
-    evidence_model: str = "gemini-2.0-flash-latest"
+    evidence_model: str = "gemini-2.5-flash-lite"
     llm_temperature: float = 0.2
     llm_max_tokens: int = 1500
     calibration_method: str = "platt"
@@ -152,7 +152,7 @@ class EnsembleConfig(BaseModel):
     """Multi-model ensemble configuration."""
     enabled: bool = True
     models: list[str] = Field(default_factory=lambda: [
-        "gpt-4o", "claude-haiku-4-5-20251001", "gemini-2.0-flash-latest",
+        "gpt-4o", "claude-haiku-4-5-20251001", "gemini-2.5-flash",
         "grok-4-fast-reasoning", "deepseek-chat",
     ])
     aggregation: str = "median"  # trimmed_mean | median | weighted
@@ -160,7 +160,7 @@ class EnsembleConfig(BaseModel):
     weights: dict[str, float] = Field(default_factory=lambda: {
         "gpt-4o": 0.25,
         "claude-haiku-4-5-20251001": 0.25,
-        "gemini-2.0-flash-latest": 0.20,
+        "gemini-2.5-flash": 0.20,
         "grok-4-fast-reasoning": 0.15,
         "deepseek-chat": 0.15,
     })
@@ -202,7 +202,7 @@ class ModelTierConfig(BaseModel):
     scout_models: list[str] = Field(default_factory=lambda: ["gpt-4o-mini"])
     standard_models: list[str] = Field(default_factory=lambda: ["gpt-4o"])
     premium_models: list[str] = Field(default_factory=lambda: [
-        "gpt-4o", "claude-haiku-4-5-20251001", "gemini-2.0-flash-latest",
+        "gpt-4o", "claude-haiku-4-5-20251001", "gemini-2.5-flash",
     ])
     premium_min_volume_usd: float = 10000.0
     premium_min_edge: float = 0.06

@@ -28,7 +28,7 @@ def _tier_cfg(**overrides) -> ModelTierConfig:
         enabled=True,
         scout_models=["gpt-4o-mini"],
         standard_models=["gpt-4o"],
-        premium_models=["gpt-4o", "claude-sonnet-4-6", "gemini-2.0-flash-latest", "grok-4-fast-reasoning", "deepseek-chat"],
+        premium_models=["gpt-4o", "claude-sonnet-4-6", "gemini-2.5-flash", "grok-4-fast-reasoning", "deepseek-chat"],
         premium_min_volume_usd=10000.0,
         premium_min_edge=0.06,
         scout_max_evidence_quality=0.4,

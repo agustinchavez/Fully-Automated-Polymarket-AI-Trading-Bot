@@ -104,14 +104,18 @@ class TestRelevance:
         c = MetaculusConnector()
         assert c.is_relevant("Will AI pass the Turing test?", "SCIENCE")
 
-    def test_relevant_for_all_categories(self) -> None:
+    def test_relevant_for_supported_categories(self) -> None:
         c = MetaculusConnector()
         for cat in [
             "MACRO", "ELECTION", "CORPORATE", "LEGAL", "TECHNOLOGY",
-            "SCIENCE", "GEOPOLITICS", "CRYPTO", "WEATHER", "SPORTS",
-            "ENTERTAINMENT", "TECH", "REGULATION", "UNKNOWN",
+            "SCIENCE", "GEOPOLITICS", "CRYPTO", "REGULATION",
         ]:
             assert c.is_relevant("any question", cat)
+
+    def test_not_relevant_for_excluded_categories(self) -> None:
+        c = MetaculusConnector()
+        for cat in ["WEATHER", "SPORTS", "ENTERTAINMENT", "CULTURE", "UNKNOWN"]:
+            assert not c.is_relevant("any question", cat)
 
 
 class TestFetch:

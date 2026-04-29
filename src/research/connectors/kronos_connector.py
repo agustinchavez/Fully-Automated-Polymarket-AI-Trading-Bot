@@ -246,17 +246,16 @@ class KronosConnector(BaseResearchConnector):
             import pandas as pd
 
             last_price = float(df["close"].iloc[-1])
-            n = len(df)
 
-            # Build timestamps for input and forecast horizon
-            # KronosPredictor.predict -> calc_time_stamps uses .dt accessor,
-            # which requires pd.Series (not DatetimeIndex)
-            x_ts = pd.Series(
-                pd.date_range(end=pd.Timestamp.now(), periods=n, freq="1h")
-            )
+            # Derive timestamps from actual candle data — never use wall clock.
+            # pd.Timestamp.now() causes tensor size mismatch because the model
+            # re-derives its expected sequence length from the data boundary,
+            # not from the current time. Off-by-1h to off-by-4h errors result.
+            x_ts = pd.Series(df["open_time"].values)
+            last_candle_time = x_ts.iloc[-1]
             y_ts = pd.Series(
                 pd.date_range(
-                    start=x_ts.iloc[-1], periods=_FORECAST_HOURS + 1, freq="1h"
+                    start=last_candle_time, periods=_FORECAST_HOURS + 1, freq="1h"
                 )[1:]
             )
 
@@ -341,7 +340,10 @@ class KronosConnector(BaseResearchConnector):
             for col in ["open", "high", "low", "close", "volume"]:
                 df[col] = df[col].astype(float)
 
-            return df[["open", "high", "low", "close", "volume"]]
+            # Keep open_time so _run_inference can derive timestamps
+            # from actual candle data (not wall clock).
+            df["open_time"] = pd.to_datetime(df["open_time"], unit="ms")
+            return df[["open_time", "open", "high", "low", "close", "volume"]]
 
         except Exception as e:
             log.warning("kronos.binance_fetch_error", symbol=symbol, error=str(e))

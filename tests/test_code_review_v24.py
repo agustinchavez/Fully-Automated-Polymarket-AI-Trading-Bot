@@ -198,7 +198,7 @@ class TestKronosBinanceFetch:
         df = await connector._fetch_binance_candles("BTC")
         assert df is not None
         assert len(df) == 100
-        assert list(df.columns) == ["open", "high", "low", "close", "volume"]
+        assert list(df.columns) == ["open_time", "open", "high", "low", "close", "volume"]
         assert df["close"].iloc[0] == 40200.0
 
     @pytest.mark.asyncio
@@ -228,10 +228,11 @@ class TestKronosInference:
         import pandas as pd
         from src.research.connectors.kronos_connector import KronosConnector
 
-        # Build mock OHLCV dataframe
+        # Build mock OHLCV dataframe with open_time
         n = 100
         closes = np.linspace(40000, 41000, n)
         df = pd.DataFrame({
+            "open_time": pd.date_range(end=pd.Timestamp.now(), periods=n, freq="1h"),
             "open": closes - 50,
             "high": closes + 100,
             "low": closes - 100,
@@ -262,6 +263,7 @@ class TestKronosInference:
         mock_predictor.predict.side_effect = RuntimeError("Model error")
 
         df = pd.DataFrame({
+            "open_time": [pd.Timestamp.now()],
             "open": [100], "high": [105], "low": [95],
             "close": [102], "volume": [50],
         })
@@ -294,10 +296,11 @@ class TestKronosFetchImpl:
             KronosConnector, _KronosSingleton,
         )
 
-        # Mock Binance candles
+        # Mock Binance candles (with open_time for timestamp alignment)
         n = 100
         closes = np.linspace(40000, 41000, n)
         mock_df = pd.DataFrame({
+            "open_time": pd.date_range(end=pd.Timestamp.now(), periods=n, freq="1h"),
             "open": closes - 50, "high": closes + 100,
             "low": closes - 100, "close": closes,
             "volume": np.random.uniform(50, 150, n),

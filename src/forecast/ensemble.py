@@ -747,7 +747,7 @@ class EnsembleForecaster:
                 alt_models = {
                     "openai": "gpt-4o",
                     "anthropic": "claude-haiku-4-5-20251001",
-                    "google": "gemini-2.0-flash-latest",
+                    "google": "gemini-2.5-flash",
                     "xai": "grok-4-fast-reasoning",
                     "deepseek": "deepseek-chat",
                 }

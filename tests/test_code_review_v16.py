@@ -199,7 +199,7 @@ class TestStaleModelRemoved:
         """All 5 active ensemble models are in _DEFAULT_COSTS."""
         from src.observability.metrics import _DEFAULT_COSTS
         active_models = [
-            "gpt-4o", "claude-haiku-4-5-20251001", "gemini-2.0-flash-latest",
+            "gpt-4o", "claude-haiku-4-5-20251001", "gemini-2.5-flash",
             "grok-4-fast-reasoning", "deepseek-chat",
         ]
         for model in active_models:
@@ -209,7 +209,7 @@ class TestStaleModelRemoved:
         """All 5 active ensemble models are in _TOKEN_COSTS."""
         from src.observability.metrics import _TOKEN_COSTS
         active_models = [
-            "gpt-4o", "claude-haiku-4-5-20251001", "gemini-2.0-flash-latest",
+            "gpt-4o", "claude-haiku-4-5-20251001", "gemini-2.5-flash",
             "grok-4-fast-reasoning", "deepseek-chat",
         ]
         for model in active_models:

@@ -198,7 +198,7 @@ class TestEvidenceModelGating:
         from src.forecast.ensemble import EnsembleForecaster
 
         cfg = EnsembleConfig(
-            models=["gpt-4o", "claude-sonnet-4-6", "gemini-2.0-flash-latest",
+            models=["gpt-4o", "claude-sonnet-4-6", "gemini-2.5-flash",
                     "grok-4-fast-reasoning", "deepseek-chat"],
             evidence_model_gating_enabled=True,
             evidence_low_quality_threshold=0.25,
@@ -248,7 +248,7 @@ class TestEvidenceModelGating:
         from src.forecast.ensemble import EnsembleForecaster
 
         cfg = EnsembleConfig(
-            models=["gpt-4o", "claude-sonnet-4-6", "gemini-2.0-flash-latest",
+            models=["gpt-4o", "claude-sonnet-4-6", "gemini-2.5-flash",
                     "grok-4-fast-reasoning", "deepseek-chat"],
             evidence_model_gating_enabled=True,
         )
@@ -295,7 +295,7 @@ class TestEvidenceModelGating:
         from src.forecast.ensemble import EnsembleForecaster
 
         cfg = EnsembleConfig(
-            models=["gpt-4o", "claude-sonnet-4-6", "gemini-2.0-flash-latest",
+            models=["gpt-4o", "claude-sonnet-4-6", "gemini-2.5-flash",
                     "grok-4-fast-reasoning", "deepseek-chat"],
             evidence_model_gating_enabled=True,
         )
@@ -342,7 +342,7 @@ class TestEvidenceModelGating:
         from src.forecast.ensemble import EnsembleForecaster
 
         cfg = EnsembleConfig(
-            models=["gpt-4o", "claude-sonnet-4-6", "gemini-2.0-flash-latest",
+            models=["gpt-4o", "claude-sonnet-4-6", "gemini-2.5-flash",
                     "grok-4-fast-reasoning", "deepseek-chat"],
             evidence_model_gating_enabled=False,  # disabled
         )
@@ -388,7 +388,7 @@ class TestEvidenceModelGating:
         from src.forecast.ensemble import EnsembleForecaster
 
         cfg = EnsembleConfig(
-            models=["gpt-4o", "claude-sonnet-4-6", "gemini-2.0-flash-latest"],
+            models=["gpt-4o", "claude-sonnet-4-6", "gemini-2.5-flash"],
             evidence_model_gating_enabled=True,
         )
         forecaster = EnsembleForecaster(cfg, ForecastingConfig())

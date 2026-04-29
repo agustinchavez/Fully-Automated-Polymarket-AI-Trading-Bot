@@ -145,8 +145,8 @@ class TestCategoryCooldowns:
 
         config = load_config()
         ccm = config.scanning.category_cooldown_minutes
-        assert ccm.get("SPORTS") == 20
-        assert ccm.get("GEOPOLITICS") == 120
+        assert ccm.get("SPORTS") == 60
+        assert ccm.get("GEOPOLITICS") == 60
 
     def test_filter_markets_passes_category(self) -> None:
         """filter_markets passes category to was_recently_researched."""
@@ -212,14 +212,14 @@ class TestStakeMultipliers:
 
         config = load_config()
         m = config.risk.category_stake_multipliers
-        assert m.get("SPORTS") == 1.3
+        assert m.get("SPORTS") == 0.8
 
     def test_geopolitics_multiplier(self) -> None:
         from src.config import load_config
 
         config = load_config()
         m = config.risk.category_stake_multipliers
-        assert m.get("GEOPOLITICS") == 0.6
+        assert m.get("GEOPOLITICS") == 1.1
 
     def test_crypto_multiplier(self) -> None:
         from src.config import load_config

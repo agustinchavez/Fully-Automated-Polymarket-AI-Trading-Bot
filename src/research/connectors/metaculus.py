@@ -40,10 +40,12 @@ class MetaculusConnector(BaseResearchConnector):
         return "metaculus"
 
     def relevant_categories(self) -> set[str]:
+        # Metaculus covers long-horizon forecasting on policy, economics,
+        # geopolitics, technology and science. It does NOT cover sports,
+        # weather, entertainment or esports — those calls are wasted.
         return {
-            "MACRO", "ELECTION", "CORPORATE", "LEGAL", "TECHNOLOGY",
-            "SCIENCE", "GEOPOLITICS", "CRYPTO", "WEATHER", "SPORTS",
-            "ENTERTAINMENT", "TECH", "REGULATION", "CULTURE", "UNKNOWN",
+            "MACRO", "ELECTION", "GEOPOLITICS", "CORPORATE",
+            "LEGAL", "TECHNOLOGY", "SCIENCE", "CRYPTO", "REGULATION",
         }
 
     def _get_api_key(self) -> str:
@@ -83,7 +85,7 @@ class MetaculusConnector(BaseResearchConnector):
             params={
                 "search": search_terms,
                 "status": "open",
-                "limit": 5,
+                "limit": 10,   # was 5 — best match is often not in top 5
                 "type": "forecast",
             },
             headers=headers,
@@ -161,9 +163,19 @@ class MetaculusConnector(BaseResearchConnector):
         )]
 
     def _extract_search_terms(self, question: str) -> str:
-        """Extract key search terms from question."""
-        tokens = self._tokenize(question)
-        return " ".join(list(tokens)[:6])
+        """Extract key search terms, preserving order from original question.
+
+        Keeps original left-to-right ordering so named entities (country names,
+        person names, organisation names) appear first and anchor the search.
+        """
+        words = re.findall(r"[a-zA-Z0-9]+", question.lower())
+        seen: set[str] = set()
+        ordered: list[str] = []
+        for w in words:
+            if w not in _STOP_WORDS and len(w) > 1 and w not in seen:
+                ordered.append(w)
+                seen.add(w)
+        return " ".join(ordered[:8])  # up from 6, ordered not shuffled
 
     def _tokenize(self, text: str) -> set[str]:
         """Tokenize text into meaningful words."""

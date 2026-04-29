@@ -443,7 +443,7 @@ class TestProviderCalls:
         from src.analytics.ai_analyst import AIAnalyst, _PROVIDER_DISPATCH
         conn = _create_test_db()
         _populate_test_db(conn, days=30, trades=60)
-        cfg = _make_config(provider="google", model="gemini-2.0-flash-latest")
+        cfg = _make_config(provider="google", model="gemini-2.5-flash")
         analyst = AIAnalyst(conn=conn, config=cfg)
 
         mock_call = AsyncMock(return_value=SAMPLE_JSON_RESPONSE)

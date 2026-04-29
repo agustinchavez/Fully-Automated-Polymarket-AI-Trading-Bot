@@ -1149,10 +1149,11 @@ class TestCultureConnectorRelevance:
         c = ManifoldConnector()
         assert "CULTURE" in c.relevant_categories()
 
-    def test_metaculus_includes_culture(self):
+    def test_metaculus_excludes_culture(self):
+        # Metaculus focuses on policy/economics/science — CULTURE removed
         from src.research.connectors.metaculus import MetaculusConnector
         c = MetaculusConnector()
-        assert "CULTURE" in c.relevant_categories()
+        assert "CULTURE" not in c.relevant_categories()
 
     def test_wikipedia_includes_culture(self):
         from src.research.connectors.wikipedia_pageviews import WikipediaPageviewsConnector

@@ -101,7 +101,7 @@ def _seed_performance_data(conn: sqlite3.Connection, n: int = 20) -> None:
 
 def _seed_model_forecasts(conn: sqlite3.Connection, n: int = 30) -> None:
     """Insert model forecast log entries."""
-    models = ["gpt-4o", "claude-sonnet-4-6", "gemini-2.0-flash-latest"]
+    models = ["gpt-4o", "claude-sonnet-4-6", "gemini-2.5-flash"]
     categories = ["POLITICS", "CRYPTO", "SPORTS"]
     for i in range(n):
         model = models[i % len(models)]
