@@ -36,7 +36,7 @@ class FakeKalshiMarket:
     ticker: str = "KXBTCUSD-25DEC31-T100000"
     title: str = "Will Bitcoin exceed $100,000 by December 31, 2025?"
     category: str = "Crypto"
-    status: str = "active"
+    status: str = "open"
     yes_bid: float = 0.62
     yes_ask: float = 0.65
     no_bid: float = 0.35
@@ -64,7 +64,7 @@ class TestKalshiMarketModel:
 
     def test_default_values(self) -> None:
         m = KalshiMarket(ticker="T", title="Test")
-        assert m.status == "active"
+        assert m.status == "open"
         assert m.result is None
         assert m.volume == 0
 

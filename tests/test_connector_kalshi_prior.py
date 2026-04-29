@@ -229,8 +229,8 @@ class TestFetch:
 
         assert sources == []
 
-    def test_list_markets_exception_returns_empty(self) -> None:
-        """list_markets raising inside _fetch_impl returns [] (internal catch)."""
+    def test_list_markets_exception_propagates_from_fetch_impl(self) -> None:
+        """list_markets exception propagates from _fetch_impl (caught by base class)."""
         c = KalshiPriorConnector()
         mock_kalshi = AsyncMock()
         mock_kalshi.list_markets = AsyncMock(
@@ -240,9 +240,25 @@ class TestFetch:
 
         with patch("src.research.connectors.kalshi_prior.rate_limiter") as mock_rl:
             mock_rl.get.return_value.acquire = AsyncMock()
-            # _fetch_impl has its own try/except for list_markets
+            # _fetch_impl no longer catches — exception propagates
+            with pytest.raises(ConnectionError):
+                asyncio.run(
+                    c._fetch_impl("Will the Fed cut rates?", "MACRO")
+                )
+
+    def test_list_markets_exception_caught_by_base_fetch(self) -> None:
+        """Base class fetch() catches exception and trips circuit breaker."""
+        c = KalshiPriorConnector()
+        mock_kalshi = AsyncMock()
+        mock_kalshi.list_markets = AsyncMock(
+            side_effect=ConnectionError("network error")
+        )
+        c._kalshi_client = mock_kalshi
+
+        with patch("src.research.connectors.kalshi_prior.rate_limiter") as mock_rl:
+            mock_rl.get.return_value.acquire = AsyncMock()
             sources = asyncio.run(
-                c._fetch_impl("Will the Fed cut rates?", "MACRO")
+                c.fetch("Will the Fed cut rates?", "MACRO")
             )
 
         assert sources == []

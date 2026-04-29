@@ -681,7 +681,7 @@ class ArbitrageConfig(BaseModel):
     """Cross-platform and intra-platform arbitrage (Phase 5)."""
     enabled: bool = False
     # Kalshi connector
-    kalshi_api_base: str = "https://trading-api.kalshi.com"
+    kalshi_api_base: str = "https://api.elections.kalshi.com"
     kalshi_api_key_id: str = ""
     kalshi_private_key_path: str = ""
     kalshi_paper_mode: bool = True

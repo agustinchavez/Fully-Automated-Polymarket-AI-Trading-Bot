@@ -115,7 +115,7 @@ class CrossPlatformArbScanner:
             self._kalshi = KalshiClient(
                 base_url=getattr(
                     self._config, "kalshi_api_base",
-                    "https://trading-api.kalshi.com",
+                    "https://api.elections.kalshi.com",
                 ),
                 api_key_id=getattr(self._config, "kalshi_api_key_id", ""),
                 private_key_path=getattr(
@@ -142,7 +142,7 @@ class CrossPlatformArbScanner:
         kalshi = self._ensure_kalshi()
 
         try:
-            kalshi_markets = await kalshi.list_markets(status="active")
+            kalshi_markets = await kalshi.list_markets(status="open")
         except Exception as e:
             log.warning("cross_platform_arb.kalshi_fetch_error", error=str(e))
             return []

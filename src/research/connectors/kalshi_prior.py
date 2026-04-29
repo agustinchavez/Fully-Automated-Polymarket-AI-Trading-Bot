@@ -4,12 +4,11 @@ Wraps existing KalshiClient + MarketMatcher to fetch the current
 Kalshi price for a matched market. Returns a FetchedSource plus
 a ``consensus_signal`` dict in ``raw`` for the signal aggregator.
 
-No API key needed for public price reads.
+Requires RSA-PSS authentication (KALSHI_API_KEY_ID + KALSHI_PRIVATE_KEY_PATH).
 """
 
 from __future__ import annotations
 
-import os
 from dataclasses import dataclass
 from typing import Any
 
@@ -68,11 +67,9 @@ class KalshiPriorConnector(BaseResearchConnector):
         matcher = self._get_matcher()
 
         # Search Kalshi for markets related to the question
-        try:
-            kalshi_markets = await client.list_markets(status="active", limit=50)
-        except Exception as e:
-            log.debug("kalshi_prior.list_failed", error=str(e))
-            return []
+        # Let exceptions propagate to BaseResearchConnector.fetch()
+        # so the circuit breaker trips on persistent failures (e.g. 401).
+        kalshi_markets = await client.list_markets(status="open", limit=50)
 
         if not kalshi_markets:
             return []

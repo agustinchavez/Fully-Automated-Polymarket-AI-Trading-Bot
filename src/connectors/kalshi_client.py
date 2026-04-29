@@ -6,7 +6,7 @@ Handles:
   - Order placement (paper mode by default)
   - Position management
 
-Kalshi API docs: https://trading-api.readme.io/reference
+Kalshi API docs: https://docs.kalshi.com/
 Authentication: RSA-PSS signing of ``timestamp + method + path``.
 """
 
@@ -44,7 +44,7 @@ class KalshiMarket:
     ticker: str
     title: str
     category: str = ""
-    status: str = "active"       # "active" | "settled" | "closed"
+    status: str = "open"          # "open" | "settled" | "closed"
     yes_bid: float = 0.0
     yes_ask: float = 1.0
     no_bid: float = 0.0
@@ -130,16 +130,16 @@ def _parse_kalshi_market(raw: dict[str, Any]) -> KalshiMarket:
         ticker=raw.get("ticker", ""),
         title=raw.get("title", ""),
         category=raw.get("category", ""),
-        status=raw.get("status", "active"),
+        status=raw.get("status", "open"),
         yes_bid=_kalshi_price(raw, "yes_bid_dollars", "yes_bid", 0.0),
         yes_ask=_kalshi_price(raw, "yes_ask_dollars", "yes_ask", 1.0),
         no_bid=_kalshi_price(raw, "no_bid_dollars", "no_bid", 0.0),
         no_ask=_kalshi_price(raw, "no_ask_dollars", "no_ask", 1.0),
-        volume=int(raw.get("volume", 0)),
-        open_interest=int(raw.get("open_interest", 0)),
+        volume=int(float(raw.get("volume_fp", raw.get("volume", 0)))),
+        open_interest=int(float(raw.get("open_interest_fp", raw.get("open_interest", 0)))),
         expiration_time=raw.get("expiration_time", ""),
         result=raw.get("result"),
-        subtitle=raw.get("subtitle", ""),
+        subtitle=raw.get("subtitle", raw.get("yes_sub_title", "")),
         event_ticker=raw.get("event_ticker", ""),
     )
 
@@ -149,7 +149,7 @@ class KalshiClient:
 
     def __init__(
         self,
-        base_url: str = "https://trading-api.kalshi.com",
+        base_url: str = "https://api.elections.kalshi.com",
         api_key_id: str = "",
         private_key_path: str = "",
         paper_mode: bool = True,
@@ -286,12 +286,14 @@ class KalshiClient:
 
     async def list_markets(
         self,
-        status: str = "active",
+        status: str = "open",
         limit: int = 100,
         cursor: str = "",
     ) -> list[KalshiMarket]:
         """List Kalshi markets with optional filtering."""
-        params: dict[str, Any] = {"status": status, "limit": limit}
+        params: dict[str, Any] = {"limit": limit}
+        if status:
+            params["status"] = status
         if cursor:
             params["cursor"] = cursor
 

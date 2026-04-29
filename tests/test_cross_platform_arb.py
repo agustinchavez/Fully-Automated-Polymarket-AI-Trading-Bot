@@ -106,7 +106,7 @@ class _FakeMarket:
 def _make_config(**overrides: Any) -> MagicMock:
     """Build a mock ArbitrageConfig-like object."""
     defaults = {
-        "kalshi_api_base": "https://trading-api.kalshi.com",
+        "kalshi_api_base": "https://api.elections.kalshi.com",
         "kalshi_api_key_id": "",
         "kalshi_private_key_path": "",
         "kalshi_paper_mode": True,
