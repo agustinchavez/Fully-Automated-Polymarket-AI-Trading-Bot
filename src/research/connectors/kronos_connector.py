@@ -253,6 +253,7 @@ class KronosConnector(BaseResearchConnector):
             # not from the current time. Off-by-1h to off-by-4h errors result.
             x_ts = pd.Series(df["open_time"].values)
             last_candle_time = x_ts.iloc[-1]
+            ohlcv_df = df[["open", "high", "low", "close", "volume"]]
             y_ts = pd.Series(
                 pd.date_range(
                     start=last_candle_time, periods=_FORECAST_HOURS + 1, freq="1h"
@@ -264,7 +265,7 @@ class KronosConnector(BaseResearchConnector):
             path_volatilities: list[float] = []
             for _ in range(_MONTE_CARLO_N):
                 pred = predictor.predict(
-                    df=df,
+                    df=ohlcv_df,
                     x_timestamp=x_ts,
                     y_timestamp=y_ts,
                     pred_len=_FORECAST_HOURS,
