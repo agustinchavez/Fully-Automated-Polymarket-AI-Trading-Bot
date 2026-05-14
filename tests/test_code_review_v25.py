@@ -36,7 +36,7 @@ class TestKronosDeviceParamValid:
 
         source = inspect.getsource(_KronosSingleton.get_predictor)
         assert "device" in source
-        assert "max_context=2048" in source
+        assert "max_context=512" in source
 
 
 # ── Bug 2: Far-future resolution gate ────────────────────────────────

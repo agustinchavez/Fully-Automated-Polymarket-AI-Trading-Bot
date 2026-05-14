@@ -84,8 +84,8 @@ class MetaculusConnector(BaseResearchConnector):
             _METACULUS_API,
             params={
                 "search": search_terms,
-                "status": "open",
-                "limit": 10,   # was 5 — best match is often not in top 5
+                # No status filter — closed questions still have valid predictions
+                "limit": 10,
                 "type": "forecast",
             },
             headers=headers,

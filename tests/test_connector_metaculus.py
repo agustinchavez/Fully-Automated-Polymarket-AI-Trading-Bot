@@ -181,7 +181,7 @@ class TestFetch:
             mock_resp.json.return_value = _make_metaculus_response(
                 title="Will the Fed cut rates?",
                 prob=0.61,
-                forecasters=5,  # Below default min of 20
+                forecasters=5,  # Below fallback min of 20
             )
             mock_resp.raise_for_status = MagicMock()
 

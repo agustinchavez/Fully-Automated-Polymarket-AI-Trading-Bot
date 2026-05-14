@@ -39,6 +39,32 @@ _DATE_RE = re.compile(
 
 _NUMBER_RE = re.compile(r"\b\d+(?:\.\d+)?%?\b")
 
+# Synonym normalisation — map abbreviations/variants to canonical form.
+# Applied before Jaccard scoring so 'btc'=='bitcoin', 'fomc'=='federal reserve'.
+_SYNONYMS: dict[str, str] = {
+    # Crypto tickers
+    "btc": "bitcoin",
+    "eth": "ethereum",
+    "sol": "solana",
+    "xrp": "ripple",
+    # Finance institutions
+    "fomc": "federal reserve",
+    "fed": "federal reserve",
+    "ecb": "european central bank",
+    # Rate variants
+    "rates": "rate",
+    "cuts": "cut",
+    "hikes": "hike",
+    # Political
+    "gop": "republican",
+    "dems": "democrat",
+    "doj": "justice department",
+    # Sports
+    "nba": "basketball",
+    "nfl": "football",
+    "mlb": "baseball",
+}
+
 
 @dataclass
 class MarketMatch:
@@ -177,6 +203,16 @@ class MarketMatcher:
         normalized = re.sub(r"[^\w\s%$.]", " ", normalized)
 
         words = set(normalized.split()) - _STOP_WORDS
+
+        # Expand synonyms before scoring
+        expanded: set[str] = set()
+        for w in words:
+            canonical = _SYNONYMS.get(w, w)
+            if " " in canonical:
+                expanded.update(canonical.split())
+            else:
+                expanded.add(canonical)
+        words = expanded
 
         # Also extract dates and numbers as entities
         dates = _DATE_RE.findall(text)

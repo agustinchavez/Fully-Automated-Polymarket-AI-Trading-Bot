@@ -53,7 +53,7 @@ class KalshiPriorConnector(BaseResearchConnector):
         """Lazy-init MarketMatcher."""
         if self._matcher is None:
             from src.connectors.market_matcher import MarketMatcher
-            self._matcher = MarketMatcher(min_confidence=0.6)
+            self._matcher = MarketMatcher(min_confidence=0.3)
         return self._matcher
 
     async def _fetch_impl(
@@ -66,10 +66,12 @@ class KalshiPriorConnector(BaseResearchConnector):
         client = self._get_kalshi_client()
         matcher = self._get_matcher()
 
-        # Search Kalshi for markets related to the question
+        # Paginate to get full market pool (~500 markets).
         # Let exceptions propagate to BaseResearchConnector.fetch()
         # so the circuit breaker trips on persistent failures (e.g. 401).
-        kalshi_markets = await client.list_markets(status="open", limit=50)
+        kalshi_markets = await client.list_markets_paginated(
+            status="open", max_markets=500,
+        )
 
         if not kalshi_markets:
             return []

@@ -63,7 +63,7 @@ research:
   kalshi_prior_enabled: true # needs Kalshi API key
   metaculus_enabled: true # needs METACULUS_API_KEY
   metaculus_min_jaccard: 0.20   # was 0.60 — 0.60 blocked nearly all valid matches
-  metaculus_min_forecasters: 10 # was 20 — still filters noise, allows more matches
+  metaculus_min_forecasters: 5  # was 10 — allows niche topic matches through
   wikipedia_pageviews_enabled: true
   google_trends_enabled: false # needs SERPAPI_KEY or TAVILY_API_KEY with quota
   reddit_sentiment_enabled: false

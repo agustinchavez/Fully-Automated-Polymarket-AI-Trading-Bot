@@ -301,6 +301,35 @@ class KalshiClient:
         markets_raw = data.get("markets", [])
         return [_parse_kalshi_market(m) for m in markets_raw]
 
+    async def list_markets_paginated(
+        self,
+        status: str = "open",
+        max_markets: int = 500,
+    ) -> list[KalshiMarket]:
+        """Paginate through Kalshi markets using cursor-based pagination."""
+        all_markets: list[KalshiMarket] = []
+        cursor = ""
+        page_size = min(100, max_markets)
+
+        for _ in range(max_markets // page_size + 1):
+            params: dict[str, Any] = {"limit": page_size}
+            if status:
+                params["status"] = status
+            if cursor:
+                params["cursor"] = cursor
+
+            data = await self._get("/trade-api/v2/markets", params=params)
+            markets_raw = data.get("markets", [])
+            all_markets.extend(_parse_kalshi_market(m) for m in markets_raw)
+
+            cursor = data.get("cursor", "")
+            if not cursor or len(markets_raw) < page_size:
+                break
+            if len(all_markets) >= max_markets:
+                break
+
+        return all_markets
+
     async def get_market(self, ticker: str) -> KalshiMarket:
         """Get a single market by ticker."""
         data = await self._get(f"/trade-api/v2/markets/{ticker}")

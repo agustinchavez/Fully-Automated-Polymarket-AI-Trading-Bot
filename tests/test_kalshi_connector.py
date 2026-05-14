@@ -239,6 +239,48 @@ class TestKalshiClient:
         assert params.get("cursor") == "abc123"
 
     @pytest.mark.asyncio
+    async def test_list_markets_paginated_single_page(self) -> None:
+        client = KalshiClient(paper_mode=True)
+        with patch.object(client, "_get", new_callable=AsyncMock) as mock_get:
+            mock_get.return_value = {
+                "markets": [{"ticker": f"K{i}", "title": f"M{i}"} for i in range(5)],
+                "cursor": "",
+            }
+            markets = await client.list_markets_paginated(max_markets=500)
+
+        assert len(markets) == 5
+
+    @pytest.mark.asyncio
+    async def test_list_markets_paginated_multi_page(self) -> None:
+        client = KalshiClient(paper_mode=True)
+        page1 = {
+            "markets": [{"ticker": f"K{i}", "title": f"M{i}"} for i in range(100)],
+            "cursor": "next_page_token",
+        }
+        page2 = {
+            "markets": [{"ticker": f"K{i}", "title": f"M{i}"} for i in range(100, 150)],
+            "cursor": "",
+        }
+        with patch.object(client, "_get", new_callable=AsyncMock) as mock_get:
+            mock_get.side_effect = [page1, page2]
+            markets = await client.list_markets_paginated(max_markets=500)
+
+        assert len(markets) == 150
+        assert mock_get.call_count == 2
+
+    @pytest.mark.asyncio
+    async def test_list_markets_paginated_respects_max(self) -> None:
+        client = KalshiClient(paper_mode=True)
+        with patch.object(client, "_get", new_callable=AsyncMock) as mock_get:
+            mock_get.return_value = {
+                "markets": [{"ticker": f"K{i}", "title": f"M{i}"} for i in range(100)],
+                "cursor": "more_data",
+            }
+            markets = await client.list_markets_paginated(max_markets=100)
+
+        assert len(markets) == 100
+
+    @pytest.mark.asyncio
     async def test_place_order_live_error_returns_failed(self) -> None:
         """Live mode order that raises returns failed result."""
         client = KalshiClient(paper_mode=False, api_key_id="test")
@@ -369,8 +411,12 @@ class TestMarketMatcher:
         entities = MarketMatcher._extract_entities("Will the Fed cut rates?")
         assert "will" not in entities
         assert "the" not in entities
-        assert "fed" in entities
+        # "fed" → synonym "federal reserve" → {"federal", "reserve"}
+        assert "federal" in entities
+        assert "reserve" in entities
         assert "cut" in entities
+        # "rates" → synonym "rate"
+        assert "rate" in entities
 
     def test_extract_entities_preserves_numbers(self) -> None:
         entities = MarketMatcher._extract_entities("above $100,000 by 2025")
@@ -437,6 +483,54 @@ class TestMarketMatcher:
         # Manual match (1.0) should come first
         if len(matches) >= 1:
             assert matches[0].match_confidence == 1.0
+
+
+class TestSynonymExpansion:
+    """Synonym expansion improves cross-platform matching."""
+
+    def test_btc_matches_bitcoin(self) -> None:
+        a = MarketMatcher._extract_entities("Will BTC reach $100K?")
+        b = MarketMatcher._extract_entities("Will Bitcoin reach $100,000?")
+        assert "bitcoin" in a  # btc → bitcoin
+        assert "bitcoin" in b
+        sim = MarketMatcher._jaccard_similarity(a, b)
+        assert sim >= 0.3
+
+    def test_fomc_matches_federal_reserve(self) -> None:
+        a = MarketMatcher._extract_entities("FOMC June 2026 Rate Decision")
+        b = MarketMatcher._extract_entities("Federal Reserve cut interest rate June 2026")
+        # "fomc" → "federal reserve", "rate" stays "rate"
+        assert "federal" in a
+        assert "reserve" in a
+        assert "federal" in b
+        assert "reserve" in b
+
+    def test_rates_normalizes_to_rate(self) -> None:
+        entities = MarketMatcher._extract_entities("Will rates increase?")
+        assert "rate" in entities
+        assert "rates" not in entities
+
+    def test_gop_matches_republican(self) -> None:
+        entities = MarketMatcher._extract_entities("Will the GOP win?")
+        assert "republican" in entities
+
+    def test_eth_matches_ethereum(self) -> None:
+        entities = MarketMatcher._extract_entities("ETH price above $5000")
+        assert "ethereum" in entities
+
+    def test_cross_platform_btc_match(self) -> None:
+        """Polymarket 'Bitcoin' and Kalshi 'BTC' match after synonym expansion."""
+        poly = [FakeGammaMarket(
+            condition_id="c1",
+            question="Will Bitcoin price increase by June 2026?",
+        )]
+        kalshi = [FakeKalshiMarket(
+            ticker="K1",
+            title="BTC price increase June 2026",
+        )]
+        matcher = MarketMatcher(min_confidence=0.3)
+        matches = matcher.find_matches(poly, kalshi)
+        assert len(matches) == 1
 
 
 # ── TestArbitrageConfig ─────────────────────────────────────────────

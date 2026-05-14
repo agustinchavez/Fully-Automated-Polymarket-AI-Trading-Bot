@@ -82,7 +82,7 @@ class ResearchConfig(BaseModel):
     google_trends_enabled: bool = False
     reddit_sentiment_enabled: bool = False
     pubmed_enabled: bool = False
-    metaculus_min_forecasters: int = 10
+    metaculus_min_forecasters: int = 5
     metaculus_min_jaccard: float = 0.20
     wikipedia_cache_ttl_secs: int = 14400  # 4 hours
     google_trends_volume_threshold_usd: float = 50000.0

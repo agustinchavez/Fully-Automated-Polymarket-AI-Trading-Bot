@@ -57,7 +57,7 @@ _COIN_SYMBOLS: dict[str, str] = {
 
 _MODEL_ID = os.environ.get("KRONOS_MODEL", "NeoQuasar/Kronos-mini")
 _TOKENIZER_ID = "NeoQuasar/Kronos-Tokenizer-2k"
-_LOOKBACK_HOURS = 360  # 15 days of 1h candles
+_LOOKBACK_HOURS = 512  # 21.3 days — matches Kronos tested context length
 _FORECAST_HOURS = 24
 _MONTE_CARLO_N = int(os.environ.get("KRONOS_MONTE_CARLO_N", "10"))
 _MAX_RESOLUTION_DAYS = 7
@@ -129,7 +129,7 @@ class _KronosSingleton:
                 tokenizer = KronosTokenizer.from_pretrained(_TOKENIZER_ID)
                 model_obj = Kronos.from_pretrained(_MODEL_ID)
                 cls._predictor = KronosPredictor(
-                    model_obj, tokenizer, device="cpu", max_context=2048
+                    model_obj, tokenizer, device="cpu", max_context=512
                 )
                 cls._loaded = True
                 log.info("kronos.model_loaded", model=_MODEL_ID)

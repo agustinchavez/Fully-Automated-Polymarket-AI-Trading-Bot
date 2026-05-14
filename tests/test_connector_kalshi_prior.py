@@ -75,7 +75,7 @@ class TestFetch:
     ) -> KalshiPriorConnector:
         c = KalshiPriorConnector()
         mock_kalshi = AsyncMock()
-        mock_kalshi.list_markets = AsyncMock(
+        mock_kalshi.list_markets_paginated = AsyncMock(
             return_value=kalshi_markets if kalshi_markets is not None else []
         )
         c._kalshi_client = mock_kalshi
@@ -127,7 +127,7 @@ class TestFetch:
     def test_client_error_returns_empty_via_fetch(self) -> None:
         c = KalshiPriorConnector()
         mock_kalshi = AsyncMock()
-        mock_kalshi.list_markets = AsyncMock(
+        mock_kalshi.list_markets_paginated = AsyncMock(
             side_effect=RuntimeError("Kalshi API down")
         )
         c._kalshi_client = mock_kalshi
@@ -233,7 +233,7 @@ class TestFetch:
         """list_markets exception propagates from _fetch_impl (caught by base class)."""
         c = KalshiPriorConnector()
         mock_kalshi = AsyncMock()
-        mock_kalshi.list_markets = AsyncMock(
+        mock_kalshi.list_markets_paginated = AsyncMock(
             side_effect=ConnectionError("network error")
         )
         c._kalshi_client = mock_kalshi
@@ -250,7 +250,7 @@ class TestFetch:
         """Base class fetch() catches exception and trips circuit breaker."""
         c = KalshiPriorConnector()
         mock_kalshi = AsyncMock()
-        mock_kalshi.list_markets = AsyncMock(
+        mock_kalshi.list_markets_paginated = AsyncMock(
             side_effect=ConnectionError("network error")
         )
         c._kalshi_client = mock_kalshi
